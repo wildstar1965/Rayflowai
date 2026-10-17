@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+backend/venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Local media storage and renders
+backend/storage/uploads/*
+!backend/storage/uploads/.gitkeep
+backend/storage/exports/*
+!backend/storage/exports/.gitkeep
+
+# Builds and environment
+dist/
+dist-ssr/
+*.local
+.env
+.env.production
+.DS_Store
+Thumbs.db
