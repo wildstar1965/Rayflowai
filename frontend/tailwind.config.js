@@ -7,36 +7,35 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#08090D',
+        background: '#FFFFFF',
         surface: {
-          DEFAULT: '#11131A',
-          elevated: '#181B24',
-          hover: '#1F232E',
-          active: '#262A36'
+          DEFAULT: '#FFFFFF',
+          subtle: '#FAFAFA',
+          muted: '#F4F4F5',
+          hover: '#F4F4F5',
+          border: '#E4E4E7',
+          dark: '#18181B',
+        },
+        charcoal: {
+          DEFAULT: '#18181B',
+          muted: '#71717A',
+          faint: '#A1A1AA',
+          border: '#E4E4E7',
         },
         accent: {
-          blue: '#3B82F6',
-          violet: '#8B5CF6',
-          cyan: '#67E8F9',
-        },
-        text: {
-          primary: '#F5F7FB',
-          secondary: '#9299AA',
-          muted: '#626875'
+          DEFAULT: '#18181B',
+          hover: '#27272A',
+          subtle: '#2563EB',
         },
         border: {
-          subtle: 'rgba(255, 255, 255, 0.07)',
-          medium: 'rgba(255, 255, 255, 0.12)',
-          accent: 'rgba(59, 130, 246, 0.3)',
+          DEFAULT: '#E4E4E7',
+          subtle: '#F4F4F5',
+          dark: '#27272A',
         }
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        cinematic: ['Geist', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
-      animation: {
-        'pulse-subtle': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-      }
     },
   },
   plugins: [],

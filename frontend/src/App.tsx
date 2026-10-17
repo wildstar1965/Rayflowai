@@ -6,7 +6,7 @@ export function App() {
   const [currentPage, setCurrentPage] = useState<'landing' | 'studio'>('landing');
 
   return (
-    <div className="min-h-screen bg-[#08090D] text-[#F5F7FB]">
+    <div className="min-h-screen bg-white text-zinc-900 font-sans">
       {currentPage === 'landing' ? (
         <LandingPage onEnterStudio={() => setCurrentPage('studio')} />
       ) : (

@@ -2,8 +2,9 @@ import os
 import shutil
 from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Query, Body
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from app.core.config import UPLOAD_DIR, EXPORT_DIR
 from app.schemas.editing_plan import (
@@ -13,6 +14,7 @@ from app.schemas.editing_plan import (
     CommandResponse,
     RenderJobRequest,
     RenderJobStatus,
+    ProjectPlanRequest,
 )
 from app.services.audio_analysis import analyze_audio
 from app.services.timeline_builder import build_timeline
@@ -90,12 +92,86 @@ async def upload_audio(file: UploadFile = File(...)):
         "url": f"/api/uploads/{clean_filename}"
     }
 
+@router.post("/media/demo-project")
+async def load_demo_project():
+    """
+    Sets up 4 sample images and a sample soundtrack in uploads,
+    enabling instant loading of a 4-photo project in the studio editor.
+    """
+    import numpy as np
+    from PIL import Image, ImageDraw
+
+    saved_images = []
+    colors = [
+        (45, 55, 72),
+        (59, 130, 246),
+        (16, 185, 129),
+        (245, 158, 11)
+    ]
+    for i in range(4):
+        fn = f"demo_photo_{i}.jpg"
+        dest = UPLOAD_DIR / fn
+        if not dest.exists():
+            src = Path(f"test_assets/test_img_{i}.jpg")
+            if src.exists():
+                shutil.copyfile(src, dest)
+            else:
+                img = Image.new("RGB", (1080, 1920), color=colors[i % len(colors)])
+                draw = ImageDraw.Draw(img)
+                draw.text((360, 960), f"RayFlow Photo {i+1}", fill="white")
+                img.save(dest, "JPEG")
+        saved_images.append({
+            "filename": fn,
+            "original_name": f"RayFlow Photo {i+1}.jpg",
+            "size": os.path.getsize(dest),
+            "url": f"/api/uploads/{fn}"
+        })
+
+    audio_fn = "demo_soundtrack.mp3"
+    audio_dest = UPLOAD_DIR / audio_fn
+    if not audio_dest.exists():
+        src_audio = Path("test_assets/soundtrack.mp3")
+        if src_audio.exists():
+            shutil.copyfile(src_audio, audio_dest)
+        else:
+            # Check for any existing mp3 in storage
+            for mp3_cand in UPLOAD_DIR.glob("*.mp3"):
+                shutil.copyfile(mp3_cand, audio_dest)
+                break
+
+    saved_audio = None
+    if audio_dest.exists():
+        saved_audio = {
+            "filename": audio_fn,
+            "original_name": "Cinematic Soundtrack.mp3",
+            "size": os.path.getsize(audio_dest),
+            "url": f"/api/uploads/{audio_fn}"
+        }
+
+    return {
+        "images": saved_images,
+        "audio": saved_audio
+    }
+
+
+class AudioAnalyzeRequest(BaseModel):
+    filename: str
+
 @router.post("/audio/analyze", response_model=AudioAnalysisResult)
-async def analyze_audio_endpoint(filename: str = Form(...)):
+async def analyze_audio_endpoint(
+    filename: Optional[str] = Form(default=None),
+    json_req: Optional[AudioAnalyzeRequest] = Body(default=None),
+    query_filename: Optional[str] = Query(default=None)
+):
     """
     Performs beat tracking and tempo estimation using Librosa on an uploaded audio file.
+    Supports Form data, JSON body, or Query parameters.
     """
-    audio_path = UPLOAD_DIR / Path(filename).name
+    target = filename or (json_req.filename if json_req else None) or query_filename
+    if not target:
+        raise HTTPException(status_code=400, detail="Audio filename is required.")
+
+    audio_path = UPLOAD_DIR / Path(target).name
     if not audio_path.exists():
         raise HTTPException(status_code=404, detail="Audio file not found.")
 
@@ -117,25 +193,30 @@ async def interpret_command_endpoint(request: CommandRequest):
 
 @router.post("/projects/plan", response_model=EditingPlan)
 async def create_or_update_plan(
-    plan: EditingPlan,
-    image_filenames: List[str],
-    audio_filename: Optional[str] = None
+    request: Optional[ProjectPlanRequest] = None,
+    image_filenames: Optional[List[str]] = Query(default=None),
+    audio_filename: Optional[str] = Query(default=None)
 ):
     """
     Constructs a synchronized timeline connecting images, music beats, and stylistic pacing.
+    Accepts ProjectPlanRequest JSON body, or Query parameters.
     """
+    actual_plan = (request.plan if request and request.plan else EditingPlan())
+    actual_images = (request.image_filenames if request and request.image_filenames else image_filenames) or []
+    actual_audio = (request.audio_filename if request and request.audio_filename else audio_filename)
+
     analysis_result = None
-    if audio_filename:
-        audio_path = UPLOAD_DIR / Path(audio_filename).name
+    if actual_audio:
+        audio_path = UPLOAD_DIR / Path(actual_audio).name
         if audio_path.exists():
             try:
                 analysis_result = analyze_audio(str(audio_path))
             except Exception:
                 analysis_result = None
 
-    image_urls = [f"/api/uploads/{Path(f).name}" for f in image_filenames]
-    plan.clips = build_timeline(image_urls, plan, analysis_result)
-    return plan
+    image_urls = [f"/api/uploads/{Path(f).name}" for f in actual_images]
+    actual_plan.clips = build_timeline(image_urls, actual_plan, analysis_result)
+    return actual_plan
 
 @router.post("/render")
 async def render_video(request: RenderJobRequest):

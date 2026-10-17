@@ -4,7 +4,8 @@ from pydantic import BaseModel, Field
 class TitleConfig(BaseModel):
     enabled: bool = True
     text: str = "RAYFLOW"
-    gradient: List[str] = ["#67E8F9", "#3B82F6"]
+    gradient: List[str] = ["#FFFFFF", "#CCCCCC"]
+    color: str = "#FFFFFF"
     subtitle: Optional[str] = None
     position: str = "center"  # "center", "bottom", "top"
 
@@ -13,18 +14,40 @@ class ClipConfig(BaseModel):
     image_url: str
     start_time: float
     duration: float
-    motion: str = "zoom_in"  # "zoom_in", "zoom_out", "pan_left", "pan_right"
-    transition: str = "fade"  # "fade", "crossfade", "cut"
+    motion: str = "zoom_in"  # "zoom_in", "zoom_out", "pan_left", "pan_right", "static"
+    transition: str = "none"  # "none", "crossfade", "dip_black", "dip_white", "fade"
+
+class TransitionConfig(BaseModel):
+    id: str
+    from_clip_id: str
+    to_clip_id: str
+    type: str = "none"  # "none", "crossfade", "dip_black", "dip_white", "fade_in", "fade_out"
+    duration: float = 0.5
+    enabled: bool = True
+
+class GlobalTransitionConfig(BaseModel):
+    enabled: bool = False
+    type: str = "fade"  # "fade_in", "fade_out", "dip_black", "dip_white"
+    duration: float = 0.5
 
 class EditingPlan(BaseModel):
-    duration_seconds: float = Field(default=15.0, ge=3.0, le=60.0)
+    duration_seconds: float = Field(default=15.0, ge=1.0, le=120.0)
     aspect_ratio: str = Field(default="9:16")  # "9:16", "16:9", "1:1"
+    fit_mode: str = Field(default="fill")  # "fill", "fit"
     style: str = Field(default="cinematic")  # "cinematic", "vintage", "noir", "vibrant", "minimal"
     beat_sync: bool = True
     cut_pacing: str = Field(default="balanced")  # "slow", "balanced", "fast", "beat_driven"
     motion: str = Field(default="slow_zoom")  # "slow_zoom", "dynamic", "static"
     title: TitleConfig = Field(default_factory=TitleConfig)
     clips: List[ClipConfig] = Field(default_factory=list)
+    transitions: List[TransitionConfig] = Field(default_factory=list)
+    head_transition: Optional[GlobalTransitionConfig] = None
+    tail_transition: Optional[GlobalTransitionConfig] = None
+
+class ProjectPlanRequest(BaseModel):
+    plan: Optional[EditingPlan] = None
+    image_filenames: Optional[List[str]] = None
+    audio_filename: Optional[str] = None
 
 class AudioAnalysisResult(BaseModel):
     duration: float

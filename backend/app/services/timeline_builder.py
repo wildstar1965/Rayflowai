@@ -55,11 +55,22 @@ def build_timeline(
     else:
         cut_points[-1] = target_duration
 
-    # If cuts are fewer than 2 (no beats detected or single image), evenly subdivide
-    if len(cut_points) < 3 and num_images > 1:
-        avg_dur = target_duration / num_images
-        cut_points = [round(i * avg_dur, 2) for i in range(num_images + 1)]
-        cut_points[-1] = target_duration
+    # Ensure at least as many intervals as uploaded images, snapping cuts to beats
+    if num_images > 1 and len(cut_points) - 1 < num_images:
+        target_cuts = [i * (target_duration / num_images) for i in range(1, num_images)]
+        beats = audio_analysis.beat_times if (audio_analysis and audio_analysis.beat_times) else []
+        cut_points = [0.0]
+        last_t = 0.0
+        for tc in target_cuts:
+            candidates = [b for b in beats if b - last_t >= 0.5 and target_duration - b >= 0.4]
+            if candidates:
+                best_b = min(candidates, key=lambda b: abs(b - tc))
+                cut_points.append(round(best_b, 2))
+                last_t = best_b
+            else:
+                cut_points.append(round(tc, 2))
+                last_t = tc
+        cut_points.append(target_duration)
 
     # 2. Build clips
     clips: List[ClipConfig] = []

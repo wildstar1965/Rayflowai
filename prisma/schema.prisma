@@ -1,0 +1,127 @@
+// RayFlow AI — Prisma Database Schema
+// Defines persistent metadata models for Projects, Media Assets, Clips, and Render Jobs
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum AssetType {
+  IMAGE
+  AUDIO
+}
+
+enum AspectRatio {
+  RATIO_9_16
+  RATIO_16_9
+  RATIO_1_1
+}
+
+enum PacingStrategy {
+  SLOW
+  BALANCED
+  FAST
+  BEAT_DRIVEN
+}
+
+enum RenderStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Project {
+  id              String         @id @default(uuid())
+  title           String         @default("Untitled Reel")
+  durationSeconds Float          @default(15.0)
+  aspectRatio     AspectRatio    @default(RATIO_9_16)
+  stylePreset     String         @default("cinematic")
+  cutPacing       PacingStrategy @default(BALANCED)
+  motionEffect    String         @default("slow_zoom")
+  beatSyncEnabled Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relationships
+  mediaAssets     MediaAsset[]
+  clips           TimelineClip[]
+  titleOverlay    TitleOverlay?
+  renderJobs      RenderJob[]
+
+  @@map("projects")
+}
+
+model MediaAsset {
+  id           String       @id @default(uuid())
+  projectId    String
+  type         AssetType
+  filename     String
+  originalName String
+  sizeBytes    Int
+  url          String
+  duration     Float?
+  tempoBpm     Float?
+  beatCount    Int?
+  beatTimes    Json?        // Array of beat timestamps [0.5, 1.0, 1.5, ...]
+  strongBeats  Json?        // Array of strong rhythmic transients
+  createdAt    DateTime     @default(now())
+
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clips        TimelineClip[]
+
+  @@map("media_assets")
+}
+
+model TimelineClip {
+  id           String      @id @default(uuid())
+  projectId    String
+  mediaAssetId String
+  orderIndex   Int
+  startTime    Float
+  duration     Float
+  motion       String      @default("zoom_in")
+  transition   String      @default("crossfade")
+  createdAt    DateTime    @default(now())
+
+  project      Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  mediaAsset   MediaAsset  @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@map("timeline_clips")
+}
+
+model TitleOverlay {
+  id        String   @id @default(uuid())
+  projectId String   @unique
+  enabled   Boolean  @default(true)
+  text      String   @default("RAYFLOW")
+  subtitle  String?
+  position  String   @default("beginning") // "beginning", "center", "throughout"
+  colorHex  String   @default("#FFFFFF")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("title_overlays")
+}
+
+model RenderJob {
+  id           String       @id @default(uuid())
+  projectId    String
+  status       RenderStatus @default(QUEUED)
+  progress     Float        @default(0.0)
+  outputUrl    String?
+  downloadUrl  String?
+  errorMessage String?
+  startedAt    DateTime     @default(now())
+  completedAt  DateTime?
+
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("render_jobs")
+}
