@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
 
 class TitleConfig(BaseModel):
@@ -12,10 +12,50 @@ class TitleConfig(BaseModel):
 class ClipConfig(BaseModel):
     id: str
     image_url: str
-    start_time: float
-    duration: float
+    start_time: float = Field(ge=0, allow_inf_nan=False)
+    duration: float = Field(gt=0, le=120, allow_inf_nan=False)
+    source_start: float = Field(default=0, ge=0, allow_inf_nan=False)
+    media_type: str = "image"  # "image", "video"
     motion: str = "zoom_in"  # "zoom_in", "zoom_out", "pan_left", "pan_right", "static"
     transition: str = "none"  # "none", "crossfade", "dip_black", "dip_white", "fade"
+    label: Optional[str] = None
+
+class WordTiming(BaseModel):
+    word: str
+    start: float
+    end: float
+    emphasis: bool = False
+    color: Optional[str] = None
+    size_multiplier: float = 1.0
+
+class SubtitleStyle(BaseModel):
+    preset: str = "bold_pop"  # "bold_pop", "fitness_energy", "minimalist", "subtle_border"
+    caption_mode: str = "word_by_word"  # "word_by_word", "phrase"
+    font_size: int = 42
+    font_family: str = "Inter, sans-serif"
+    color: str = "#FFFFFF"
+    highlight_color: str = "#FACC15"  # Vibrant Yellow for emphasized keywords
+    stroke_color: str = "#000000"
+    stroke_width: int = 3
+    position: str = "center_bottom"  # "center_bottom", "middle", "top"
+
+class SubtitleSegment(BaseModel):
+    id: str
+    text: str
+    start_time: float
+    end_time: float
+    words: List[WordTiming] = Field(default_factory=list)
+    style: Optional[SubtitleStyle] = None
+
+class VisualInsert(BaseModel):
+    id: str
+    asset_id: str
+    asset_url: str
+    start_time: float
+    duration: float
+    mode: str = "pip"  # "pip", "split", "floating", "cutaway"
+    position: str = "top_right"  # "top_right", "top_left", "right_half", "center"
+    label: Optional[str] = None
 
 class TransitionConfig(BaseModel):
     id: str
@@ -31,9 +71,9 @@ class GlobalTransitionConfig(BaseModel):
     duration: float = 0.5
 
 class EditingPlan(BaseModel):
-    duration_seconds: float = Field(default=15.0, ge=1.0, le=120.0)
-    aspect_ratio: str = Field(default="9:16")  # "9:16", "16:9", "1:1"
-    fit_mode: str = Field(default="fill")  # "fill", "fit"
+    duration_seconds: float = Field(default=15.0, ge=0.0, le=120.0, allow_inf_nan=False)
+    aspect_ratio: Literal['9:16', '16:9', '1:1'] = '9:16'
+    fit_mode: Literal['fill', 'fit'] = 'fill'
     style: str = Field(default="cinematic")  # "cinematic", "vintage", "noir", "vibrant", "minimal"
     beat_sync: bool = True
     cut_pacing: str = Field(default="balanced")  # "slow", "balanced", "fast", "beat_driven"
@@ -43,6 +83,11 @@ class EditingPlan(BaseModel):
     transitions: List[TransitionConfig] = Field(default_factory=list)
     head_transition: Optional[GlobalTransitionConfig] = None
     tail_transition: Optional[GlobalTransitionConfig] = None
+    subtitles: List[SubtitleSegment] = Field(default_factory=list)
+    visual_inserts: List[VisualInsert] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    audio_filename: Optional[str] = None
+
 
 class ProjectPlanRequest(BaseModel):
     plan: Optional[EditingPlan] = None

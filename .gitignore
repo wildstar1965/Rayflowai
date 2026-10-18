@@ -5,6 +5,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+test_artifacts/
 
 # Local media storage and renders
 backend/storage/uploads/*

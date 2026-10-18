@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Button } from '../components/ui/Button';
 import {
   EditingPlan,
@@ -7,7 +7,8 @@ import {
   AudioAnalysisResult,
   RenderJobStatus,
   ClipConfig,
-  TransitionConfig
+  SubtitleSegment,
+  SubtitlePreset
 } from '../types';
 import {
   uploadImages,
@@ -19,8 +20,15 @@ import {
   getRenderProgress,
   getDownloadUrl,
   getMediaUrl,
-  loadDemoProject
+  loadDemoProject,
+  startTranscription,
+  getTranscriptionStatus,
+  checkOllamaStatus,
+  suggestVisualInserts,
+  generateAutoEditReel
 } from '../services/api';
+import { recalculateTimeline } from '../utils/timeline';
+import { interpretWithOllama } from '../services/api';
 import { InteractiveTimeline } from '../components/studio/InteractiveTimeline';
 import { EffectsPanel } from '../components/studio/EffectsPanel';
 import {
@@ -53,7 +61,10 @@ import {
   Monitor,
   Square,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Subtitles,
+  Layers,
+  Wand2,
 } from 'lucide-react';
 
 interface StudioPageProps {
@@ -65,7 +76,8 @@ const STORAGE_KEY = 'rayflow_project_state_v3';
 export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   // Project State
   const [projectName, setProjectName] = useState('Untitled Reel');
-  const [activeTab, setActiveTab] = useState<'photos' | 'music' | 'effects' | 'style' | 'title'>('photos');
+  const [hasHydrated, setHasHydrated] = useState(false);
+  const [activeTab, setActiveTab] = useState<'photos' | 'music' | 'effects' | 'style' | 'title' | 'captions' | 'inserts'>('photos');
 
   // Media State
   const [images, setImages] = useState<UploadedImage[]>([]);
@@ -77,6 +89,25 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   // Audio preview playback in media library
   const [isAudioPreviewPlaying, setIsAudioPreviewPlaying] = useState(false);
   const mediaAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Speech Transcription State (Faster-Whisper)
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptionProgress, setTranscriptionProgress] = useState(0);
+
+  // Ollama Client State
+  const [ollamaStatus, setOllamaStatus] = useState<{ available: boolean; host: string; models: string[]; default_model?: string }>({
+    available: false,
+    host: 'http://127.0.0.1:11434',
+    models: []
+  });
+  const [selectedOllamaModel, setSelectedOllamaModel] = useState<string>('');
+
+  // Auto-Edit Workflow Modal State
+  const [isAutoEditModalOpen, setIsAutoEditModalOpen] = useState(false);
+  const [autoEditStyle, setAutoEditStyle] = useState<'fitness_energy' | 'minimalist' | 'cinematic'>('fitness_energy');
+  const [isAutoEditing, setIsAutoEditing] = useState(false);
+  const [includeCaptions, setIncludeCaptions] = useState(true);
+  const [mobilePanel, setMobilePanel] = useState<'media' | 'director' | null>(null);
 
   // Editing Plan State
   const [plan, setPlan] = useState<EditingPlan>({
@@ -105,6 +136,12 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   // Undo / Redo History
   const [history, setHistory] = useState<EditingPlan[]>([]);
   const [redoStack, setRedoStack] = useState<EditingPlan[]>([]);
+  const timelineRefreshIdRef = useRef(0);
+  const editOriginRef = useRef<EditingPlan | null>(null);
+  const planRef = useRef(plan);
+  useLayoutEffect(() => { planRef.current = plan; }, [plan]);
+  const pollTimersRef = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
+  const recognitionRef = useRef<any>(null);
 
   // Assistant / Directing State
   const [commandInput, setCommandInput] = useState('');
@@ -121,9 +158,22 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   // Video Preview & Playback State
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0.0);
+  const currentTimeRef = useRef(0.0);
+  const lastUiUpdateRef = useRef(0);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const synchronizedAudioRef = useRef<HTMLAudioElement | null>(null);
   const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const videoCacheRef = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const drawFrameRef = useRef<(time: number) => void>(() => {});
+  const playbackRef = useRef(false);
+  useLayoutEffect(() => { playbackRef.current = isPlaying; }, [isPlaying]);
+  useEffect(() => () => {
+    pollTimersRef.current.forEach(clearInterval);
+    recognitionRef.current?.abort();
+    videoCacheRef.current.forEach(video => {
+      video.pause(); video.removeAttribute('src'); video.load();
+    });
+  }, []);
 
   // Rendering State
   const [renderJobId, setRenderJobId] = useState<string | null>(null);
@@ -152,10 +202,12 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     } catch {
       // Ignore parse errors
     }
+    setHasHydrated(true);
   }, []);
 
   // Save state to localStorage on modification
   useEffect(() => {
+    if (!hasHydrated) return;
     try {
       const stateToSave = {
         projectName,
@@ -168,12 +220,27 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     } catch {
       // Ignore quota errors
     }
-  }, [projectName, images, audio, audioAnalysis, plan]);
+  }, [projectName, images, audio, audioAnalysis, plan, hasHydrated]);
 
   // Push new plan to history
-  const updatePlanWithHistory = (newPlan: EditingPlan) => {
-    setHistory(prev => [...prev.slice(-25), plan]);
-    setRedoStack([]);
+  const updatePlanWithHistory = (newPlan: EditingPlan, recordHistory = true) => {
+    if (newPlan.duration_seconds > 120) {
+      setErrorMessage('Reels can be up to 120 seconds. Shorten or remove clips first.');
+      return;
+    }
+    timelineRefreshIdRef.current++;
+    setViewRenderedVideo(false);
+    if (recordHistory) {
+      const before = editOriginRef.current || planRef.current;
+      if (JSON.stringify(before) !== JSON.stringify(newPlan)) {
+        setHistory(prev => [...prev.slice(-25), before]);
+        setRedoStack([]);
+      }
+      editOriginRef.current = null;
+    } else if (!editOriginRef.current) {
+      editOriginRef.current = planRef.current;
+    }
+    planRef.current = newPlan;
     setPlan(newPlan);
   };
 
@@ -182,6 +249,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     const previous = history[history.length - 1];
     setRedoStack(prev => [plan, ...prev]);
     setHistory(prev => prev.slice(0, -1));
+    timelineRefreshIdRef.current++;
+    editOriginRef.current = null;
+    setViewRenderedVideo(false);
     setPlan(previous);
   };
 
@@ -190,6 +260,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     const next = redoStack[0];
     setHistory(prev => [...prev, plan]);
     setRedoStack(prev => prev.slice(1));
+    timelineRefreshIdRef.current++;
+    editOriginRef.current = null;
+    setViewRenderedVideo(false);
     setPlan(next);
   };
 
@@ -197,78 +270,113 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   const refreshTimeline = async (
     currentPlan: EditingPlan,
     currentImages: UploadedImage[],
-    currentAudio: UploadedAudio | null
+    currentAudio: UploadedAudio | null,
+    rebuildTimeline = true
   ) => {
+    const refreshId = ++timelineRefreshIdRef.current;
     if (currentImages.length === 0) {
+      if (refreshId !== timelineRefreshIdRef.current) return;
       setPlan(prev => ({ ...prev, clips: [], transitions: [] }));
       return;
     }
+
+    // Audio changes do not alter the user's visual edit. Rebuilding here used
+    // to discard trims, ordering, transitions, and effects after an audio
+    // upload/removal.
+    if (!rebuildTimeline && currentPlan.clips.length > 0) {
+      setPlan(currentPlan);
+      return;
+    }
+
     try {
       const updated = await generateProjectPlan(
         currentPlan,
         currentImages.map(img => img.filename),
         currentAudio ? currentAudio.filename : undefined
       );
+      if (refreshId !== timelineRefreshIdRef.current) return;
       if (!updated.fit_mode) updated.fit_mode = currentPlan.fit_mode || 'fill';
       if (!updated.transitions) updated.transitions = currentPlan.transitions || [];
-      setPlan(updated);
+      updatePlanWithHistory(updated);
     } catch (err: any) {
-      console.warn('Backend plan update deferred, generating client timeline:', err);
-      const numImages = currentImages.length;
-      const targetDur = currentPlan.duration_seconds;
-      const durPerClip = Math.round((targetDur / numImages) * 10) / 10;
-      const fallbackClips: ClipConfig[] = currentImages.map((img, idx) => ({
-        id: `clip-${idx + 1}`,
-        image_url: img.url,
-        start_time: Math.round(idx * durPerClip * 10) / 10,
-        duration: idx === numImages - 1 ? Math.round((targetDur - idx * durPerClip) * 10) / 10 : durPerClip,
-        motion: (idx % 2 === 0 ? 'zoom_in' : 'zoom_out'),
-        transition: 'crossfade'
-      }));
-
-      // Fallback transitions
-      const fallbackTransitions: TransitionConfig[] = [];
-      for (let i = 0; i < fallbackClips.length - 1; i++) {
-        fallbackTransitions.push({
-          id: `trans-${i + 1}`,
-          from_clip_id: fallbackClips[i].id,
-          to_clip_id: fallbackClips[i + 1].id,
-          type: 'crossfade',
-          duration: 0.5,
-          enabled: true
-        });
-      }
-
-      setPlan(prev => ({
-        ...prev,
-        clips: fallbackClips,
-        transitions: fallbackTransitions
-      }));
+      if (refreshId !== timelineRefreshIdRef.current) return;
+      setErrorMessage('Could not build the timeline: ' + err.message);
     }
   };
 
-  // Pre-load clip images into cache
+  // Decode media once and repaint paused frames when loading/seeking completes.
   useEffect(() => {
-    plan.clips.forEach(clip => {
-      if (clip.image_url && !imageCacheRef.current.has(clip.image_url)) {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.src = getMediaUrl(clip.image_url);
-        imageCacheRef.current.set(clip.image_url, img);
+    const liveImages = new Set<string>();
+    const liveVideos = new Set<string>();
+    for (const clip of plan.clips) {
+      if (clip.media_type === 'video') {
+        liveVideos.add(clip.id);
+        let video = videoCacheRef.current.get(clip.id);
+        if (!video || video.dataset.source !== clip.image_url) {
+          video?.pause();
+          video = document.createElement('video');
+          video.crossOrigin = 'anonymous';
+          video.playsInline = true;
+          video.preload = 'auto';
+          video.dataset.source = clip.image_url;
+          video.src = getMediaUrl(clip.image_url);
+          video.onloadeddata = video.onseeked = () => drawFrameRef.current(currentTimeRef.current);
+          video.onerror = () => setErrorMessage('Could not load video: ' + clip.image_url);
+          videoCacheRef.current.set(clip.id, video);
+          video.load();
+        }
+      } else liveImages.add(clip.image_url);
+    }
+    for (const insert of plan.visual_inserts || []) liveImages.add(insert.asset_url);
+    liveImages.forEach(url => {
+      if (!imageCacheRef.current.has(url)) {
+        const image = new Image();
+        image.crossOrigin = 'anonymous';
+        image.onload = () => drawFrameRef.current(currentTimeRef.current);
+        image.onerror = () => setErrorMessage('Could not load image: ' + url);
+        image.src = getMediaUrl(url);
+        imageCacheRef.current.set(url, image);
       }
     });
-  }, [plan.clips]);
+    imageCacheRef.current.forEach((image, key) => {
+      if (!liveImages.has(key)) { image.onload = null; imageCacheRef.current.delete(key); }
+    });
+    videoCacheRef.current.forEach((video, key) => {
+      if (!liveVideos.has(key)) {
+        video.pause(); video.removeAttribute('src'); video.load(); videoCacheRef.current.delete(key);
+      }
+    });
+  }, [plan.clips, plan.visual_inserts]);
+
+  const clipMedia = (clip: ClipConfig, time: number): HTMLImageElement | HTMLVideoElement | undefined => {
+    if (clip.media_type !== 'video') return imageCacheRef.current.get(clip.image_url);
+    const video = videoCacheRef.current.get(clip.id);
+    if (!video) return;
+    const target = Math.max(0, Math.min((clip.source_start || 0) + Math.max(0, time - clip.start_time),
+      Number.isFinite(video.duration) ? Math.max(0, video.duration - 1 / 30) : Infinity));
+    const active = time >= clip.start_time && time < clip.start_time + clip.duration;
+    const shouldPlay = active && playbackRef.current;
+    video.muted = Boolean(audio) || !active;
+    if (video.readyState >= 1 && !video.seeking && Math.abs(video.currentTime - target) > (shouldPlay ? 0.12 : 1 / 60)) {
+      video.currentTime = target;
+    }
+    if (shouldPlay && video.paused) video.play().catch(() => {});
+    else if (!shouldPlay && !video.paused) video.pause();
+    return video;
+  };
+  const mediaReady = (media?: HTMLImageElement | HTMLVideoElement) => media instanceof HTMLVideoElement
+    ? media.readyState >= 2 : Boolean(media?.complete && media.naturalWidth > 0);
 
   // Photo Upload Handler with validation
   const processImageFiles = async (fileList: File[]) => {
-    const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.heic'];
+    const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.mp4', '.mov', '.webm', '.avi', '.mkv'];
     const validFiles = fileList.filter(file => {
       const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-      return validExtensions.includes(ext) || file.type.startsWith('image/');
+      return validExtensions.includes(ext);
     });
 
-    if (validFiles.length === 0) {
-      setErrorMessage('Please upload valid photograph files (JPG, PNG, WebP).');
+    if (validFiles.length !== fileList.length || validFiles.length === 0) {
+      setErrorMessage('Use JPG, PNG, WebP, MP4, MOV or WebM media files.');
       return;
     }
 
@@ -278,7 +386,17 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       const uploaded = await uploadImages(validFiles);
       const combined = [...images, ...uploaded];
       setImages(combined);
-      await refreshTimeline(plan, combined, audio);
+      if (planRef.current.clips.length) {
+        let start = planRef.current.duration_seconds;
+        const appended: ClipConfig[] = uploaded.map(item => {
+          const duration = item.media_type === 'video' ? Math.min(10, item.duration || 3) : 2.5;
+          const clip: ClipConfig = { id: crypto.randomUUID(), image_url: item.url, start_time: start,
+            duration, media_type: item.media_type || 'image', motion: item.media_type === 'video' ? 'static' : 'zoom_in', transition: 'none' };
+          start += duration;
+          return clip;
+        });
+        updatePlanWithHistory(recalculateTimeline([...planRef.current.clips, ...appended], planRef.current.transitions, planRef.current));
+      } else await refreshTimeline(planRef.current, combined, audio);
       setConversation(prev => [
         ...prev,
         {
@@ -297,6 +415,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   const handleImageFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     processImageFiles(Array.from(e.target.files));
+    e.target.value = '';
   };
 
   const handleDropPhotos = (e: React.DragEvent) => {
@@ -363,26 +482,20 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       try {
         const analysis = await analyzeAudioFile(uploaded.filename);
         setAudioAnalysis(analysis);
-        await refreshTimeline(plan, images, uploaded);
+        await refreshTimeline(plan, images, uploaded, false);
         setConversation(prev => [
           ...prev,
           {
             sender: 'assistant',
-            text: `Soundtrack "${uploaded.original_name}" loaded. Librosa detected ${analysis.tempo} BPM with ${analysis.beat_count} rhythm beats. Cuts aligned.`,
+            text: `Soundtrack "${uploaded.original_name}" loaded. Librosa detected ${analysis.tempo} BPM with ${analysis.beat_count} rhythm beats. Your timeline edits were preserved.`,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           }
         ]);
       } catch (err: any) {
         console.warn('Audio analysis fallback:', err);
-        setAudioAnalysis({
-          duration: 15.0,
-          tempo: 120.0,
-          beat_count: 30,
-          beat_times: [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0],
-          strong_beats: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
-          sample_rate: 22050
-        });
-        await refreshTimeline(plan, images, uploaded);
+        setAudioAnalysis(null);
+        setErrorMessage('Soundtrack uploaded, but beat analysis failed. ' + err.message);
+        await refreshTimeline(plan, images, uploaded, false);
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to upload soundtrack.');
@@ -395,7 +508,10 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   const handleRemoveImage = (index: number) => {
     const updated = images.filter((_, i) => i !== index);
     setImages(updated);
-    refreshTimeline(plan, updated, audio);
+    const removed = images[index];
+    updatePlanWithHistory(recalculateTimeline(plan.clips.filter(c => getMediaUrl(c.image_url) !== getMediaUrl(removed.url)), plan.transitions, {
+      ...plan, visual_inserts: (plan.visual_inserts || []).filter(i => getMediaUrl(i.asset_url) !== getMediaUrl(removed.url))
+    }));
   };
 
   const handleMoveImage = (index: number, direction: 'up' | 'down') => {
@@ -405,7 +521,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     const [moved] = copy.splice(index, 1);
     copy.splice(target, 0, moved);
     setImages(copy);
-    refreshTimeline(plan, copy, audio);
+    const rank = new Map(copy.map((item, i) => [getMediaUrl(item.url), i]));
+    const ordered = [...plan.clips].sort((a, b) => (rank.get(getMediaUrl(a.image_url)) ?? 0) - (rank.get(getMediaUrl(b.image_url)) ?? 0));
+    updatePlanWithHistory(recalculateTimeline(ordered, plan.transitions, plan));
   };
 
   const handleRemoveAudio = () => {
@@ -415,7 +533,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     }
     setAudio(null);
     setAudioAnalysis(null);
-    refreshTimeline(plan, images, null);
+    refreshTimeline(plan, images, null, false);
   };
 
   const handleToggleAudioPreview = () => {
@@ -441,6 +559,160 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       setSelectedTransitionId(`boundary-${fromClipId}-${toClipId}`);
     }
     setActiveTab('effects');
+    setMobilePanel('media');
+  };
+
+  // Check local Ollama status on mount
+  useEffect(() => {
+    checkOllamaStatus()
+      .then(st => {
+        setOllamaStatus(st);
+        if (st.models && st.models.length > 0) {
+          setSelectedOllamaModel(st.default_model || st.models[0]);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Speech-to-Text Transcription via local Faster-Whisper
+  const handleAutoTranscribe = async () => {
+    const speechSource = audio?.filename || images.find(item => item.media_type === 'video')?.filename;
+    if (!speechSource) {
+      setErrorMessage('Please upload speech audio or video first.');
+      return;
+    }
+    setIsTranscribing(true);
+    setTranscriptionProgress(0);
+    setErrorMessage(null);
+    try {
+      const jobId = await startTranscription(speechSource, 'tiny');
+      setTranscriptionProgress(0);
+
+      const pollTimer = setInterval(async () => {
+        try {
+          const job = await getTranscriptionStatus(jobId);
+          if (job.status === 'processing') {
+            setTranscriptionProgress(Math.round(job.progress || 50));
+          } else if (job.status === 'completed') {
+            clearInterval(pollTimer);
+            setIsTranscribing(false);
+            setTranscriptionProgress(100);
+            if (job.subtitles && job.subtitles.length > 0) {
+              const updatedPlan: EditingPlan = {
+                ...planRef.current,
+                subtitles: job.subtitles
+              };
+              updatePlanWithHistory(updatedPlan);
+              setActiveTab('captions');
+              setConversation(prev => [
+                ...prev,
+                {
+                  sender: 'assistant',
+                  text: `Faster-Whisper transcribed audio locally with int8 quantization. Generated ${job.subtitles.length} subtitle segments with word-level timestamps and keyword highlights.`,
+                  time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }
+              ]);
+            }
+          } else if (job.status === 'failed') {
+            clearInterval(pollTimer);
+            setIsTranscribing(false);
+            setErrorMessage(`Transcription failed: ${job.error || 'Unknown error'}`);
+          }
+        } catch (e: any) {
+          clearInterval(pollTimer);
+          setIsTranscribing(false);
+          setErrorMessage(`Transcription status error: ${e.message}`);
+        }
+      }, 1200);
+      pollTimersRef.current.add(pollTimer);
+    } catch (err: any) {
+      setIsTranscribing(false);
+      setErrorMessage(err.message || 'Failed to start local transcription.');
+    }
+  };
+
+  // Contextual Visual Inserts Suggestion from Subtitles
+  const handleAutoSuggestInserts = async () => {
+    if (!plan.subtitles || plan.subtitles.length === 0) {
+      setErrorMessage('No subtitles available. Transcribe speech first.');
+      return;
+    }
+    if (images.length === 0) {
+      setErrorMessage('Please upload photos or B-roll images first.');
+      return;
+    }
+    try {
+      const assets = images.map(img => ({
+        id: img.filename,
+        filename: img.filename,
+        original_name: img.original_name,
+        url: img.url
+      }));
+      const suggested = await suggestVisualInserts(plan.subtitles, assets, 'pip');
+      if (suggested && suggested.length > 0) {
+        updatePlanWithHistory({
+          ...plan,
+          visual_inserts: suggested
+        });
+        setActiveTab('inserts');
+        setConversation(prev => [
+          ...prev,
+          {
+            sender: 'assistant',
+            text: `Matched ${suggested.length} contextual visual inserts from your media library based on speech transcript keywords.`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }
+        ]);
+      } else {
+        setErrorMessage('No matching keywords found between transcript and uploaded images.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to suggest visual inserts.');
+    }
+  };
+
+  // Automatic Talking-Head / Photo Reel Generation Workflow
+  const handleExecuteAutoEdit = async () => {
+    if (images.length === 0) {
+      setErrorMessage('Please upload photographs or an audio/video soundtrack to generate an auto reel.');
+      return;
+    }
+    setIsAutoEditing(true);
+    setErrorMessage(null);
+    try {
+      const assets = images.map(img => ({
+        id: img.filename,
+        filename: img.filename,
+        original_name: img.original_name,
+        url: img.url
+      }));
+      const video = images.find(item => item.media_type === 'video');
+      const mediaTarget = video?.filename || audio?.filename || images[0].filename;
+      const newPlan = await generateAutoEditReel(mediaTarget, autoEditStyle, assets, 'tiny', plan.aspect_ratio, includeCaptions);
+      setIsPlaying(false);
+      currentTimeRef.current = 0;
+      setCurrentTime(0);
+      setErrorMessage(newPlan.warnings?.join(' ') || null);
+      updatePlanWithHistory(newPlan);
+      setIsAutoEditModalOpen(false);
+      if (newPlan.subtitles && newPlan.subtitles.length > 0) {
+        setActiveTab('captions');
+      } else {
+        setActiveTab('photos');
+      }
+      setConversation(prev => [
+        ...prev,
+        {
+          sender: 'assistant',
+          text: `Auto Reel draft generated! Applied "${autoEditStyle.replace('_', ' ').toUpperCase()}" style, synchronized ${newPlan.clips.length} clip cuts, and structured your timeline.`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Auto reel generation failed.');
+    } finally {
+      setIsAutoEditing(false);
+    }
   };
 
   // Voice Recognition via Web Speech API
@@ -452,12 +724,14 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     }
 
     if (isListening) {
+      recognitionRef.current?.stop();
       setIsListening(false);
       return;
     }
 
     try {
       const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
       recognition.continuous = false;
       recognition.interimResults = false;
       recognition.lang = 'en-US';
@@ -501,7 +775,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     setCommandInput('');
 
     try {
-      const res = await interpretNaturalCommand(cmd, plan);
+      const res = ollamaStatus.available && selectedOllamaModel
+        ? await interpretWithOllama(cmd, plan, selectedOllamaModel)
+        : await interpretNaturalCommand(cmd, plan);
       updatePlanWithHistory(res.plan);
 
       // Re-calculate clips if images exist and clips were not specifically modified
@@ -526,12 +802,14 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
   // Video Rendering Trigger
   const handleStartRender = async () => {
-    if (images.length === 0) {
-      setErrorMessage('Please upload at least one photograph to render a reel.');
+    if (plan.clips.length === 0) {
+      setErrorMessage('Add at least one clip to the timeline before exporting.');
       return;
     }
 
     setIsRenderingModalOpen(true);
+    setRenderStatus(null);
+    setRenderJobId(null);
     setErrorMessage(null);
 
     try {
@@ -568,96 +846,22 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               ]);
             }
           }
-        } catch {
+        } catch (error: any) {
           clearInterval(interval);
+          setRenderStatus(prev => prev ? { ...prev, status: 'failed', error: 'Could not retrieve export status: ' + error.message } : prev);
         }
       }, 1200);
+      pollTimersRef.current.add(interval);
     } catch (err: any) {
       setErrorMessage(err.message || 'Render failed to start.');
       setIsRenderingModalOpen(false);
     }
   };
 
-  // Real Playback Controller & Canvas Animation Loop
-  useEffect(() => {
-    let animId: number;
-    let lastStamp: number | null = null;
-
-    const tick = (stamp: number) => {
-      if (lastStamp !== null && isPlaying) {
-        const delta = (stamp - lastStamp) / 1000;
-        setCurrentTime(prev => {
-          const next = prev + delta;
-          if (next >= plan.duration_seconds) {
-            setIsPlaying(false);
-            if (synchronizedAudioRef.current) {
-              synchronizedAudioRef.current.pause();
-              synchronizedAudioRef.current.currentTime = 0;
-            }
-            return 0.0;
-          }
-
-          // Keep audio synchronized with playback position
-          if (synchronizedAudioRef.current && !synchronizedAudioRef.current.paused) {
-            const diff = Math.abs(synchronizedAudioRef.current.currentTime - next);
-            if (diff > 0.3) {
-              synchronizedAudioRef.current.currentTime = next;
-            }
-          }
-
-          return next;
-        });
-      }
-      lastStamp = stamp;
-      if (isPlaying) {
-        animId = requestAnimationFrame(tick);
-      }
-    };
-
-    if (isPlaying) {
-      animId = requestAnimationFrame(tick);
-    }
-
-    return () => cancelAnimationFrame(animId);
-  }, [isPlaying, plan.duration_seconds]);
-
-  const handleTogglePlay = () => {
-    if (isPlaying) {
-      setIsPlaying(false);
-      if (synchronizedAudioRef.current) {
-        synchronizedAudioRef.current.pause();
-      }
-    } else {
-      if (currentTime >= plan.duration_seconds - 0.2) {
-        setCurrentTime(0.0);
-      }
-      if (synchronizedAudioRef.current && audio) {
-        synchronizedAudioRef.current.currentTime = currentTime;
-        synchronizedAudioRef.current.play().catch(e => console.warn('Audio play deferred:', e));
-      }
-      setIsPlaying(true);
-    }
-  };
-
-  const handleSeek = (newTime: number) => {
-    setCurrentTime(newTime);
-    if (synchronizedAudioRef.current && audio) {
-      synchronizedAudioRef.current.currentTime = newTime;
-    }
-  };
-
-  // Find active clip for current playback time
-  const currentClipIndex = plan.clips.findIndex(
-    c => currentTime >= c.start_time && currentTime < c.start_time + c.duration
-  );
-  const currentClip = currentClipIndex >= 0
-    ? plan.clips[currentClipIndex]
-    : (plan.clips.length > 0 ? plan.clips[0] : null);
-
   // Helper to draw an image frame onto the preview canvas
   const drawImageFrame = (
     ctx: CanvasRenderingContext2D,
-    img: HTMLImageElement,
+    img: HTMLImageElement | HTMLVideoElement,
     clip: ClipConfig,
     w: number,
     h: number,
@@ -668,34 +872,37 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
 
     const fitMode = plan.fit_mode || 'fill';
+    const naturalWidth = img instanceof HTMLVideoElement ? img.videoWidth : img.naturalWidth;
+    const naturalHeight = img instanceof HTMLVideoElement ? img.videoHeight : img.naturalHeight;
     let scale: number;
     let zoom = 1.0;
 
     if (fitMode === 'fit') {
       // Fit mode: preserve whole image, centered
-      scale = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+      scale = Math.min(w / naturalWidth, h / naturalHeight);
     } else {
       // Fill mode: crop to cover and apply motion zoom
-      scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
-      if (clip.motion === 'zoom_out') {
+      scale = Math.max(w / naturalWidth, h / naturalHeight);
+      if (clip.media_type !== 'video' && clip.motion === 'zoom_out') {
         zoom = 1.15 - 0.1 * progress;
-      } else if (clip.motion === 'zoom_in') {
+      } else if (clip.media_type !== 'video' && clip.motion === 'zoom_in') {
         zoom = 1.05 + 0.1 * progress;
       }
     }
 
     const finalScale = scale * zoom;
-    const sw = img.naturalWidth * finalScale;
-    const sh = img.naturalHeight * finalScale;
-    const sx = (w - sw) / 2;
+    const pan = fitMode === 'fill' && clip.media_type !== 'video' && (clip.motion === 'pan_left' || clip.motion === 'pan_right');
+    const sw = naturalWidth * (pan ? scale * 1.15 : finalScale);
+    const sh = naturalHeight * (pan ? scale * 1.15 : finalScale);
+    const sx = (w - sw) / 2 + (pan ? w * 0.15 * (0.5 - (clip.motion === 'pan_left' ? 1 - progress : progress)) : 0);
     const sy = (h - sh) / 2;
 
     ctx.drawImage(img, sx, sy, sw, sh);
     ctx.restore();
   };
 
-  // Draw smooth preview on canvas with aspect ratios, fit modes, and transitions
-  useEffect(() => {
+  // Direct canvas render function decoupled from React rendering cycle
+  const renderPreviewFrame = (time: number) => {
     const canvas = previewCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -725,45 +932,52 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     ctx.fillStyle = '#09090B';
     ctx.fillRect(0, 0, w, h);
 
-    if (currentClip && currentClip.image_url) {
-      const cached = imageCacheRef.current.get(currentClip.image_url);
-      if (cached && cached.complete && cached.naturalWidth > 0) {
-        const clipProgress = currentClip.duration > 0
-          ? Math.min(1, Math.max(0, (currentTime - currentClip.start_time) / currentClip.duration))
+    videoCacheRef.current.forEach((video, id) => {
+      const clip = plan.clips.find(c => c.id === id);
+      if (!clip || time < clip.start_time || time >= clip.start_time + clip.duration) video.pause();
+    });
+    const clipIdx = plan.clips.findIndex(
+      c => time >= c.start_time && time < c.start_time + c.duration
+    );
+    const activeClip = clipIdx >= 0 ? plan.clips[clipIdx] : (plan.clips.length > 0 ? plan.clips[plan.clips.length - 1] : null);
+
+    if (activeClip && activeClip.image_url) {
+      const cached = clipMedia(activeClip, time);
+      if (cached && mediaReady(cached)) {
+        const clipProgress = activeClip.duration > 0
+          ? Math.min(1, Math.max(0, (time - activeClip.start_time) / activeClip.duration))
           : 0;
 
         // Check if a transition is active with the next clip
         let transitionHandled = false;
-        if (currentClipIndex >= 0 && currentClipIndex < plan.clips.length - 1) {
-          const nextClip = plan.clips[currentClipIndex + 1];
+        if (clipIdx >= 0 && clipIdx < plan.clips.length - 1) {
+          const nextClip = plan.clips[clipIdx + 1];
           const boundaryTrans = (plan.transitions || []).find(
-            t => t.from_clip_id === currentClip.id && t.to_clip_id === nextClip.id
+            t => t.from_clip_id === activeClip.id && t.to_clip_id === nextClip.id
           );
 
           if (boundaryTrans && boundaryTrans.enabled && boundaryTrans.type !== 'none') {
-            const tDur = Math.max(0.1, boundaryTrans.duration);
-            const clipEnd = currentClip.start_time + currentClip.duration;
+            const tDur = Math.round(Math.max(0, Math.min(boundaryTrans.duration, activeClip.duration - 0.1, nextClip.duration - 0.1, 2)) * 30) / 30;
+            const clipEnd = activeClip.start_time + activeClip.duration;
             const tStart = clipEnd - tDur;
 
-            if (currentTime >= tStart && currentTime < clipEnd) {
-              const transProgress = (currentTime - tStart) / tDur;
-              const nextCached = imageCacheRef.current.get(nextClip.image_url);
+            if (time >= tStart && time < clipEnd) {
+              const transProgress = (time - tStart) / tDur;
+              const nextCached = clipMedia(nextClip, time);
 
               if (boundaryTrans.type === 'crossfade') {
-                // Outgoing clip
-                drawImageFrame(ctx, cached, currentClip, w, h, clipProgress, 1.0);
-                // Incoming clip blended over
-                if (nextCached && nextCached.complete && nextCached.naturalWidth > 0) {
+                drawImageFrame(ctx, cached, activeClip, w, h, clipProgress, 1.0);
+                if (nextCached && mediaReady(nextCached)) {
                   drawImageFrame(ctx, nextCached, nextClip, w, h, 0, transProgress);
                 }
                 transitionHandled = true;
-              } else if (boundaryTrans.type === 'dip_black') {
+              } else if (['dip_black', 'fade_in', 'fade_out'].includes(boundaryTrans.type)) {
                 if (transProgress < 0.5) {
-                  drawImageFrame(ctx, cached, currentClip, w, h, clipProgress, 1.0);
+                  drawImageFrame(ctx, cached, activeClip, w, h, clipProgress, 1.0);
                   ctx.fillStyle = `rgba(0, 0, 0, ${transProgress * 2})`;
                   ctx.fillRect(0, 0, w, h);
                 } else {
-                  if (nextCached && nextCached.complete && nextCached.naturalWidth > 0) {
+                  if (nextCached && mediaReady(nextCached)) {
                     drawImageFrame(ctx, nextCached, nextClip, w, h, 0, 1.0);
                   }
                   ctx.fillStyle = `rgba(0, 0, 0, ${(1 - transProgress) * 2})`;
@@ -772,11 +986,11 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 transitionHandled = true;
               } else if (boundaryTrans.type === 'dip_white') {
                 if (transProgress < 0.5) {
-                  drawImageFrame(ctx, cached, currentClip, w, h, clipProgress, 1.0);
+                  drawImageFrame(ctx, cached, activeClip, w, h, clipProgress, 1.0);
                   ctx.fillStyle = `rgba(255, 255, 255, ${transProgress * 2})`;
                   ctx.fillRect(0, 0, w, h);
                 } else {
-                  if (nextCached && nextCached.complete && nextCached.naturalWidth > 0) {
+                  if (nextCached && mediaReady(nextCached)) {
                     drawImageFrame(ctx, nextCached, nextClip, w, h, 0, 1.0);
                   }
                   ctx.fillStyle = `rgba(255, 255, 255, ${(1 - transProgress) * 2})`;
@@ -789,14 +1003,14 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
         }
 
         if (!transitionHandled) {
-          drawImageFrame(ctx, cached, currentClip, w, h, clipProgress, 1.0);
+          drawImageFrame(ctx, cached, activeClip, w, h, clipProgress, 1.0);
         }
 
         // Global Head Transition (Fade in from black)
         if (plan.head_transition?.enabled) {
-          const hDur = plan.head_transition.duration || 0.5;
-          if (currentTime < hDur) {
-            const hAlpha = 1.0 - (currentTime / hDur);
+          const hDur = Math.max(1 / 30, Math.min(plan.head_transition.duration || 0.5, plan.duration_seconds / 3));
+          if (time < hDur) {
+            const hAlpha = 1.0 - (time / hDur);
             ctx.fillStyle = plan.head_transition.type?.includes('white') ? '#FFFFFF' : '#000000';
             ctx.globalAlpha = Math.max(0, Math.min(1, hAlpha));
             ctx.fillRect(0, 0, w, h);
@@ -806,10 +1020,10 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
         // Global Tail Transition (Fade out to black)
         if (plan.tail_transition?.enabled) {
-          const tDur = plan.tail_transition.duration || 0.5;
+          const tDur = Math.max(1 / 30, Math.min(plan.tail_transition.duration || 0.5, plan.duration_seconds / 3));
           const tStart = Math.max(0, plan.duration_seconds - tDur);
-          if (currentTime > tStart) {
-            const tAlpha = (currentTime - tStart) / tDur;
+          if (time > tStart) {
+            const tAlpha = (time - tStart) / tDur;
             ctx.fillStyle = plan.tail_transition.type.includes('white') ? '#FFFFFF' : '#000000';
             ctx.globalAlpha = Math.max(0, Math.min(1, tAlpha));
             ctx.fillRect(0, 0, w, h);
@@ -833,14 +1047,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
         }
 
         // Clean monochrome title overlay (first 4.5 seconds if enabled)
-        if (plan.title.enabled && plan.title.text && currentTime <= 4.5) {
+        if (plan.title.enabled && plan.title.text && time < 4.5) {
           ctx.save();
-          const titleAlpha = currentTime < 0.5
-            ? currentTime / 0.5
-            : currentTime > 3.8
-            ? (4.5 - currentTime) / 0.7
-            : 1.0;
-          ctx.globalAlpha = Math.max(0, Math.min(1, titleAlpha));
+          ctx.globalAlpha = 1;
 
           ctx.textAlign = 'center';
           const fontSize = Math.max(28, Math.round(w * 0.055));
@@ -852,14 +1061,144 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
           ctx.shadowOffsetY = 2;
 
           ctx.fillStyle = '#FFFFFF';
-          ctx.fillText(plan.title.text, w / 2, h * 0.45);
+          const titleY = plan.title.position === 'top' ? h * 0.15 : plan.title.position === 'bottom' ? h * 0.8 : h * 0.45;
+          ctx.fillText(plan.title.text, w / 2, titleY);
 
           if (plan.title.subtitle) {
             ctx.font = `400 ${Math.max(14, Math.round(w * 0.026))}px Inter, -apple-system, sans-serif`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-            ctx.fillText(plan.title.subtitle, w / 2, h * 0.45 + fontSize * 0.9);
+            ctx.fillText(plan.title.subtitle, w / 2, titleY + fontSize * 0.9);
           }
           ctx.restore();
+        }
+
+        // Render Active Visual Inserts (Stage 6)
+        if (plan.visual_inserts && plan.visual_inserts.length > 0) {
+          const activeIns = plan.visual_inserts.find(ins => time >= ins.start_time && time <= ins.start_time + ins.duration);
+          if (activeIns) {
+            const insUrl = activeIns.asset_url;
+            let imgEl = imageCacheRef.current.get(insUrl);
+            if (!imgEl) {
+              imgEl = new Image();
+              imgEl.src = getMediaUrl(insUrl);
+              imageCacheRef.current.set(insUrl, imgEl);
+            }
+            if (imgEl.complete && imgEl.naturalWidth > 0) {
+              ctx.save();
+              if (activeIns.mode === 'cutaway') {
+                ctx.drawImage(imgEl, 0, 0, w, h);
+              } else if (activeIns.mode === 'split') {
+                const hw = Math.round(w / 2);
+                ctx.drawImage(imgEl, hw, 0, hw, h);
+              } else {
+                // PIP overlay with clean border
+                const pipW = Math.round(w * 0.38);
+                const pipH = Math.round(pipW * (imgEl.naturalHeight / imgEl.naturalWidth));
+                let px = Math.round(w * 0.57);
+                let py = Math.round(h * 0.08);
+                if (activeIns.position === 'top_left') {
+                  px = Math.round(w * 0.05);
+                } else if (activeIns.position === 'bottom_right') {
+                  py = Math.round(h * 0.70);
+                } else if (activeIns.position === 'center') {
+                  px = Math.round((w - pipW) / 2);
+                  py = Math.round((h - pipH) / 2);
+                }
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(px - 3, py - 3, pipW + 6, pipH + 6);
+                ctx.drawImage(imgEl, px, py, pipW, pipH);
+              }
+              ctx.restore();
+            }
+          }
+        }
+
+        // Render Dynamic Subtitles (Stage 4)
+        if (plan.subtitles && plan.subtitles.length > 0) {
+          const activeSub = plan.subtitles.find(s => time >= s.start_time && time <= s.end_time);
+          if (activeSub) {
+            ctx.save();
+            const subStyle = activeSub.style || {
+              preset: 'bold_pop',
+              caption_mode: 'word_by_word',
+              font_size: 42,
+              color: '#FFFFFF',
+              highlight_color: '#FACC15',
+              stroke_color: '#000000',
+              stroke_width: 4,
+              position: 'center_bottom'
+            };
+            const isWordByWord = (subStyle.caption_mode || 'word_by_word') === 'word_by_word';
+            const baseFontSize = (subStyle.font_size || 42) * w / (ratio === '16:9' ? 1920 : 1080);
+            const primaryColor = subStyle.color || '#FFFFFF';
+            const highlightColor = subStyle.highlight_color || '#FACC15';
+            const strokeColor = subStyle.stroke_color || '#000000';
+            const strokeWidth = (subStyle.stroke_width ?? 3) * w / (ratio === '16:9' ? 1920 : 1080);
+
+            const yPos = subStyle.position === 'top'
+              ? h * 0.12
+              : subStyle.position === 'middle'
+              ? h * 0.50
+              : h * 0.86;
+
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.lineJoin = 'round';
+            ctx.miterLimit = 2;
+
+            if (isWordByWord && activeSub.words && activeSub.words.length > 0) {
+              const activeWord = activeSub.words.find(word => time >= word.start && time < word.end);
+
+              if (activeWord) {
+                const isEmph = Boolean(activeWord.emphasis);
+                const fontSize = isEmph ? Math.round(baseFontSize * 1.15) : baseFontSize;
+                ctx.font = `800 ${fontSize}px Inter, Arial, sans-serif`;
+
+                ctx.strokeStyle = strokeColor;
+                ctx.lineWidth = strokeWidth + (isEmph ? 2 : 0);
+                const wordText = isEmph ? activeWord.word.toUpperCase() : activeWord.word;
+                ctx.strokeText(wordText, w / 2, yPos);
+
+                ctx.fillStyle = isEmph ? highlightColor : primaryColor;
+                ctx.fillText(wordText, w / 2, yPos);
+              }
+            } else {
+              // Phrase display
+              const fontSize = baseFontSize;
+              ctx.font = `700 ${fontSize}px Inter, Arial, sans-serif`;
+
+              if (activeSub.words && activeSub.words.length > 0) {
+                const words = activeSub.words;
+                const wordMeasures = words.map(item => ({
+                  word: item,
+                  width: ctx.measureText(item.word + ' ').width
+                }));
+                const totalWidth = wordMeasures.reduce((acc, curr) => acc + curr.width, 0);
+                let currentX = Math.max(10, (w - totalWidth) / 2);
+
+                ctx.textAlign = 'left';
+                for (const wm of wordMeasures) {
+                  const isEmph = Boolean(wm.word.emphasis);
+                  ctx.font = isEmph ? `800 ${Math.round(fontSize * 1.1)}px Inter, Arial, sans-serif` : `700 ${fontSize}px Inter, Arial, sans-serif`;
+                  ctx.strokeStyle = strokeColor;
+                  ctx.lineWidth = strokeWidth;
+                  ctx.strokeText(wm.word.word, currentX, yPos);
+
+                  ctx.fillStyle = isEmph ? highlightColor : primaryColor;
+                  ctx.fillText(wm.word.word, currentX, yPos);
+                  currentX += wm.width;
+                }
+              } else {
+                ctx.strokeStyle = strokeColor;
+                ctx.lineWidth = strokeWidth;
+                ctx.strokeText(activeSub.text, w / 2, yPos);
+
+                ctx.fillStyle = primaryColor;
+                ctx.fillText(activeSub.text, w / 2, yPos);
+              }
+            }
+            ctx.restore();
+          }
         }
       } else {
         // Drawing placeholder while image decodes
@@ -882,20 +1221,167 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       ctx.fillStyle = '#52525B';
       ctx.fillText('Upload photos to preview edit', w / 2, h / 2 + 14);
     }
-  }, [currentTime, currentClip, plan]);
+  };
+
+  useLayoutEffect(() => { drawFrameRef.current = renderPreviewFrame; });
+
+  // Re-draw canvas frame whenever plan or images update
+  useEffect(() => {
+    drawFrameRef.current(currentTimeRef.current);
+  }, [plan, images, viewRenderedVideo]);
+
+  // Real Playback Controller & Canvas Animation Loop
+  useEffect(() => {
+    let animId: number;
+    let lastStamp: number | null = null;
+
+    const tick = (stamp: number) => {
+      if (lastStamp !== null && isPlaying) {
+        const delta = (stamp - lastStamp) / 1000;
+        const next = currentTimeRef.current + delta;
+
+        if (next >= plan.duration_seconds) {
+          setIsPlaying(false);
+          currentTimeRef.current = plan.duration_seconds;
+          setCurrentTime(plan.duration_seconds);
+          synchronizedAudioRef.current?.pause();
+          videoCacheRef.current.forEach(video => video.pause());
+          drawFrameRef.current(plan.duration_seconds);
+          return;
+        }
+
+        currentTimeRef.current = next;
+        if (synchronizedAudioRef.current) synchronizedAudioRef.current.volume = Math.max(0, Math.min(1, (plan.duration_seconds - next) / Math.min(1.5, plan.duration_seconds)));
+
+        // Keep audio synchronized with playback position
+        if (synchronizedAudioRef.current && !synchronizedAudioRef.current.paused) {
+          const diff = Math.abs(synchronizedAudioRef.current.currentTime - next);
+          if (diff > 0.25) {
+            synchronizedAudioRef.current.currentTime = next;
+          }
+        }
+
+        // Direct 60fps canvas render
+        drawFrameRef.current(next);
+
+        // Throttle React component tree updates to ~15fps (every 66ms) to avoid lagging UI
+        if (stamp - lastUiUpdateRef.current > 66) {
+          lastUiUpdateRef.current = stamp;
+          setCurrentTime(next);
+        }
+      }
+      lastStamp = stamp;
+      if (isPlaying) {
+        animId = requestAnimationFrame(tick);
+      }
+    };
+
+    if (isPlaying) {
+      animId = requestAnimationFrame(tick);
+    }
+
+    return () => cancelAnimationFrame(animId);
+  }, [isPlaying, plan]);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      synchronizedAudioRef.current?.pause();
+      videoCacheRef.current.forEach(video => video.pause());
+    }
+  }, [isPlaying]);
+
+  useEffect(() => {
+    if (currentTimeRef.current > plan.duration_seconds || !plan.clips.length) {
+      currentTimeRef.current = plan.clips.length ? plan.duration_seconds : 0;
+      setCurrentTime(currentTimeRef.current);
+      setIsPlaying(false);
+    }
+  }, [plan.duration_seconds, plan.clips.length]);
+
+  const handleTogglePlay = () => {
+    setViewRenderedVideo(false);
+    if (!plan.clips.length) return;
+    if (isPlaying) {
+      setIsPlaying(false);
+      setCurrentTime(currentTimeRef.current);
+      if (synchronizedAudioRef.current) {
+        synchronizedAudioRef.current.pause();
+      }
+    } else {
+      if (currentTimeRef.current >= plan.duration_seconds - 1 / 30) {
+        currentTimeRef.current = 0.0;
+        setCurrentTime(0.0);
+      }
+      if (synchronizedAudioRef.current && audio) {
+        synchronizedAudioRef.current.currentTime = currentTimeRef.current;
+        synchronizedAudioRef.current.play().catch(e => console.warn('Audio play deferred:', e));
+      }
+      setIsPlaying(true);
+    }
+  };
+
+  const handleSeek = (newTime: number) => {
+    newTime = Math.max(0, Math.min(plan.duration_seconds, newTime));
+    setViewRenderedVideo(false);
+    currentTimeRef.current = newTime;
+    setCurrentTime(newTime);
+    if (synchronizedAudioRef.current && audio) {
+      synchronizedAudioRef.current.currentTime = newTime;
+    }
+    renderPreviewFrame(newTime);
+  };
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const element = event.target as HTMLElement;
+      if (element.matches('input, textarea, select, [contenteditable="true"]')) return;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) handleRedo(); else handleUndo();
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+        event.preventDefault(); handleRedo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  const resizeDuration = (duration: number) => {
+    if (!plan.clips.length) { updatePlanWithHistory({ ...plan, duration_seconds: duration }); return; }
+    const target = Math.max(duration, plan.clips.length * 0.5);
+    const flexible = plan.clips.reduce((sum, clip) => sum + Math.max(0, clip.duration - 0.5), 0);
+    const resized = plan.clips.map(clip => ({ ...clip, duration: 0.5 + (target - plan.clips.length * 0.5) *
+      (flexible ? Math.max(0, clip.duration - 0.5) / flexible : 1 / plan.clips.length) }));
+    updatePlanWithHistory(recalculateTimeline(resized, plan.transitions, plan));
+  };
+
+  const repace = (updated: EditingPlan, keepDuration = false) => {
+    const originals = updated.clips;
+    if (!originals.length) { updatePlanWithHistory(updated); return; }
+    const seconds = updated.cut_pacing === 'fast' ? 1.5 : updated.cut_pacing === 'slow' ? 4 : 2.5;
+    const duration = keepDuration ? updated.duration_seconds : Math.min(120, originals.length * seconds);
+    let cursor = 0;
+    const clips = originals.map((clip, i) => {
+      let end = duration * (i + 1) / originals.length;
+      if (updated.beat_sync && audioAnalysis?.beat_times.length && i < originals.length - 1) {
+        const candidates = audioAnalysis.beat_times.filter(t => t >= cursor + 0.5 && t <= duration - (originals.length - i - 1) * 0.5);
+        if (candidates.length) end = candidates.reduce((best, t) => Math.abs(t - end) < Math.abs(best - end) ? t : best);
+      }
+      const length = i === originals.length - 1 ? duration - cursor : Math.max(0.5, end - cursor);
+      cursor += length;
+      return { ...clip, duration: length };
+    });
+    updatePlanWithHistory(recalculateTimeline(clips, updated.transitions, updated));
+  };
 
   return (
-    <div className="flex flex-col h-screen bg-white text-zinc-900 select-none overflow-hidden">
+    <div className="flex flex-col h-dvh bg-white text-zinc-900 select-none overflow-hidden">
       {/* Hidden audio element for preview sync */}
       {audio && (
         <audio
           ref={synchronizedAudioRef}
           src={getMediaUrl(audio.url)}
           preload="auto"
-          onEnded={() => {
-            setIsPlaying(false);
-            setCurrentTime(0.0);
-          }}
         />
       )}
 
@@ -909,7 +1395,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       )}
 
       {/* Top Navigation Toolbar */}
-      <header className="h-14 border-b border-zinc-200 bg-white px-5 flex items-center justify-between z-30 shrink-0">
+      <header className="h-14 gap-4 overflow-x-auto border-b border-zinc-200 bg-white px-3 flex items-center justify-between z-30 shrink-0">
         {/* Left: Back & Project Name */}
         <div className="flex items-center gap-3">
           <button
@@ -928,14 +1414,14 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               type="text"
               value={projectName}
               onChange={e => setProjectName(e.target.value)}
-              className="text-sm font-semibold text-zinc-900 bg-transparent border-b border-transparent hover:border-zinc-300 focus:border-zinc-900 focus:outline-none transition-colors px-1"
+              className="w-28 text-sm font-semibold text-zinc-900 bg-transparent border-b border-transparent hover:border-zinc-300 focus:border-zinc-900 focus:outline-none transition-colors px-1"
               title="Click to rename project"
             />
           </div>
         </div>
 
         {/* Center: Aspect Ratio & Image Fit Mode Controls */}
-        <div className="hidden md:flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           {/* Aspect Ratio Selector */}
           <div className="flex items-center p-0.5 bg-zinc-100 rounded-lg border border-zinc-200 shadow-2xs">
             <button
@@ -1010,6 +1496,10 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
           </div>
         </div>
 
+        <div className="flex shrink-0 gap-2">
+          <button className="lg:hidden text-xs border rounded px-2 py-1" onClick={() => setMobilePanel(mobilePanel === 'media' ? null : 'media')}>Media</button>
+          <button className="xl:hidden text-xs border rounded px-2 py-1" onClick={() => setMobilePanel(mobilePanel === 'director' ? null : 'director')}>Director</button>
+        </div>
         {/* Right: Undo/Redo & Export Button */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
@@ -1033,6 +1523,14 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               onClick={() => {
                 if (window.confirm('Reset this project to start fresh?')) {
                   localStorage.removeItem(STORAGE_KEY);
+                  setIsPlaying(false);
+                  currentTimeRef.current = 0;
+                  setCurrentTime(0);
+                  setHistory([]);
+                  setRedoStack([]);
+                  setSelectedClipId(null);
+                  setViewRenderedVideo(false);
+                  setRenderStatus(null);
                   setImages([]);
                   setAudio(null);
                   setAudioAnalysis(null);
@@ -1060,10 +1558,21 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
           <div className="h-4 w-px bg-zinc-200" />
 
           <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsAutoEditModalOpen(true)}
+            className="flex items-center gap-1.5 border-amber-300 hover:border-amber-400 bg-amber-50/50 hover:bg-amber-100/60 text-amber-900"
+            title="Automatically transcribe and generate a dynamic talking-head reel"
+          >
+            <Wand2 className="w-3.5 h-3.5 text-amber-600" />
+            <span className="font-semibold">Auto Reel</span>
+          </Button>
+
+          <Button
             variant="primary"
             size="sm"
             onClick={handleStartRender}
-            disabled={images.length === 0}
+            disabled={plan.clips.length === 0 || renderStatus?.status === 'processing' || renderStatus?.status === 'queued'}
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export MP4</span>
@@ -1071,10 +1580,17 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
         </div>
       </header>
 
+      {errorMessage && (
+        <div role="alert" className="shrink-0 max-h-20 overflow-auto border-b border-zinc-200 px-3 py-2 text-xs bg-white flex gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" /><span className="flex-1">{errorMessage}</span>
+          <button aria-label="Dismiss message" onClick={() => setErrorMessage(null)}>Dismiss</button>
+        </div>
+      )}
       {/* Main Studio Area (3 Columns: Left Media/Settings, Center Preview, Right AI Assistant) */}
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+      <div className="flex-1 min-h-0 flex relative overflow-hidden">
         {/* LEFT PANEL: Media Library & Settings */}
-        <aside className="w-full md:w-80 lg:w-88 border-r border-zinc-200 bg-zinc-50/70 flex flex-col shrink-0 overflow-hidden">
+        <aside className={`${mobilePanel === 'media' ? 'flex absolute inset-y-0 left-0 z-30 shadow-xl' : 'hidden'} lg:static lg:flex w-72 max-w-[85vw] border-r border-zinc-200 bg-zinc-50 flex-col shrink-0 overflow-hidden`}>
+          <button className="lg:hidden text-xs p-2 border-b" onClick={() => setMobilePanel(null)}>Close media</button>
           {/* Tabs */}
           <div className="flex border-b border-zinc-200 bg-white px-2 pt-2 gap-1 text-xs font-medium overflow-x-auto">
             <button
@@ -1086,7 +1602,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               }`}
             >
               <ImageIcon className="w-3.5 h-3.5" />
-              <span>Photos ({images.length})</span>
+              <span>Media ({images.length})</span>
             </button>
 
             <button
@@ -1099,6 +1615,32 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             >
               <Music className="w-3.5 h-3.5" />
               <span>Music {audio ? '•' : ''}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('captions')}
+              className={`px-3 py-2 rounded-t-lg border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'captions'
+                  ? 'border-zinc-900 text-zinc-900 font-semibold bg-zinc-50'
+                  : 'border-transparent text-zinc-500 hover:text-zinc-900'
+              }`}
+              title="Dynamic Expressive Captions"
+            >
+              <Subtitles className="w-3.5 h-3.5 text-amber-500" />
+              <span>Captions {plan.subtitles && plan.subtitles.length > 0 ? `(${plan.subtitles.length})` : ''}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('inserts')}
+              className={`px-3 py-2 rounded-t-lg border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'inserts'
+                  ? 'border-zinc-900 text-zinc-900 font-semibold bg-zinc-50'
+                  : 'border-transparent text-zinc-500 hover:text-zinc-900'
+              }`}
+              title="Contextual B-Roll & Visual Inserts"
+            >
+              <Layers className="w-3.5 h-3.5 text-blue-500" />
+              <span>Inserts {plan.visual_inserts && plan.visual_inserts.length > 0 ? `(${plan.visual_inserts.length})` : ''}</span>
             </button>
 
             <button
@@ -1151,15 +1693,15 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 >
                   <Upload className="w-5 h-5 text-zinc-500 mb-1.5 group-hover:text-zinc-800 transition-colors" />
                   <span className="text-xs font-semibold text-zinc-800">
-                    Add Photographs
+                    Add Photos or Videos
                   </span>
                   <span className="text-[11px] text-zinc-500 mt-0.5">
-                    Drag and drop or browse files (JPG, PNG, WebP)
+                    Drag and drop JPG, PNG, WebP, MP4, MOV or WebM files
                   </span>
                   <input
                     type="file"
                     multiple
-                    accept="image/*"
+                    accept=".jpg,.jpeg,.png,.webp,.mp4,.mov,.webm,.avi,.mkv"
                     onChange={handleImageFileInput}
                     className="hidden"
                   />
@@ -1186,8 +1728,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
                 {images.length === 0 ? (
                   <div className="text-center py-10 px-4 text-xs text-zinc-500 border border-zinc-200 rounded-xl bg-white space-y-2">
-                    <p className="font-medium text-zinc-700">No photos in project library</p>
-                    <p className="text-[11px]">Upload photos to begin assembling your reel.</p>
+                    <p className="font-medium text-zinc-700">No media in project library</p>
+                    <p className="text-[11px]">Upload photos or videos to begin assembling your reel.</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -1210,11 +1752,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                         className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 transition-all shadow-sm"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <img
-                            src={getMediaUrl(img.url)}
-                            alt=""
-                            className="w-10 h-10 object-cover rounded bg-zinc-100 shrink-0 border border-zinc-200"
-                          />
+                          {img.media_type === 'video'
+                            ? <video src={getMediaUrl(img.url)} muted preload="metadata" className="w-10 h-10 object-cover rounded shrink-0" />
+                            : <img src={getMediaUrl(img.url)} alt="" className="w-10 h-10 object-cover rounded shrink-0" />}
                           <div className="min-w-0">
                             <p className="text-xs font-medium text-zinc-900 truncate">
                               {img.original_name}
@@ -1367,7 +1907,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                     checked={plan.beat_sync}
                     onChange={e => {
                       const updated = { ...plan, beat_sync: e.target.checked };
-                      updatePlanWithHistory(updated);
+                      if (updated.beat_sync && !audioAnalysis?.beat_times.length) { setErrorMessage('Analyze a soundtrack with detectable beats first.'); return; }
+                      repace(updated, true);
                     }}
                     className="w-4 h-4 accent-zinc-900 rounded cursor-pointer"
                   />
@@ -1424,7 +1965,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                         key={p.id}
                         onClick={() => {
                           const updated = { ...plan, cut_pacing: p.id as any };
-                          updatePlanWithHistory(updated);
+                          repace(updated);
                         }}
                         className={`py-2 px-1 text-center rounded-lg border text-xs font-medium transition-all ${
                           plan.cut_pacing === p.id
@@ -1453,9 +1994,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                     step="0.5"
                     value={plan.duration_seconds}
                     onChange={e => {
-                      const updated = { ...plan, duration_seconds: parseFloat(e.target.value) };
-                      setPlan(updated);
-                      refreshTimeline(updated, images, audio);
+                      resizeDuration(parseFloat(e.target.value));
                     }}
                     className="w-full accent-zinc-900 cursor-pointer"
                   />
@@ -1532,13 +2071,334 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 )}
               </div>
             )}
+
+            {/* CAPTIONS TAB (Stage 4) */}
+            {activeTab === 'captions' && (
+              <div className="space-y-4">
+                {/* Auto-Transcribe Action Card */}
+                <div className="p-3.5 bg-amber-500/10 border border-amber-200 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                      <Subtitles className="w-4 h-4 text-amber-600" />
+                      Local Speech Transcription
+                    </span>
+                    <span className="text-[10px] font-mono bg-amber-200/60 text-amber-900 px-1.5 py-0.5 rounded font-semibold">
+                      Faster-Whisper
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Extract word-level timestamps and auto-highlight high-energy emphasis keywords on CPU without paid APIs.
+                  </p>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleAutoTranscribe}
+                    disabled={isTranscribing || (!audio && !images.some(item => item.media_type === 'video'))}
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white flex items-center justify-center gap-1.5 shadow-xs"
+                  >
+                    {isTranscribing ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Transcribing... {transcriptionProgress}%</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="w-3.5 h-3.5" />
+                        <span>Transcribe Speech from Media</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Caption Presets */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-zinc-900 block">
+                    Caption Style Preset
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: 'bold_pop', name: 'Bold Pop', color: '#FACC15', desc: 'Neon Yellow Active Pop' },
+                      { id: 'fitness_energy', name: 'Fitness Energy', color: '#38BDF8', desc: 'Electric Cyan & Amber' },
+                      { id: 'minimalist', name: 'Minimalist Clean', color: '#E11D48', desc: 'Subtle Crimson Accent' },
+                      { id: 'subtle_border', name: 'Subtle Border', color: '#10B981', desc: 'Clean Emerald Stroke' },
+                    ].map(preset => {
+                      const currentPreset = plan.subtitles?.[0]?.style?.preset || 'bold_pop';
+                      const isSelected = currentPreset === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          onClick={() => {
+                            if (!plan.subtitles || plan.subtitles.length === 0) return;
+                            const updatedSubs = plan.subtitles.map(s => ({
+                              ...s,
+                              style: {
+                                ...(s.style || {
+                                  preset: 'bold_pop' as SubtitlePreset,
+                                  font_size: 42,
+                                  font_family: 'Inter, sans-serif',
+                                  color: '#FFFFFF',
+                                  highlight_color: '#FACC15',
+                                  stroke_color: '#000000',
+                                  stroke_width: 4,
+                                  position: 'center_bottom' as const
+                                }),
+                                preset: preset.id as SubtitlePreset,
+                                highlight_color: preset.color,
+                                caption_mode: preset.id === 'minimalist' || preset.id === 'subtle_border' ? 'phrase' as const : 'word_by_word' as const
+                              }
+                            }));
+                            updatePlanWithHistory({ ...plan, subtitles: updatedSubs });
+                          }}
+                          className={`p-2.5 rounded-xl border text-left transition-all ${
+                            isSelected
+                              ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm ring-1 ring-zinc-900'
+                              : 'bg-white text-zinc-800 border-zinc-200 hover:border-zinc-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: preset.color }} />
+                            <span className="text-xs font-semibold">{preset.name}</span>
+                          </div>
+                          <p className={`text-[10px] leading-tight ${isSelected ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                            {preset.desc}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Caption Mode Switcher */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-zinc-900 block">
+                    Timing Display Mode
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-100 rounded-lg border border-zinc-200">
+                    <button
+                      onClick={() => {
+                        if (!plan.subtitles) return;
+                        const updated = plan.subtitles.map(s => ({
+                          ...s,
+                          style: { ...(s.style || {
+                            preset: 'bold_pop' as SubtitlePreset,
+                            font_size: 42,
+                            font_family: 'Inter, sans-serif',
+                            color: '#FFFFFF',
+                            highlight_color: '#FACC15',
+                            stroke_color: '#000000',
+                            stroke_width: 4,
+                            position: 'center_bottom' as const
+                          }), caption_mode: 'word_by_word' as const }
+                        }));
+                        updatePlanWithHistory({ ...plan, subtitles: updated });
+                      }}
+                      className={`py-1.5 px-2 rounded-md text-xs font-medium transition-all ${
+                        (plan.subtitles?.[0]?.style?.caption_mode || 'word_by_word') === 'word_by_word'
+                          ? 'bg-white text-zinc-900 font-semibold shadow-xs'
+                          : 'text-zinc-600 hover:text-zinc-900'
+                      }`}
+                    >
+                      Word-by-Word
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!plan.subtitles) return;
+                        const updated = plan.subtitles.map(s => ({
+                          ...s,
+                          style: { ...(s.style || {
+                            preset: 'bold_pop' as SubtitlePreset,
+                            font_size: 42,
+                            font_family: 'Inter, sans-serif',
+                            color: '#FFFFFF',
+                            highlight_color: '#FACC15',
+                            stroke_color: '#000000',
+                            stroke_width: 4,
+                            position: 'center_bottom' as const
+                          }), caption_mode: 'phrase' as const }
+                        }));
+                        updatePlanWithHistory({ ...plan, subtitles: updated });
+                      }}
+                      className={`py-1.5 px-2 rounded-md text-xs font-medium transition-all ${
+                        plan.subtitles?.[0]?.style?.caption_mode === 'phrase'
+                          ? 'bg-white text-zinc-900 font-semibold shadow-xs'
+                          : 'text-zinc-600 hover:text-zinc-900'
+                      }`}
+                    >
+                      Full Phrase
+                    </button>
+                  </div>
+                </div>
+
+                {/* Subtitle Segments List */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-zinc-900">
+                      Subtitle Segments ({plan.subtitles?.length || 0})
+                    </label>
+                    <button
+                      onClick={() => {
+                        const newSub: SubtitleSegment = {
+                          id: `sub-${(plan.subtitles?.length || 0) + 1}`,
+                          text: 'NEW CAPTION PHRASE',
+                          start_time: Math.round(currentTime * 10) / 10,
+                          end_time: Math.round((currentTime + 2.0) * 10) / 10,
+                          words: [
+                            { word: 'NEW', start: currentTime, end: currentTime + 0.6, emphasis: true },
+                            { word: 'CAPTION', start: currentTime + 0.6, end: currentTime + 1.3, emphasis: false },
+                            { word: 'PHRASE', start: currentTime + 1.3, end: currentTime + 2.0, emphasis: true }
+                          ]
+                        };
+                        updatePlanWithHistory({
+                          ...plan,
+                          subtitles: [...(plan.subtitles || []), newSub]
+                        });
+                      }}
+                      className="text-[11px] font-semibold text-amber-600 hover:text-amber-700"
+                    >
+                      + Add Segment
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {(plan.subtitles || []).map(seg => (
+                      <div
+                        key={seg.id}
+                        onClick={() => {
+                          currentTimeRef.current = seg.start_time;
+                          setCurrentTime(seg.start_time);
+                          renderPreviewFrame(seg.start_time);
+                        }}
+                        className="p-2.5 rounded-lg border border-zinc-200 bg-white hover:border-zinc-300 transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center justify-between text-[11px] text-zinc-400 font-mono mb-1">
+                          <span>{seg.start_time.toFixed(1)}s - {seg.end_time.toFixed(1)}s</span>
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              const updated = (plan.subtitles || []).filter(s => s.id !== seg.id);
+                              updatePlanWithHistory({ ...plan, subtitles: updated });
+                            }}
+                            className="text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Delete segment"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <p className="text-xs font-semibold text-zinc-900 leading-snug">
+                          {seg.text}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VISUAL INSERTS TAB (Stage 6) */}
+            {activeTab === 'inserts' && (
+              <div className="space-y-4">
+                {/* Auto-Suggest Action Card */}
+                <div className="p-3.5 bg-blue-500/10 border border-blue-200 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                      <Layers className="w-4 h-4 text-blue-600" />
+                      Contextual B-Roll Matching
+                    </span>
+                    <span className="text-[10px] font-mono bg-blue-200/60 text-blue-900 px-1.5 py-0.5 rounded font-semibold">
+                      AI Timeline
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-blue-800 leading-relaxed">
+                    Analyzes spoken keywords from your transcript and places matching uploaded photos as PiP or split overlays.
+                  </p>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleAutoSuggestInserts}
+                    disabled={!plan.subtitles || plan.subtitles.length === 0 || images.length === 0}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-1.5 shadow-xs"
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    <span>Auto-Match B-Roll from Speech</span>
+                  </Button>
+                </div>
+
+                {/* Inserts List */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-zinc-900 block">
+                    Active Visual Overlays ({plan.visual_inserts?.length || 0})
+                  </label>
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {(plan.visual_inserts || []).map(ins => (
+                      <div
+                        key={ins.id}
+                        className="p-2.5 rounded-lg border border-zinc-200 bg-white hover:border-zinc-300 transition-colors space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-zinc-900 truncate max-w-[170px]">
+                            {ins.label || 'Visual Overlay'}
+                          </span>
+                          <button
+                            onClick={() => {
+                              const updated = (plan.visual_inserts || []).filter(i => i.id !== ins.id);
+                              updatePlanWithHistory({ ...plan, visual_inserts: updated });
+                            }}
+                            className="text-zinc-400 hover:text-red-500 transition-colors"
+                            title="Remove insert"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={getMediaUrl(ins.asset_url)}
+                            alt=""
+                            className="w-12 h-12 object-cover rounded border border-zinc-200"
+                          />
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center gap-1 text-[11px] text-zinc-500 font-mono">
+                              <span>{ins.start_time.toFixed(1)}s</span>
+                              <span>•</span>
+                              <span>{ins.duration.toFixed(1)}s dur</span>
+                            </div>
+
+                            {/* Mode selector */}
+                            <div className="flex items-center gap-1 text-[10px]">
+                              {(['pip', 'split', 'cutaway'] as const).map(m => (
+                                <button
+                                  key={m}
+                                  onClick={() => {
+                                    const updated = (plan.visual_inserts || []).map(i =>
+                                      i.id === ins.id ? { ...i, mode: m } : i
+                                    );
+                                    updatePlanWithHistory({ ...plan, visual_inserts: updated });
+                                  }}
+                                  className={`px-1.5 py-0.5 rounded uppercase font-semibold ${
+                                    ins.mode === m
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                                  }`}
+                                >
+                                  {m}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </aside>
 
         {/* CENTER VIEWPORT: Video Preview & Playback Controls */}
-        <main className="flex-1 flex flex-col bg-zinc-100 items-center justify-between p-4 sm:p-6 overflow-hidden">
+        <main className="flex-1 min-h-0 min-w-0 flex flex-col bg-zinc-100 items-center gap-2 p-2 sm:p-4 overflow-hidden">
           {/* Top Info Bar */}
-          <div className="w-full max-w-sm flex items-center justify-between text-xs text-zinc-500 font-mono pb-2">
+          <div className="w-full max-w-sm shrink-0 flex items-center justify-between text-xs text-zinc-500 font-mono pb-2">
             <span>PREVIEW</span>
             <span className="font-semibold text-zinc-800 uppercase">
               {plan.aspect_ratio} • {plan.fit_mode || 'fill'} • {plan.style}
@@ -1546,15 +2406,13 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
           </div>
 
           {/* Viewport Box */}
-          <div className="relative flex-1 flex items-center justify-center w-full max-h-[56vh]">
+          <div data-testid="preview-area" style={{ containerType: 'size' }} className="relative flex-1 min-h-0 min-w-0 flex items-center justify-center w-full">
             <div
-              className={`relative rounded-xl overflow-hidden border border-zinc-300 shadow-md bg-zinc-950 transition-all duration-200 ${
-                plan.aspect_ratio === '9:16'
-                  ? 'aspect-[9/16] h-full max-h-[520px]'
-                  : plan.aspect_ratio === '16:9'
-                  ? 'aspect-[16/9] w-full max-w-[580px]'
-                  : 'aspect-square h-full max-h-[440px]'
-              }`}
+              style={{
+                width: `min(100cqw, calc(100cqh * ${plan.aspect_ratio === '16:9' ? 16 / 9 : plan.aspect_ratio === '1:1' ? 1 : 9 / 16}))`,
+                height: `min(100cqh, calc(100cqw / ${plan.aspect_ratio === '16:9' ? 16 / 9 : plan.aspect_ratio === '1:1' ? 1 : 9 / 16}))`
+              }}
+              className="relative rounded-xl overflow-hidden border border-zinc-300 bg-zinc-950 shrink-0"
             >
               {/* Native HTML5 video player if exported reel is selected */}
               {viewRenderedVideo && renderStatus?.status === 'completed' && renderJobId ? (
@@ -1582,7 +2440,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
               {renderStatus?.status === 'completed' && renderJobId && (
                 <button
-                  onClick={() => setViewRenderedVideo(!viewRenderedVideo)}
+                  onClick={() => { setIsPlaying(false); setViewRenderedVideo(!viewRenderedVideo); }}
                   className="absolute bottom-3 right-3 px-2.5 py-1 rounded bg-white text-zinc-900 text-[11px] font-medium shadow-md hover:bg-zinc-100 transition-colors border border-zinc-200"
                 >
                   {viewRenderedVideo ? 'Canvas Mode' : 'Watch Exported MP4'}
@@ -1592,10 +2450,12 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
           </div>
 
           {/* Playback Controller */}
-          <div className="w-full max-w-md mt-4 p-3 rounded-xl bg-white border border-zinc-200 shadow-sm flex items-center justify-between gap-4">
+          <div data-testid="playback-controls"
+          className="w-full max-w-md shrink-0 p-2 rounded-xl bg-white border border-zinc-200 shadow-sm flex items-center justify-between gap-4">
             <button
               onClick={handleTogglePlay}
               className="w-9 h-9 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white flex items-center justify-center transition-transform active:scale-95 shrink-0 shadow-sm"
+              aria-label={isPlaying ? 'Pause' : 'Play'}
               title={isPlaying ? 'Pause' : 'Play'}
             >
               {isPlaying ? <Pause className="w-4 h-4 fill-white" /> : <Play className="w-4 h-4 fill-white ml-0.5" />}
@@ -1609,6 +2469,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               </div>
               <input
                 type="range"
+                aria-label="Playback position"
                 min="0"
                 max={plan.duration_seconds}
                 step="0.1"
@@ -1632,7 +2493,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
         </main>
 
         {/* RIGHT PANEL: Voice & Text Editing Directives */}
-        <aside className="w-full md:w-80 lg:w-88 border-l border-zinc-200 bg-white flex flex-col shrink-0 overflow-hidden">
+        <aside className={`${mobilePanel === 'director' ? 'flex absolute inset-y-0 right-0 z-30 shadow-xl' : 'hidden'} xl:static xl:flex w-80 max-w-[85vw] border-l border-zinc-200 bg-white flex-col shrink-0 overflow-hidden`}>
+          <button className="xl:hidden text-xs p-2 border-b" onClick={() => setMobilePanel(null)}>Close director</button>
           {/* Header */}
           <div className="p-4 border-b border-zinc-200 flex items-center justify-between">
             <div>
@@ -1647,9 +2509,23 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               </p>
             </div>
 
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 text-zinc-700 border border-zinc-200">
-              AI DIRECTOR
-            </span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    ollamaStatus.available ? 'bg-emerald-500 ring-2 ring-emerald-200' : 'bg-zinc-300'
+                  }`}
+                />
+                <span className="text-[10px] font-mono text-zinc-500 truncate max-w-[125px]">
+                  {ollamaStatus.available
+                    ? `Ollama: ${selectedOllamaModel || 'Connected'}`
+                    : 'Ollama: Offline (Fallback)'}
+                </span>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 text-zinc-700 border border-zinc-200">
+                AI DIRECTOR
+              </span>
+            </div>
           </div>
 
           {/* Conversation History */}
@@ -1684,15 +2560,14 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             </span>
             <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pb-1">
               {[
+                'Move the fifth photo to the beginning.',
+                'Make the second image last three seconds.',
+                'Add a fade-in between the second and third photos.',
+                'Emphasize important words.',
+                'Turn this talking-head video into a dynamic reel.',
+                'Remove the eighth photo.',
                 'Apply a crossfade between photos one and two.',
-                'Replace transition between photos two and three with dip to black.',
-                'Add a fade-in at the beginning of the entire reel.',
-                'Fade out the video at the end.',
-                'Change the video to landscape.',
-                'Change the output ratio to square.',
-                'Make the first photo last three seconds.',
-                'Extend the third photo by two seconds.',
-                'Move the last photo to the beginning.'
+                'Change the video to landscape.'
               ].map(cmd => (
                 <button
                   key={cmd}
@@ -1846,6 +2721,116 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auto-Edit Talking-Head Reel Workflow Modal (Stage 7) */}
+      {isAutoEditModalOpen && (
+        <div className="fixed inset-0 z-50 bg-zinc-950/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-zinc-200 rounded-2xl max-w-md w-full p-6 shadow-xl space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-600">
+                  <Wand2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-900">Auto Reel</h3>
+                  <p className="text-[11px] text-zinc-500">Local AI transcription, expressive captions & B-roll</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAutoEditModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-600 text-xs p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <label className="flex items-center gap-2 text-xs text-zinc-700">
+              <input type="checkbox" checked={includeCaptions} onChange={e => setIncludeCaptions(e.target.checked)} />
+              Generate captions from speech
+            </label>
+            <p className="text-xs text-zinc-500">Output: {plan.aspect_ratio}. Uses your uploaded photos or primary video.</p>
+            {/* Choose Reel Style */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-zinc-800 block">
+                Select Editing Style
+              </label>
+              <div className="space-y-2">
+                {[
+                  {
+                    id: 'fitness_energy',
+                    name: 'Fitness High Energy',
+                    desc: 'Fast pacing, vibrant color grade, active word-by-word yellow pops & PiP overlays',
+                    tag: 'Reels & TikTok'
+                  },
+                  {
+                    id: 'minimalist',
+                    name: 'Minimalist Clean',
+                    desc: 'Clean letterbox fit, subtle crimson accents, full phrase captions & split screen',
+                    tag: 'Educational & Podcasts'
+                  },
+                  {
+                    id: 'cinematic',
+                    name: 'Cinematic Story',
+                    desc: 'Smooth slow-zoom motion, bold centered typography, and cinematic crossfades',
+                    tag: 'Storytelling & Lifestyle'
+                  }
+                ].map(style => (
+                  <button
+                    key={style.id}
+                    onClick={() => setAutoEditStyle(style.id as any)}
+                    className={`w-full p-3 rounded-xl border text-left transition-all ${
+                      autoEditStyle === style.id
+                        ? 'border-zinc-900 bg-zinc-50 ring-1 ring-zinc-900 shadow-xs'
+                        : 'border-zinc-200 bg-white hover:border-zinc-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-zinc-900">{style.name}</span>
+                      <span className="text-[10px] font-mono text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
+                        {style.tag}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 leading-relaxed">
+                      {style.desc}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-zinc-100">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsAutoEditModalOpen(false)}
+                disabled={isAutoEditing}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleExecuteAutoEdit}
+                disabled={isAutoEditing || images.length === 0}
+                className="bg-zinc-900 hover:bg-zinc-800 text-white flex items-center gap-1.5"
+              >
+                {isAutoEditing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Analyzing & Building Reel...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Generate Reel Draft</span>
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </div>

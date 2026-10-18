@@ -7,7 +7,8 @@ from app.schemas.editing_plan import (
     CommandResponse,
     ClipConfig,
     TransitionConfig,
-    GlobalTransitionConfig
+    GlobalTransitionConfig,
+    SubtitleStyle
 )
 
 WORD_TO_NUM = {
@@ -87,13 +88,18 @@ def _recalc_timeline(plan: EditingPlan):
     if plan.transitions and len(plan.clips) > 1:
         clip_dict = {c.id: c for c in plan.clips}
         for t in plan.transitions:
-            c1 = clip_dict.get(t.from_clip_id)
-            c2 = clip_dict.get(t.to_clip_id)
+            f_id = getattr(t, "from_clip_id", None) or (t.get("from_clip_id") if isinstance(t, dict) else None)
+            t_id = getattr(t, "to_clip_id", None) or (t.get("to_clip_id") if isinstance(t, dict) else None)
+            c1 = clip_dict.get(f_id)
+            c2 = clip_dict.get(t_id)
             if c1 and c2:
                 max_dur = max(0.1, min(c1.duration, c2.duration) - 0.1)
-                t.duration = min(round(t.duration, 2), round(max_dur, 2))
+                if hasattr(t, "duration"):
+                    t.duration = min(round(t.duration, 2), round(max_dur, 2))
+                elif isinstance(t, dict) and "duration" in t:
+                    t["duration"] = min(round(t["duration"], 2), round(max_dur, 2))
 
-def interpret_command(request: CommandRequest) -> CommandResponse:
+def interpret_command(request: CommandRequest, allow_llm: bool = True) -> CommandResponse:
     """
     Parses natural language video editing commands into a validated EditingPlan.
     Supports transitions, aspect ratios, fit modes, clip durations, trimming, and reordering.
@@ -242,7 +248,28 @@ def interpret_command(request: CommandRequest) -> CommandResponse:
             changes.append(f"Removed transition between photo {from_idx + 1} and photo {to_idx + 1}")
 
     # -------------------------------------------------------------
-    # 5. Modify Transition Duration
+    # 5. Remove a Specific Photo
+    # e.g., "Remove the eighth photo."
+    # -------------------------------------------------------------
+    remove_clip_match = re.search(
+        r'(?:remove|delete|drop)\s+(?:the\s+)?(\w+)\s+(?:photo|clip|image)(?:\s+from\s+(?:the\s+)?timeline)?',
+        lower
+    )
+    if remove_clip_match and clip_count > 0:
+        idx = _resolve_clip_index(remove_clip_match.group(1), clip_count)
+        if idx is not None:
+            removed_clip = clips.pop(idx)
+            def _is_unaffected(t):
+                f_id = getattr(t, "from_clip_id", None) or (t.get("from_clip_id") if isinstance(t, dict) else None)
+                t_id = getattr(t, "to_clip_id", None) or (t.get("to_clip_id") if isinstance(t, dict) else None)
+                return f_id != removed_clip.id and t_id != removed_clip.id
+            plan.transitions = [t for t in plan.transitions if _is_unaffected(t)]
+            _recalc_timeline(plan)
+            changes.append(f"Removed photo {idx + 1} from the timeline")
+            clip_count = len(clips)
+
+    # -------------------------------------------------------------
+    # 6. Modify Transition Duration
     # e.g., "Make the transition between the third and fourth clips last one second."
     # -------------------------------------------------------------
     trans_dur_match = re.search(
@@ -270,7 +297,7 @@ def interpret_command(request: CommandRequest) -> CommandResponse:
             changes.append(f"Set transition between photo {from_idx + 1} and photo {to_idx + 1} duration to {dur}s")
 
     # -------------------------------------------------------------
-    # 6. Fade Out Specific Photo
+    # 7. Fade Out Specific Photo
     # e.g., "Fade out the second photo."
     # -------------------------------------------------------------
     single_fade_match = re.search(
@@ -303,7 +330,7 @@ def interpret_command(request: CommandRequest) -> CommandResponse:
             changes.append(f"Applied fade-out to photo {idx + 1}")
 
     # -------------------------------------------------------------
-    # 7. Extend or Shorten Specific Photo
+    # 8. Extend or Shorten Specific Photo
     # e.g., "Extend the third photo by two seconds."
     # -------------------------------------------------------------
     extend_match = re.search(
@@ -331,7 +358,7 @@ def interpret_command(request: CommandRequest) -> CommandResponse:
             changes.append(f"Shortened photo {idx + 1} by {delta}s (new duration: {clips[idx].duration}s)")
 
     # -------------------------------------------------------------
-    # 8. Set Specific Photo Duration
+    # 9. Set Specific Photo Duration
     # e.g., "Make the first photo last three seconds"
     # -------------------------------------------------------------
     clip_dur_match = re.search(
@@ -349,7 +376,7 @@ def interpret_command(request: CommandRequest) -> CommandResponse:
             changes.append(f"Set photo {idx + 1} duration to {dur}s (total reel duration: {plan.duration_seconds}s)")
 
     # -------------------------------------------------------------
-    # 9. Reorder / Move Clips
+    # 10. Reorder / Move Clips
     # e.g., "Move the last photo to the beginning."
     #       "Move the first photo to the end."
     # -------------------------------------------------------------
@@ -397,7 +424,7 @@ def interpret_command(request: CommandRequest) -> CommandResponse:
             changes.append(f"Moved photo {src_idx + 1} to {'beginning' if dst_idx == 0 else 'end' if dst_idx == clip_count - 1 else f'position {dst_idx + 1}'}")
 
     # -------------------------------------------------------------
-    # 10. Aspect Ratio & Fit Mode
+    # 11. Aspect Ratio & Fit Mode
     # e.g., "Change the video to landscape", "Change the output ratio to square"
     # -------------------------------------------------------------
     if any(k in lower for k in ["landscape", "16:9", "horizontal"]):
@@ -406,7 +433,7 @@ def interpret_command(request: CommandRequest) -> CommandResponse:
     elif any(k in lower for k in ["square", "1:1"]):
         plan.aspect_ratio = "1:1"
         changes.append("Set aspect ratio to square (1:1)")
-    elif any(k in lower for k in ["portrait", "vertical", "9:16", "reel", "tiktok", "shorts"]):
+    elif any(k in lower for k in ["portrait", "vertical", "9:16", "tiktok", "shorts"]):
         plan.aspect_ratio = "9:16"
         changes.append("Set aspect ratio to portrait (9:16)")
 
@@ -419,7 +446,7 @@ def interpret_command(request: CommandRequest) -> CommandResponse:
         changes.append("Set image fitting mode to Fill (crop to fill frame)")
 
     # -------------------------------------------------------------
-    # 11. Total Duration
+    # 12. Total Duration
     # -------------------------------------------------------------
     if not clip_dur_match and not extend_match and not shorten_match:
         dur_match = re.search(r'(\d{1,2})[-\s]*(?:seconds?|secs?|s\b)', lower)
@@ -439,14 +466,14 @@ def interpret_command(request: CommandRequest) -> CommandResponse:
                 changes.append(f"Set reel duration to {d}s")
 
     # -------------------------------------------------------------
-    # 12. Pacing & Beat Sync
+    # 13. Pacing & Beat Sync
     # -------------------------------------------------------------
-    if any(k in lower for k in ["sync to beat", "sync cuts to beat", "beat sync", "beat-synced"]):
-        plan.beat_sync = True
-        changes.append("Enabled beat synchronization")
-    elif any(k in lower for k in ["no beat sync", "disable beat", "don't sync"]):
+    if any(k in lower for k in ["no beat sync", "disable beat", "don't sync"]):
         plan.beat_sync = False
         changes.append("Disabled beat synchronization")
+    elif any(k in lower for k in ["sync to beat", "sync cuts to beat", "beat sync", "beat-synced"]):
+        plan.beat_sync = True
+        changes.append("Enabled beat synchronization")
 
     if any(k in lower for k in ["fast cut", "faster", "rapid", "energetic"]):
         plan.cut_pacing = "fast"
@@ -456,7 +483,7 @@ def interpret_command(request: CommandRequest) -> CommandResponse:
         changes.append("Changed pacing to slow cuts")
 
     # -------------------------------------------------------------
-    # 13. Style Presets
+    # 14. Style Presets
     # -------------------------------------------------------------
     if "noir" in lower or "monochrome" in lower:
         plan.style = "noir"
@@ -475,7 +502,7 @@ def interpret_command(request: CommandRequest) -> CommandResponse:
         changes.append("Selected Cinematic style")
 
     # -------------------------------------------------------------
-    # 14. Title Text & Overlay
+    # 15. Title Text & Overlay
     # -------------------------------------------------------------
     title_match = re.search(
         r'(?:change\s+(?:the\s+)?title\s+to|set\s+(?:the\s+)?title\s+to|title\s+to|title:\s*|name\s+(?:it|reel)\s+to)\s*["\']?([^"\'.\n]+)["\']?',
@@ -493,14 +520,51 @@ def interpret_command(request: CommandRequest) -> CommandResponse:
         changes.append("Disabled title overlay")
     elif any(k in lower for k in ["title at the beginning", "title at start", "beginning title", "at the beginning"]) and "title" in lower:
         plan.title.enabled = True
-        plan.title.position = "beginning"
+        plan.title.position = "center"
         changes.append("Enabled title overlay at the beginning")
     elif any(k in lower for k in ["add title", "show title", "enable title"]):
         plan.title.enabled = True
         changes.append("Enabled title overlay")
 
+    # -------------------------------------------------------------
+    # 16. Subtitle Word Emphasis
+    # e.g., "Emphasize important words", "Highlight keywords"
+    # -------------------------------------------------------------
+    if any(k in lower for k in ["emphasize", "highlight keywords", "bold keywords", "pop keywords"]):
+        if plan.subtitles:
+            from app.services.speech_transcription import apply_word_emphasis
+            for sub in plan.subtitles:
+                sub.style = sub.style or SubtitleStyle(preset="bold_pop")
+                if sub.words:
+                    sub.words = apply_word_emphasis(sub.words, sub.style)
+            changes.append("Emphasized key high-energy words with vibrant styling in subtitles")
+
+    # -------------------------------------------------------------
+    # 17. Turn Talking-Head Video into Dynamic Reel
+    # e.g., "Turn this talking-head video into a dynamic reel"
+    # -------------------------------------------------------------
+    if any(k in lower for k in ["dynamic reel", "talking-head", "talking head into", "auto edit reel"]):
+        plan.aspect_ratio = "9:16"
+        plan.style = "vibrant"
+        if plan.subtitles:
+            for sub in plan.subtitles:
+                sub.style = sub.style or SubtitleStyle(preset="bold_pop", caption_mode="word_by_word")
+                sub.style.preset = "bold_pop"
+                sub.style.caption_mode = "word_by_word"
+        changes.append("Optimized project as a high-energy 9:16 talking-head reel with dynamic word-by-word captions")
+
     # Ensure overall timeline consistency
     _recalc_timeline(plan)
+
+    if not changes and allow_llm:
+        # Fallback to local Ollama if running
+        try:
+            from app.services.ollama_client import interpret_with_ollama
+            ollama_res = interpret_with_ollama(text, plan)
+            if ollama_res and ollama_res.applied_changes:
+                return ollama_res
+        except Exception as e:
+            print(f"Ollama interpretation fallback deferred: {e}")
 
     if changes:
         explanation = f"RayFlow applied your direction: {', '.join(changes)}."

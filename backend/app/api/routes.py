@@ -1,10 +1,14 @@
 import os
 import shutil
 from pathlib import Path
-from typing import List, Optional
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Query, Body
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Query, Body, Request
+from starlette.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from PIL import Image, ImageOps
+from app.services.media import uploaded_path, probe_media, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
+from app.schemas.editing_plan import TransitionConfig
 
 from app.core.config import UPLOAD_DIR, EXPORT_DIR
 from app.schemas.editing_plan import (
@@ -15,6 +19,8 @@ from app.schemas.editing_plan import (
     RenderJobRequest,
     RenderJobStatus,
     ProjectPlanRequest,
+    SubtitleSegment,
+    VisualInsert,
 )
 from app.services.audio_analysis import analyze_audio
 from app.services.timeline_builder import build_timeline
@@ -35,7 +41,7 @@ def health_check():
     }
 
 @router.post("/media/images")
-async def upload_images(files: List[UploadFile] = File(...)):
+def upload_images(files: List[UploadFile] = File(...)):
     """
     Uploads multiple photos for reel creation.
     """
@@ -43,32 +49,42 @@ async def upload_images(files: List[UploadFile] = File(...)):
         raise HTTPException(status_code=400, detail="No image files provided.")
 
     saved_images = []
-    for file in files:
-        ext = Path(file.filename or "").suffix.lower()
-        if ext not in ALLOWED_IMAGE_EXTS:
-            continue
-
-        clean_filename = f"{Path(file.filename).stem}_{os.urandom(4).hex()}{ext}"
-        destination = UPLOAD_DIR / clean_filename
-
-        with open(destination, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        size_bytes = os.path.getsize(destination)
-        saved_images.append({
-            "filename": clean_filename,
-            "original_name": file.filename,
-            "size": size_bytes,
-            "url": f"/api/uploads/{clean_filename}"
-        })
-
-    if not saved_images:
-        raise HTTPException(status_code=400, detail="No supported image files found (.jpg, .png, .webp).")
-
+    destinations = []
+    try:
+        for file in files:
+            ext = Path(file.filename or "").suffix.lower()
+            if ext not in IMAGE_EXTENSIONS | VIDEO_EXTENSIONS:
+                raise ValueError(f"Unsupported media: {file.filename}. Use JPG, PNG, WebP, MP4, MOV or WebM.")
+            clean_filename = f"media_{os.urandom(8).hex()}{ext}"
+            destination = UPLOAD_DIR / clean_filename
+            destinations.append(destination)
+            with open(destination, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            media_type = "video" if ext in VIDEO_EXTENSIONS else "image"
+            metadata = {}
+            if media_type == "image":
+                with Image.open(destination) as source:
+                    source.load()
+                    normalized = ImageOps.exif_transpose(source).convert("RGB")
+                normalized.save(destination)
+                metadata = {"width": normalized.width, "height": normalized.height}
+            else:
+                metadata = probe_media(destination)
+                if not metadata["has_video"] or metadata["duration"] <= 0:
+                    raise ValueError(f"Cannot decode video: {file.filename}")
+            saved_images.append({
+                "filename": clean_filename, "original_name": file.filename,
+                "size": destination.stat().st_size, "url": f"/api/uploads/{clean_filename}",
+                "media_type": media_type, **metadata,
+            })
+    except Exception as exc:
+        for path in destinations:
+            path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=f"Media upload failed: {exc}") from exc
     return {"images": saved_images, "count": len(saved_images)}
 
 @router.post("/media/audio")
-async def upload_audio(file: UploadFile = File(...)):
+def upload_audio(file: UploadFile = File(...)):
     """
     Uploads a background music track.
     """
@@ -85,6 +101,11 @@ async def upload_audio(file: UploadFile = File(...)):
     with open(destination, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    metadata = probe_media(destination)
+    if not metadata["has_audio"] or metadata["duration"] <= 0:
+        destination.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="The uploaded file has no decodable audio.")
+
     return {
         "filename": clean_filename,
         "original_name": file.filename,
@@ -93,7 +114,7 @@ async def upload_audio(file: UploadFile = File(...)):
     }
 
 @router.post("/media/demo-project")
-async def load_demo_project():
+def load_demo_project():
     """
     Sets up 4 sample images and a sample soundtrack in uploads,
     enabling instant loading of a 4-photo project in the studio editor.
@@ -158,16 +179,17 @@ class AudioAnalyzeRequest(BaseModel):
     filename: str
 
 @router.post("/audio/analyze", response_model=AudioAnalysisResult)
-async def analyze_audio_endpoint(
-    filename: Optional[str] = Form(default=None),
-    json_req: Optional[AudioAnalyzeRequest] = Body(default=None),
-    query_filename: Optional[str] = Query(default=None)
-):
+async def analyze_audio_endpoint(request: Request):
     """
     Performs beat tracking and tempo estimation using Librosa on an uploaded audio file.
     Supports Form data, JSON body, or Query parameters.
     """
-    target = filename or (json_req.filename if json_req else None) or query_filename
+    target = request.query_params.get('filename') or request.query_params.get('query_filename')
+    try:
+        body = await request.json() if 'application/json' in request.headers.get('content-type', '') else await request.form()
+        target = body.get('filename') or target
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail='Invalid audio analysis request.')
     if not target:
         raise HTTPException(status_code=400, detail="Audio filename is required.")
 
@@ -176,13 +198,13 @@ async def analyze_audio_endpoint(
         raise HTTPException(status_code=404, detail="Audio file not found.")
 
     try:
-        result = analyze_audio(str(audio_path))
+        result = await run_in_threadpool(analyze_audio, str(audio_path))
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Audio analysis failed: {str(e)}")
 
 @router.post("/commands/interpret", response_model=CommandResponse)
-async def interpret_command_endpoint(request: CommandRequest):
+def interpret_command_endpoint(request: CommandRequest):
     """
     Translates natural-language voice instructions into an updated EditingPlan.
     """
@@ -192,7 +214,7 @@ async def interpret_command_endpoint(request: CommandRequest):
     return interpret_command(request)
 
 @router.post("/projects/plan", response_model=EditingPlan)
-async def create_or_update_plan(
+def create_or_update_plan(
     request: Optional[ProjectPlanRequest] = None,
     image_filenames: Optional[List[str]] = Query(default=None),
     audio_filename: Optional[str] = Query(default=None)
@@ -214,8 +236,17 @@ async def create_or_update_plan(
             except Exception:
                 analysis_result = None
 
-    image_urls = [f"/api/uploads/{Path(f).name}" for f in actual_images]
-    actual_plan.clips = build_timeline(image_urls, actual_plan, analysis_result)
+    try:
+        image_urls = [f"/api/uploads/{uploaded_path(f).name}" for f in actual_images]
+        actual_plan.clips = build_timeline(image_urls, actual_plan, analysis_result)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    actual_plan.transitions = [
+        TransitionConfig(id=f"trans-{a.id}-{b.id}", from_clip_id=a.id, to_clip_id=b.id,
+                         type=a.transition, duration=min(0.5, a.duration - 0.1, b.duration - 0.1),
+                         enabled=a.transition not in ("none", "cut"))
+        for a, b in zip(actual_plan.clips, actual_plan.clips[1:])
+    ]
     return actual_plan
 
 @router.post("/render")
@@ -223,8 +254,17 @@ async def render_video(request: RenderJobRequest):
     """
     Spawns an asynchronous FFmpeg rendering task for the specified EditingPlan.
     """
-    if not request.image_filenames:
-        raise HTTPException(status_code=400, detail="At least one image is required for rendering.")
+    if not request.plan.clips:
+        raise HTTPException(status_code=400, detail="Add at least one clip to the timeline before exporting.")
+    try:
+        for clip in request.plan.clips:
+            uploaded_path(clip.image_url)
+        for insert in request.plan.visual_inserts:
+            uploaded_path(insert.asset_url)
+        if request.audio_filename:
+            uploaded_path(request.audio_filename)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     job_id = start_render_job(
         plan=request.plan,
@@ -256,7 +296,8 @@ async def download_rendered_video(job_id: str):
     output_filename = f"rayflow_{job_id}.mp4"
     file_path = EXPORT_DIR / output_filename
 
-    if not file_path.exists():
+    status = get_job_status(job_id)
+    if not file_path.exists() or (status and status.status != "completed"):
         raise HTTPException(status_code=404, detail="Rendered video not found or not yet complete.")
 
     return FileResponse(
@@ -264,3 +305,121 @@ async def download_rendered_video(job_id: str):
         media_type="video/mp4",
         filename=output_filename
     )
+
+class TranscribeRequest(BaseModel):
+    media_filename: str
+    model_size: Optional[str] = "base"
+    language: Optional[str] = None
+
+@router.post("/transcribe")
+async def start_transcription(request: TranscribeRequest):
+    """
+    Initiates asynchronous speech-to-text transcription using local faster-whisper.
+    """
+    from app.services.speech_transcription import start_transcription_job
+
+    media_path = UPLOAD_DIR / Path(request.media_filename).name
+    if not media_path.exists():
+        raise HTTPException(status_code=404, detail=f"Media file '{request.media_filename}' not found in uploads.")
+
+    job_id = start_transcription_job(
+        media_filename=request.media_filename,
+        model_size=request.model_size or "base"
+    )
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "message": "Transcription job started."
+    }
+
+@router.get("/transcribe/{job_id}")
+async def get_transcription_status(job_id: str):
+    """
+    Checks the status and results of a speech-to-text transcription job.
+    """
+    from app.services.speech_transcription import get_transcription_job
+
+    job = get_transcription_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Transcription job not found.")
+    return job
+
+@router.get("/ollama/status")
+def get_ollama_status_endpoint(host: Optional[str] = Query(default=None)):
+    """
+    Queries local Ollama availability, endpoint reachability, and installed model tags.
+    """
+    from app.services.ollama_client import check_ollama_status
+    return check_ollama_status(host=host)
+
+class OllamaInterpretRequest(BaseModel):
+    command: str
+    plan: EditingPlan
+    model: Optional[str] = None
+    host: Optional[str] = None
+
+@router.post("/ollama/interpret", response_model=CommandResponse)
+def interpret_with_ollama_endpoint(req: OllamaInterpretRequest):
+    """
+    Interprets natural language editing command using local Ollama model with deterministic fallback.
+    """
+    from app.services.ollama_client import interpret_with_ollama
+    from app.services.command_interpreter import interpret_command
+
+    # Common clip operations must use the full editor grammar first. The LLM's
+    # restricted update schema cannot perform trims or reordering.
+    fallback_req = CommandRequest(command=req.command, current_plan=req.plan)
+    deterministic = interpret_command(fallback_req, allow_llm=False)
+    if deterministic.applied_changes:
+        return deterministic
+    # Attempt Ollama structured interpretation
+    res = interpret_with_ollama(command=req.command, current_plan=req.plan, model=req.model, host=req.host)
+    if res:
+        return res
+
+    # Clean fallback to deterministic parser
+    return deterministic
+
+class SuggestInsertsRequest(BaseModel):
+    subtitles: List[SubtitleSegment]
+    available_assets: List[Dict[str, Any]]
+    default_mode: Optional[str] = "pip"
+
+@router.post("/inserts/suggest", response_model=List[VisualInsert])
+async def suggest_inserts_endpoint(req: SuggestInsertsRequest):
+    """
+    Suggests contextual visual inserts (B-roll, PiP) matching transcript keywords.
+    """
+    from app.services.visual_inserts import suggest_contextual_inserts
+    return suggest_contextual_inserts(
+        subtitles=req.subtitles,
+        available_assets=req.available_assets,
+        default_mode=req.default_mode or "pip"
+    )
+
+class AutoEditRequest(BaseModel):
+    media_filename: str
+    style_key: Optional[str] = "fitness_energy"
+    available_assets: Optional[List[Dict[str, Any]]] = None
+    whisper_model: Optional[str] = "tiny"
+    aspect_ratio: str = "9:16"
+    include_captions: bool = True
+
+@router.post("/auto-edit", response_model=EditingPlan)
+def auto_edit_endpoint(req: AutoEditRequest):
+    """
+    Executes the end-to-end Auto Edit workflow from an uploaded video file.
+    """
+    from app.services.auto_edit import generate_auto_edit_reel
+    try:
+        return generate_auto_edit_reel(
+            media_filename=req.media_filename, style_key=req.style_key or "fitness_energy",
+            available_assets=req.available_assets, whisper_model=req.whisper_model or "tiny",
+            aspect_ratio=req.aspect_ratio, include_captions=req.include_captions,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Auto Reel failed: {exc}") from exc

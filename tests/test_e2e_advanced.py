@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from PIL import Image
 
-sys.path.insert(0, './backend')
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
 from app.core.config import UPLOAD_DIR, EXPORT_DIR, FFMPEG_PATH
 from app.schemas.editing_plan import EditingPlan, ClipConfig, TransitionConfig, GlobalTransitionConfig, CommandRequest
 from app.services.video_renderer import start_render_job, get_job_status
@@ -69,7 +69,7 @@ def run_tests():
     for ratio, exp_w, exp_h, fit_mode in test_cases:
         print(f"\n   Testing Export {ratio} ({exp_w}x{exp_h}, {fit_mode})...")
         export_plan = EditingPlan(
-            duration_seconds=4.0,
+            duration_seconds=4.5,
             aspect_ratio=ratio,
             fit_mode=fit_mode,
             clips=[

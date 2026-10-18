@@ -1,22 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   EditingPlan,
   ClipConfig,
-  TransitionConfig,
   AudioAnalysisResult,
   UploadedAudio
 } from '../../types';
 import { getMediaUrl } from '../../services/api';
+import { reorderClips, recalculateTimeline } from '../../utils/timeline';
 import {
   Plus,
   Minus,
   Trash2,
   ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Sparkles,
-  GripHorizontal,
-  Clock
+  ZoomOut
 } from 'lucide-react';
 
 interface InteractiveTimelineProps {
@@ -28,7 +24,7 @@ interface InteractiveTimelineProps {
   selectedClipId: string | null;
   onSelectClip: (clipId: string | null) => void;
   onSeek: (time: number) => void;
-  onUpdatePlan: (updatedPlan: EditingPlan) => void;
+  onUpdatePlan: (updatedPlan: EditingPlan, recordHistory?: boolean) => void;
   onOpenEffectsForBoundary?: (fromClipId: string, toClipId: string) => void;
 }
 
@@ -38,6 +34,7 @@ interface TrimmingActiveState {
   startX: number;
   initialDuration: number;
   initialStartTime: number;
+  initialSourceStart: number;
   currentDuration: number;
 }
 
@@ -57,10 +54,11 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
 
   // Trimming interaction state
   const [trimmingState, setTrimmingState] = useState<TrimmingActiveState | null>(null);
+  const pendingTrimPlanRef = useRef<EditingPlan | null>(null);
 
-  // Drag-and-drop reordering state
-  const [draggedClipIndex, setDraggedClipIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  // Drag-and-drop reordering state using stable clip IDs
+  const [draggedClipId, setDraggedClipId] = useState<string | null>(null);
+  const [dragTarget, setDragTarget] = useState<{ clipId: string; position: 'before' | 'after' } | null>(null);
 
   // Audio waveform peaks cache
   const [waveformPeaks, setWaveformPeaks] = useState<number[] | null>(null);
@@ -68,6 +66,60 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
 
   // Container refs for scroll sync
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const scrubRef = useRef<{ pointerId: number; grabOffset: number } | null>(null);
+  const seekFrameRef = useRef<number | null>(null);
+  const pendingSeekRef = useRef<number | null>(null);
+  const onSeekRef = useRef(onSeek);
+  useLayoutEffect(() => { onSeekRef.current = onSeek; }, [onSeek]);
+  const timelineOrigin = 33; // Padding + track label + track border.
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  useEffect(() => () => {
+    if (seekFrameRef.current !== null) cancelAnimationFrame(seekFrameRef.current);
+    scrubRef.current = null;
+  }, []);
+  const flushSeek = () => {
+    if (seekFrameRef.current !== null) cancelAnimationFrame(seekFrameRef.current);
+    seekFrameRef.current = null;
+    if (pendingSeekRef.current !== null) {
+      onSeekRef.current(pendingSeekRef.current);
+      pendingSeekRef.current = null;
+    }
+  };
+  const queueScrub = (clientX: number) => {
+    const scroller = scrollContainerRef.current;
+    if (!scroller || !scrubRef.current) return;
+    const x = clientX - scroller.getBoundingClientRect().left + scroller.scrollLeft
+      - timelineOrigin - scrubRef.current.grabOffset;
+    pendingSeekRef.current = Math.max(0, Math.min(totalDuration, x / pxPerSec));
+    if (seekFrameRef.current === null) seekFrameRef.current = requestAnimationFrame(flushSeek);
+  };
+  const startScrub = (event: React.PointerEvent<HTMLElement>, fromPlayhead = false) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const scroller = scrollContainerRef.current;
+    if (!scroller) return;
+    const headX = scroller.getBoundingClientRect().left - scroller.scrollLeft
+      + timelineOrigin + currentTime * pxPerSec;
+    scrubRef.current = { pointerId: event.pointerId, grabOffset: fromPlayhead ? event.clientX - headX : 0 };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsScrubbing(true);
+    if (!fromPlayhead) queueScrub(event.clientX);
+  };
+  const moveScrub = (event: React.PointerEvent<HTMLElement>) => {
+    if (scrubRef.current?.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    queueScrub(event.clientX);
+  };
+  const endScrub = (event: React.PointerEvent<HTMLElement>) => {
+    if (scrubRef.current?.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    if (event.type === 'pointerup') queueScrub(event.clientX);
+    flushSeek();
+    scrubRef.current = null;
+    setIsScrubbing(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
 
   const clips = plan.clips;
   const clipCount = clips.length;
@@ -85,26 +137,31 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
     }
 
     let isCancelled = false;
+    const abort = new AbortController();
+    let audioContext: AudioContext | null = null;
+    setWaveformPeaks(null);
     const fetchAndDecode = async () => {
       try {
         const audioUrl = getMediaUrl(audio.url);
-        const res = await fetch(audioUrl);
+        const res = await fetch(audioUrl, { signal: abort.signal });
+        if (!res.ok) throw new Error('Audio waveform unavailable');
         const arrayBuf = await res.arrayBuffer();
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
         if (!AudioCtx) return;
-        const ctx = new AudioCtx();
+        const ctx: AudioContext = new AudioCtx();
+        audioContext = ctx;
         const decoded = await ctx.decodeAudioData(arrayBuf);
         if (isCancelled) return;
 
         const raw = decoded.getChannelData(0);
         const numPeaks = 240;
-        const blockSize = Math.floor(raw.length / numPeaks);
+        const blockSize = Math.max(1, Math.floor(raw.length / numPeaks));
         const peaks: number[] = [];
 
         for (let i = 0; i < numPeaks; i++) {
           let sum = 0;
           for (let j = 0; j < blockSize; j++) {
-            sum += Math.abs(raw[i * blockSize + j]);
+            sum += Math.abs(raw[i * blockSize + j] || 0);
           }
           peaks.push(sum / blockSize);
         }
@@ -115,13 +172,16 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
           setWaveformPeaks(normalized);
         }
       } catch (err) {
-        console.warn('Could not decode audio waveform:', err);
+        if (!isCancelled) console.warn('Could not decode audio waveform:', err);
+      } finally {
+        if (audioContext && audioContext.state !== 'closed') await audioContext.close();
       }
     };
 
     fetchAndDecode();
     return () => {
       isCancelled = true;
+      abort.abort();
     };
   }, [audio?.url]);
 
@@ -147,51 +207,15 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
         const y = (h - barH) / 2;
         ctx.fillRect(x, y, Math.max(1, barWidth - 1), barH);
       }
-    } else {
-      // Subtle audio placeholder bars if still decoding
-      ctx.fillStyle = '#E4E4E7';
-      const numBars = 120;
-      const barW = w / numBars;
-      for (let i = 0; i < numBars; i++) {
-        const fakeH = 4 + (Math.sin(i * 0.4) * 0.5 + 0.5) * 14;
-        ctx.fillRect(i * barW, (h - fakeH) / 2, barW - 1, fakeH);
-      }
+
     }
   }, [waveformPeaks, timelineContentWidth]);
 
   // Recalculate timeline after any clip duration or order changes
-  const applyTimelineUpdate = (updatedClips: ClipConfig[]) => {
-    let accTime = 0.0;
-    const synced = updatedClips.map(c => {
-      const start = Math.round(accTime * 100) / 100;
-      const dur = Math.max(0.5, Math.round(c.duration * 100) / 100);
-      accTime += dur;
-      return { ...c, start_time: start, duration: dur };
-    });
-
-    const newTotal = Math.round(accTime * 100) / 100;
-
-    // Safely clamp boundary transitions
-    let updatedTransitions = plan.transitions || [];
-    if (updatedTransitions.length > 0 && synced.length > 1) {
-      const clipMap = new Map(synced.map(c => [c.id, c]));
-      updatedTransitions = updatedTransitions.map(t => {
-        const c1 = clipMap.get(t.from_clip_id);
-        const c2 = clipMap.get(t.to_clip_id);
-        if (c1 && c2) {
-          const maxAllowed = Math.max(0.1, Math.min(c1.duration, c2.duration) - 0.1);
-          return { ...t, duration: Math.min(t.duration, maxAllowed) };
-        }
-        return t;
-      });
-    }
-
-    onUpdatePlan({
-      ...plan,
-      duration_seconds: newTotal,
-      clips: synced,
-      transitions: updatedTransitions
-    });
+  const applyTimelineUpdate = (updatedClips: ClipConfig[], recordHistory = true): EditingPlan => {
+    const updatedPlan = recalculateTimeline(updatedClips, plan.transitions || [], plan);
+    onUpdatePlan(updatedPlan, recordHistory);
+    return updatedPlan;
   };
 
   // -------------------------------------------------------------
@@ -217,8 +241,10 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
       startX: e.clientX,
       initialDuration: clip.duration,
       initialStartTime: clip.start_time,
+      initialSourceStart: clip.source_start || 0,
       currentDuration: clip.duration
     });
+    pendingTrimPlanRef.current = null;
   };
 
   const handleTrimPointerMove = (e: React.PointerEvent) => {
@@ -238,11 +264,15 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
     // Apply real-time preview of clip duration
     const updated = clips.map(c => {
       if (c.id === trimmingState.clipId) {
+        if (c.media_type === 'video' && trimmingState.edge === 'left') {
+          nextDur = Math.min(nextDur, trimmingState.initialDuration + trimmingState.initialSourceStart);
+          return { ...c, duration: nextDur, source_start: trimmingState.initialSourceStart + trimmingState.initialDuration - nextDur };
+        }
         return { ...c, duration: nextDur };
       }
       return c;
     });
-    applyTimelineUpdate(updated);
+    pendingTrimPlanRef.current = applyTimelineUpdate(updated, false);
   };
 
   const handleTrimPointerUp = (e: React.PointerEvent) => {
@@ -252,82 +282,53 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
     } catch {
       // Ignore pointer release errors
     }
+    if (pendingTrimPlanRef.current) {
+      onUpdatePlan(pendingTrimPlanRef.current, true);
+      pendingTrimPlanRef.current = null;
+    }
     setTrimmingState(null);
   };
 
   // -------------------------------------------------------------
-  // Drag and Drop Horizontal Reordering
+  // Drag and Drop Horizontal Reordering with Stable IDs
   // -------------------------------------------------------------
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    e.dataTransfer.setData('text/plain', String(index));
+  const handleDragStart = (e: React.DragEvent, clipId: string) => {
+    e.dataTransfer.setData('text/plain', clipId);
     e.dataTransfer.effectAllowed = 'move';
-    setDraggedClipIndex(index);
+    setDraggedClipId(clipId);
   };
 
-  const handleDragOver = (e: React.DragEvent, targetIndex: number) => {
+  const handleDragOver = (e: React.DragEvent, targetClip: ClipConfig) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    if (dragOverIndex !== targetIndex) {
-      setDragOverIndex(targetIndex);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midX = rect.left + rect.width / 2;
+    const position: 'before' | 'after' = e.clientX < midX ? 'before' : 'after';
+
+    if (!dragTarget || dragTarget.clipId !== targetClip.id || dragTarget.position !== position) {
+      setDragTarget({ clipId: targetClip.id, position });
     }
   };
 
-  const handleDrop = (e: React.DragEvent, dropTargetIndex: number) => {
+  const handleDrop = (e: React.DragEvent, targetClip: ClipConfig) => {
     e.preventDefault();
-    if (draggedClipIndex === null || draggedClipIndex === dropTargetIndex) {
-      setDraggedClipIndex(null);
-      setDragOverIndex(null);
+    if (!draggedClipId || draggedClipId === targetClip.id) {
+      setDraggedClipId(null);
+      setDragTarget(null);
       return;
     }
 
-    const updatedClips = [...clips];
-    const [moved] = updatedClips.splice(draggedClipIndex, 1);
-    updatedClips.splice(dropTargetIndex, 0, moved);
+    const position = dragTarget?.position || 'before';
+    const reorderedClips = reorderClips(clips, draggedClipId, targetClip.id, position);
+    applyTimelineUpdate(reorderedClips, true);
 
-    // Rebuild adjacent transitions safely to align with new sequence
-    const newTransitions: TransitionConfig[] = [];
-    for (let i = 0; i < updatedClips.length - 1; i++) {
-      const c1 = updatedClips[i];
-      const c2 = updatedClips[i + 1];
-      const existing = (plan.transitions || []).find(t => t.from_clip_id === c1.id && t.to_clip_id === c2.id);
-      if (existing) {
-        newTransitions.push(existing);
-      } else {
-        newTransitions.push({
-          id: `trans-${c1.id}-${c2.id}`,
-          from_clip_id: c1.id,
-          to_clip_id: c2.id,
-          type: (c1.transition || 'none') as any,
-          duration: 0.5,
-          enabled: c1.transition !== 'none'
-        });
-      }
-    }
-
-    let acc = 0.0;
-    const synced = updatedClips.map(c => {
-      const s = Math.round(acc * 100) / 100;
-      acc += c.duration;
-      return { ...c, start_time: s };
-    });
-
-    onUpdatePlan({
-      ...plan,
-      duration_seconds: Math.round(acc * 100) / 100,
-      clips: synced,
-      transitions: newTransitions
-    });
-
-    setDraggedClipIndex(null);
-    setDragOverIndex(null);
+    setDraggedClipId(null);
+    setDragTarget(null);
   };
 
-  // Ruler click to seek
-  const handleRulerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const targetTime = Math.max(0.0, Math.min(totalDuration, clickX / pxPerSec));
-    onSeek(targetTime);
+  const handleDragEnd = () => {
+    setDraggedClipId(null);
+    setDragTarget(null);
   };
 
   // Selected clip object for inspector
@@ -364,9 +365,9 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
   }
 
   return (
-    <footer className="h-52 border-t border-zinc-200 bg-white flex flex-col shrink-0 z-20 select-none">
+    <footer className="h-52 max-h-[34dvh] min-h-[140px] border-t border-zinc-200 bg-white flex flex-col shrink-0 z-20 select-none">
       {/* 1. TIMELINE TOP BAR / INSPECTOR / ZOOM CONTROLS */}
-      <div className="h-10 border-b border-zinc-200 px-4 flex items-center justify-between text-xs bg-zinc-50/80">
+      <div className="h-10 shrink-0 overflow-x-auto gap-4 border-b border-zinc-200 px-4 flex items-center justify-between text-xs bg-zinc-50/80">
         {/* Left: Clips Counter & Active Inspector */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 font-mono text-zinc-800">
@@ -473,19 +474,30 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
       {/* 2. TIMELINE TRACKS SCROLL CONTAINER */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-x-auto overflow-y-hidden relative bg-zinc-50/50"
+        className="flex-1 overflow-auto relative bg-zinc-50/50"
       >
         <div
-          style={{ width: `${timelineContentWidth}px` }}
+          style={{ width: `${timelineContentWidth + 42}px` }}
           className="relative min-h-full flex flex-col p-2 space-y-1"
         >
           {/* PLAYHEAD NEEDLE */}
           <div
             style={{
-              left: `${currentTime * pxPerSec + 24}px`, // +24px left track label offset
+              left: `${currentTime * pxPerSec + timelineOrigin}px`,
               transform: 'translateX(-50%)'
             }}
-            className="absolute top-0 bottom-0 pointer-events-none z-40 flex flex-col items-center"
+            role="slider" tabIndex={0} aria-label="Timeline playhead"
+            aria-valuemin={0} aria-valuemax={totalDuration} aria-valuenow={currentTime}
+            aria-valuetext={currentTime.toFixed(2) + ' seconds'}
+            onPointerDown={e => startScrub(e, true)} onPointerMove={moveScrub}
+            onPointerUp={endScrub} onPointerCancel={endScrub} onLostPointerCapture={endScrub}
+            onKeyDown={e => {
+              const next = e.key === 'Home' ? 0 : e.key === 'End' ? totalDuration
+                : e.key === 'ArrowLeft' ? currentTime - (e.shiftKey ? 1 : 1 / 30)
+                : e.key === 'ArrowRight' ? currentTime + (e.shiftKey ? 1 : 1 / 30) : null;
+              if (next !== null) { e.preventDefault(); onSeek(Math.max(0, Math.min(totalDuration, next))); }
+            }}
+            className={`absolute top-0 bottom-0 w-5 touch-none z-40 flex flex-col items-center outline-offset-2 focus-visible:outline ${isScrubbing ? 'cursor-grabbing' : 'cursor-ew-resize'}`}
           >
             {/* Playhead badge */}
             <div className="w-3 h-3 bg-zinc-900 rotate-45 rounded-2xs shadow-xs" />
@@ -494,8 +506,9 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
 
           {/* TIME RULER */}
           <div
-            onClick={handleRulerClick}
-            className="h-5 flex items-center relative cursor-pointer border-b border-zinc-200 pl-6"
+            onPointerDown={e => startScrub(e)} onPointerMove={moveScrub}
+            onPointerUp={endScrub} onPointerCancel={endScrub} onLostPointerCapture={endScrub}
+            className="h-5 shrink-0 touch-none flex items-center relative cursor-pointer border-b border-zinc-200 pl-6"
             title="Click or drag on ruler to seek"
           >
             {rulerTicks.map(t => {
@@ -504,7 +517,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
               return (
                 <div
                   key={t}
-                  style={{ left: `${xPos}px` }}
+                  style={{ left: `${xPos + 25}px` }}
                   className="absolute top-0 bottom-0 flex flex-col items-start"
                 >
                   <div
@@ -536,9 +549,9 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
               ) : (
                 clips.map((clip, i) => {
                   const isSelected = selectedClipId === clip.id;
-                  const isDraggingOver = dragOverIndex === i;
+                  const isDraggingOver = dragTarget?.clipId === clip.id;
                   const leftPx = clip.start_time * pxPerSec;
-                  const widthPx = Math.max(30, clip.duration * pxPerSec);
+                  const widthPx = clip.duration * pxPerSec;
 
                   // Transition badge with next clip
                   const nextClip = clips[i + 1];
@@ -552,17 +565,21 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                       {/* Drop insertion line indicator */}
                       {isDraggingOver && (
                         <div
-                          style={{ left: `${leftPx}px` }}
-                          className="absolute top-0 bottom-0 w-1 bg-zinc-900 z-30 pointer-events-none rounded"
+                          style={{
+                            left: `${dragTarget.position === 'before' ? leftPx : leftPx + widthPx}px`
+                          }}
+                          className="absolute top-0 bottom-0 w-1 bg-zinc-900 z-30 pointer-events-none rounded shadow-xs"
                         />
                       )}
 
                       {/* CLIP BLOCK */}
                       <div
-                        draggable
-                        onDragStart={e => handleDragStart(e, i)}
-                        onDragOver={e => handleDragOver(e, i)}
-                        onDrop={e => handleDrop(e, i)}
+                        draggable={!trimmingState && !isScrubbing}
+                        data-clip-id={clip.id}
+                        onDragStart={e => handleDragStart(e, clip.id)}
+                        onDragOver={e => handleDragOver(e, clip)}
+                        onDrop={e => handleDrop(e, clip)}
+                        onDragEnd={handleDragEnd}
                         onClick={e => {
                           e.stopPropagation();
                           onSelectClip(clip.id);
@@ -583,6 +600,9 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                           onPointerDown={e => handleTrimPointerDown(e, clip.id, 'left')}
                           onPointerMove={handleTrimPointerMove}
                           onPointerUp={handleTrimPointerUp}
+                          onPointerCancel={handleTrimPointerUp}
+                          onClick={e => e.stopPropagation()}
+                          style={{ touchAction: 'none' }}
                           className="absolute left-0 top-0 bottom-0 w-2.5 cursor-ew-resize hover:bg-zinc-900/40 z-20 flex items-center justify-center group/handle"
                           title="Drag left edge to trim start"
                         >
@@ -594,6 +614,9 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                           onPointerDown={e => handleTrimPointerDown(e, clip.id, 'right')}
                           onPointerMove={handleTrimPointerMove}
                           onPointerUp={handleTrimPointerUp}
+                          onPointerCancel={handleTrimPointerUp}
+                          onClick={e => e.stopPropagation()}
+                          style={{ touchAction: 'none' }}
                           className="absolute right-0 top-0 bottom-0 w-2.5 cursor-ew-resize hover:bg-zinc-900/40 z-20 flex items-center justify-center group/handle"
                           title="Drag right edge to trim duration"
                         >
@@ -601,11 +624,11 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                         </div>
 
                         {/* Thumbnail background */}
-                        <img
-                          src={getMediaUrl(clip.image_url)}
-                          alt=""
-                          className="w-full h-full object-cover pointer-events-none"
-                        />
+                        {clip.media_type === 'video' ? (
+                          <video src={getMediaUrl(clip.image_url)} muted preload="metadata" className="w-full h-full object-cover pointer-events-none" />
+                        ) : (
+                          <img src={getMediaUrl(clip.image_url)} alt="" draggable={false} className="w-full h-full object-cover pointer-events-none" />
+                        )}
 
                         {/* Bottom clip duration badge */}
                         <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/70 via-transparent to-transparent flex items-end justify-between p-1 text-[9px] font-mono text-white pointer-events-none">
@@ -651,6 +674,80 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
             </div>
           </div>
 
+          {/* VISUAL INSERTS TRACK (V2) */}
+          {plan.visual_inserts && plan.visual_inserts.length > 0 && (
+            <div className="h-8 flex items-center relative">
+              <span className="text-[9px] font-mono font-semibold text-blue-500 uppercase w-6 shrink-0 text-center">
+                V2
+              </span>
+              <div className="flex-1 h-full relative rounded-lg border border-blue-200/80 bg-blue-50/40 overflow-hidden shadow-2xs">
+                {plan.visual_inserts.map(ins => {
+                  const leftPx = ins.start_time * pxPerSec;
+                  const widthPx = Math.max(16, ins.duration * pxPerSec);
+                  const isCurrent = currentTime >= ins.start_time && currentTime <= ins.start_time + ins.duration;
+                  return (
+                    <div
+                      key={ins.id}
+                      onClick={e => {
+                        e.stopPropagation();
+                        onSeek(ins.start_time);
+                      }}
+                      style={{
+                        left: `${leftPx}px`,
+                        width: `${widthPx}px`
+                      }}
+                      className={`absolute top-0.5 bottom-0.5 rounded px-1.5 flex items-center justify-between text-[10px] font-medium border cursor-pointer transition-all truncate ${
+                        isCurrent
+                          ? 'bg-blue-500 text-white border-blue-600 shadow-xs ring-1 ring-blue-400'
+                          : 'bg-blue-100 text-blue-900 border-blue-300 hover:bg-blue-200'
+                      }`}
+                      title={`Insert: ${ins.mode.toUpperCase()} (${ins.start_time.toFixed(1)}s - ${(ins.start_time + ins.duration).toFixed(1)}s). Click to seek.`}
+                    >
+                      <span className="truncate">{ins.label || ins.mode.toUpperCase()}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* SUBTITLES / CAPTIONS TRACK (CC) */}
+          {plan.subtitles && plan.subtitles.length > 0 && (
+            <div className="h-8 flex items-center relative">
+              <span className="text-[9px] font-mono font-semibold text-amber-500 uppercase w-6 shrink-0 text-center">
+                CC
+              </span>
+              <div className="flex-1 h-full relative rounded-lg border border-amber-200/80 bg-amber-50/40 overflow-hidden shadow-2xs">
+                {plan.subtitles.map(sub => {
+                  const leftPx = sub.start_time * pxPerSec;
+                  const widthPx = Math.max(16, (sub.end_time - sub.start_time) * pxPerSec);
+                  const isCurrent = currentTime >= sub.start_time && currentTime <= sub.end_time;
+                  return (
+                    <div
+                      key={sub.id}
+                      onClick={e => {
+                        e.stopPropagation();
+                        onSeek(sub.start_time);
+                      }}
+                      style={{
+                        left: `${leftPx}px`,
+                        width: `${widthPx}px`
+                      }}
+                      className={`absolute top-0.5 bottom-0.5 rounded px-1 flex items-center justify-between text-[10px] font-medium border cursor-pointer transition-all truncate ${
+                        isCurrent
+                          ? 'bg-amber-400 text-zinc-950 border-amber-500 shadow-xs ring-1 ring-amber-400'
+                          : 'bg-amber-100/90 text-amber-900 border-amber-300 hover:bg-amber-200'
+                      }`}
+                      title={`"${sub.text}" (${sub.start_time.toFixed(1)}s - ${sub.end_time.toFixed(1)}s). Click to seek.`}
+                    >
+                      <span className="truncate">{sub.text}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* AUDIO TRACK (AUD) */}
           <div className="h-12 flex items-center relative">
             <span className="text-[9px] font-mono font-semibold text-zinc-400 uppercase w-6 shrink-0 text-center">
@@ -694,7 +791,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                   {audio ? audio.original_name : 'No soundtrack loaded'}
                 </span>
                 <span className="text-[10px] font-semibold text-zinc-500 bg-white/80 px-1.5 py-0.5 rounded border border-zinc-200">
-                  {audioAnalysis ? `${audioAnalysis.tempo} BPM` : '120 BPM'}
+                  {audioAnalysis?.tempo ? `${audioAnalysis.tempo} BPM` : 'No beat data'}
                 </span>
               </div>
             </div>

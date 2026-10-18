@@ -5,9 +5,12 @@ import {
   UploadedAudio,
   CommandResponse,
   RenderJobStatus,
+  TransitionConfig,
 } from '../types';
 
-const API_BASE = 'http://localhost:8000/api';
+const configuredApiBase = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const API_BASE = configuredApiBase || (typeof window !== 'undefined' ? `${window.location.origin}/api` : 'http://127.0.0.1:8000/api');
+const API_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
 
 export async function checkBackendHealth(): Promise<boolean> {
   try {
@@ -116,6 +119,10 @@ export function localInterpretCommand(command: string, currentPlan?: EditingPlan
     fourth: 3, '4th': 3, '4': 3, four: 3,
     fifth: 4, '5th': 4, '5': 4, five: 4,
     sixth: 5, '6th': 5, '6': 5, six: 5,
+    seventh: 6, '7th': 6, '7': 6, seven: 6,
+    eighth: 7, '8th': 7, '8': 7, eight: 7,
+    ninth: 8, '9th': 8, '9': 8, nine: 8,
+    tenth: 9, '10th': 9, '10': 9, ten: 9,
     last: -1
   };
 
@@ -250,7 +257,21 @@ export function localInterpretCommand(command: string, currentPlan?: EditingPlan
     }
   }
 
-  // 5. Extend or Shorten Photo
+  // 5. Remove a Specific Photo
+  const removeClipMatch = lower.match(/(?:remove|delete|drop)\s+(?:the\s+)?(\w+)\s+(?:photo|clip|image)(?:\s+from\s+(?:the\s+)?timeline)?/);
+  if (removeClipMatch && clipCount > 0) {
+    const idx = resolveIndex(removeClipMatch[1], clipCount);
+    if (idx !== null) {
+      const [removedClip] = plan.clips.splice(idx, 1);
+      plan.transitions = plan.transitions.filter(
+        t => t.from_clip_id !== removedClip.id && t.to_clip_id !== removedClip.id
+      );
+      recalcTimeline();
+      changes.push(`Removed photo ${idx + 1} from the timeline`);
+    }
+  }
+
+  // 6. Extend or Shorten Photo
   const extMatch = lower.match(/(?:extend|lengthen|increase)\s+(?:the\s+)?(\w+)\s+(?:photo|clip|image)\s+by\s+(\d+(?:\.\d+)?|one|two|three|four|five)\s*(?:seconds?|secs?|s\b)?/);
   if (extMatch && clipCount > 0) {
     const idx = resolveIndex(extMatch[1], clipCount);
@@ -289,6 +310,28 @@ export function localInterpretCommand(command: string, currentPlan?: EditingPlan
     if (srcIdx !== null && destIdx !== null && destIdx >= 0 && destIdx < clipCount && srcIdx !== destIdx) {
       const [moved] = plan.clips.splice(srcIdx, 1);
       plan.clips.splice(destIdx, 0, moved);
+
+      // Rebuild adjacent transitions safely to align with new sequence
+      const newTransitions: TransitionConfig[] = [];
+      for (let i = 0; i < plan.clips.length - 1; i++) {
+        const c1 = plan.clips[i];
+        const c2 = plan.clips[i + 1];
+        const existing = (plan.transitions || []).find(t => t.from_clip_id === c1.id && t.to_clip_id === c2.id);
+        if (existing) {
+          newTransitions.push(existing);
+        } else {
+          newTransitions.push({
+            id: `trans-${c1.id}-${c2.id}`,
+            from_clip_id: c1.id,
+            to_clip_id: c2.id,
+            type: (c1.transition || 'none') as any,
+            duration: 0.5,
+            enabled: c1.transition !== 'none'
+          });
+        }
+      }
+      plan.transitions = newTransitions;
+
       recalcTimeline();
       changes.push(`Moved photo ${srcIdx + 1} to ${destIdx === 0 ? 'beginning' : destIdx === clipCount - 1 ? 'end' : `position ${destIdx + 1}`}`);
     }
@@ -438,5 +481,114 @@ export function getMediaUrl(relativeUrl: string): string {
   if (relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) {
     return relativeUrl;
   }
-  return `http://localhost:8000${relativeUrl}`;
+  return relativeUrl.startsWith('/')
+    ? `${API_ORIGIN}${relativeUrl}`
+    : `${API_BASE}/uploads/${encodeURIComponent(relativeUrl)}`;
+}
+
+export async function startTranscription(
+  mediaFilename: string,
+  modelSize: string = 'base'
+): Promise<string> {
+  const res = await fetch(`${API_BASE}/transcribe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      media_filename: mediaFilename,
+      model_size: modelSize,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to start transcription' }));
+    throw new Error(err.detail || 'Failed to start transcription');
+  }
+
+  const data = await res.json();
+  return data.job_id;
+}
+
+export async function getTranscriptionStatus(jobId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/transcribe/${jobId}`);
+  if (!res.ok) {
+    throw new Error('Failed to fetch transcription status');
+  }
+  return await res.json();
+}
+
+export async function checkOllamaStatus(host?: string): Promise<{ available: boolean; host: string; models: string[]; default_model?: string; error?: string }> {
+  try {
+    const url = host ? `${API_BASE}/ollama/status?host=${encodeURIComponent(host)}` : `${API_BASE}/ollama/status`;
+    const res = await fetch(url);
+    if (!res.ok) return { available: false, host: host || 'http://127.0.0.1:11434', models: [] };
+    return await res.json();
+  } catch {
+    return { available: false, host: host || 'http://127.0.0.1:11434', models: [] };
+  }
+}
+
+export async function interpretWithOllama(
+  command: string,
+  plan: EditingPlan,
+  model?: string,
+  host?: string
+): Promise<CommandResponse> {
+  const res = await fetch(`${API_BASE}/ollama/interpret`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command, plan, model, host }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to interpret with Ollama' }));
+    throw new Error(err.detail || 'Failed to interpret with Ollama');
+  }
+  return await res.json();
+}
+
+export async function suggestVisualInserts(
+  subtitles: any[],
+  availableAssets: any[],
+  defaultMode: string = 'pip'
+): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/inserts/suggest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      subtitles,
+      available_assets: availableAssets,
+      default_mode: defaultMode,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to suggest visual inserts' }));
+    throw new Error(err.detail || 'Failed to suggest visual inserts');
+  }
+  return await res.json();
+}
+
+export async function generateAutoEditReel(
+  mediaFilename: string,
+  styleKey: string = 'fitness_energy',
+  availableAssets?: any[],
+  whisperModel: string = 'tiny',
+  aspectRatio: EditingPlan['aspect_ratio'] = '9:16',
+  includeCaptions: boolean = true
+): Promise<EditingPlan> {
+  const res = await fetch(`${API_BASE}/auto-edit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      media_filename: mediaFilename,
+      style_key: styleKey,
+      available_assets: availableAssets,
+      whisper_model: whisperModel,
+      aspect_ratio: aspectRatio,
+      include_captions: includeCaptions,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Auto-edit workflow failed' }));
+    throw new Error(err.detail || 'Auto-edit workflow failed');
+  }
+  return await res.json();
 }

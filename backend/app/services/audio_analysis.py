@@ -14,8 +14,10 @@ def analyze_audio(audio_path: str) -> AudioAnalysisResult:
     Analyzes an audio file using Librosa to estimate tempo, beats, and strong transients.
     """
     resolved_path = str(Path(audio_path).resolve())
-    if resolved_path in _AUDIO_CACHE:
-        return _AUDIO_CACHE[resolved_path]
+    stat = Path(resolved_path).stat()
+    cache_key = f"{resolved_path}:{stat.st_mtime_ns}:{stat.st_size}"
+    if cache_key in _AUDIO_CACHE:
+        return _AUDIO_CACHE[cache_key]
 
     if not os.path.exists(resolved_path):
         raise FileNotFoundError(f"Audio file not found: {resolved_path}")
@@ -49,10 +51,8 @@ def analyze_audio(audio_path: str) -> AudioAnalysisResult:
             tempo_val = float(tempo)
 
         beat_times = librosa.frames_to_time(beat_frames, sr=sr).tolist()
-    except Exception:
-        tempo_val = 120.0
-        # Fallback beat grid every 0.5s
-        beat_times = [round(t, 2) for t in np.arange(0.5, duration, 0.5).tolist()]
+    except Exception as exc:
+        raise RuntimeError(f"Beat detection failed: {exc}") from exc
 
     # Extract onset strength envelope to identify 'strong beats'
     try:
@@ -81,5 +81,7 @@ def analyze_audio(audio_path: str) -> AudioAnalysisResult:
         sample_rate=sr
     )
 
-    _AUDIO_CACHE[resolved_path] = result
+    if len(_AUDIO_CACHE) >= 64:
+        _AUDIO_CACHE.pop(next(iter(_AUDIO_CACHE)))
+    _AUDIO_CACHE[cache_key] = result
     return result

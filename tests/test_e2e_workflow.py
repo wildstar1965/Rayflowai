@@ -96,7 +96,8 @@ def test_full_e2e_workflow():
         ("Create a 20-second cinematic reel.", lambda p: p.duration_seconds == 20.0 and p.style == "cinematic"),
         ("Sync the cuts to the beats.", lambda p: p.beat_sync is True),
         ("Make the first photo last three seconds.", lambda p: len(p.clips) > 0 and p.clips[0].duration == 3.0),
-        ("Add a title at the beginning.", lambda p: p.title.enabled is True and p.title.position == "beginning"),
+        # Titles appear at the beginning in time; position is a spatial setting.
+        ("Add a title at the beginning.", lambda p: p.title.enabled is True and p.title.position == "center"),
         ("Make the transitions smoother.", lambda p: p.clips[0].transition == "crossfade"),
         ("Change the title to Summer Memories.", lambda p: p.title.text == "Summer Memories"),
     ]

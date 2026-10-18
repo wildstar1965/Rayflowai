@@ -58,7 +58,8 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
 
     // Max duration allowed
     const maxDur = Math.max(0.1, Math.min(fromClip.duration, toClip.duration) - 0.1);
-    let dur = updates.duration !== undefined ? updates.duration : 0.5;
+    const existing = transitions.find(t => t.from_clip_id === fromClipId && t.to_clip_id === toClipId);
+    let dur = updates.duration !== undefined ? updates.duration : existing?.duration ?? 0.5;
     dur = Math.max(0.1, Math.min(dur, maxDur, 2.0));
 
     const existingIdx = transitions.findIndex(t => t.from_clip_id === fromClipId && t.to_clip_id === toClipId);
