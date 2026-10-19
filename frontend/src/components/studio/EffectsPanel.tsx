@@ -1,7 +1,6 @@
 import React from 'react';
 import { EditingPlan, TransitionType, TransitionConfig, GlobalTransitionConfig, UploadedImage } from '../../types';
-import { Sparkles, Trash2, RotateCcw, Check, ArrowRight } from 'lucide-react';
-import { getMediaUrl } from '../../services/api';
+import { Sparkles, ArrowRight } from 'lucide-react';
 
 interface EffectsPanelProps {
   plan: EditingPlan;
@@ -13,7 +12,6 @@ interface EffectsPanelProps {
 
 export const EffectsPanel: React.FC<EffectsPanelProps> = ({
   plan,
-  images,
   selectedTransitionId,
   onUpdatePlan,
   onSelectTransition
@@ -23,13 +21,6 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
 
   // Ensure transitions array exists
   const transitions = plan.transitions || [];
-
-  // Helper to find image for a clip
-  const getImageForClip = (clipId: string) => {
-    const clip = clips.find(c => c.id === clipId);
-    if (!clip) return null;
-    return images.find(img => img.url === clip.image_url || clip.image_url.includes(img.filename)) || null;
-  };
 
   // Helper to get or create transition for adjacent clips
   const getTransitionForBoundary = (fromClipId: string, toClipId: string): TransitionConfig => {
@@ -73,7 +64,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
       };
     } else {
       updatedTransitions.push({
-        id: `trans-${Date.now()}-${fromClipId}`,
+        id: `trans-${fromClipId}-${toClipId}`,
         from_clip_id: fromClipId,
         to_clip_id: toClipId,
         type: updates.type || 'crossfade',

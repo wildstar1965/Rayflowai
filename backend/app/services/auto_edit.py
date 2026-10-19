@@ -18,6 +18,8 @@ from app.services.speech_transcription import (
     transcribe_audio_file,
     apply_word_emphasis
 )
+from app.services.speech_transcription import source_fingerprint
+from app.services.processing import ProcessingCancelled
 from app.services.visual_inserts import suggest_contextual_inserts
 from app.services.audio_analysis import analyze_audio
 
@@ -47,7 +49,7 @@ REEL_STYLES = {
         "aspect_ratio": "9:16",
         "fit_mode": "fill",
         "style": "cinematic",
-        "subtitle_preset": "bold_pop",
+        "subtitle_preset": "cinematic",
         "caption_mode": "phrase",
         "pacing": "slow",
         "title_gradient": ["#F3F4F6", "#9CA3AF"],
@@ -56,11 +58,15 @@ REEL_STYLES = {
 
 def generate_auto_edit_reel(
     media_filename: str,
-    style_key: str = "fitness_energy",
+    style_key: str = "cinematic",
     available_assets: Optional[List[Dict[str, Any]]] = None,
-    whisper_model: str = "tiny",
+    whisper_model: Optional[str] = None,
     aspect_ratio: str = "9:16",
     include_captions: bool = True,
+    current_plan: Optional[EditingPlan] = None,
+    auto_broll: bool = True,
+    list_sounds: bool = True,
+    progress=None,
 ) -> EditingPlan:
     """Generate an editable plan from validated uploads, with explicit partial-result warnings."""
     from app.services.media import uploaded_path, probe_media, VIDEO_EXTENSIONS, IMAGE_EXTENSIONS, AUDIO_EXTENSIONS
@@ -86,35 +92,68 @@ def generate_auto_edit_reel(
     if not is_video and not assets:
         raise ValueError("Upload at least one photo or video alongside the soundtrack.")
 
+    report = progress or (lambda stage: None)
+    report('Inspecting source')
     warnings = []
     info = probe_media(media_path) if not is_image else {}
     if not is_image and info["duration"] <= 0:
         raise ValueError(f"Cannot read media duration: {media_path.name}")
-    duration = min(60.0, info["duration"]) if is_video else min(60.0, max(1.0, len(assets) * 2.5))
+    duration = min(120.0, info["duration"]) if is_video else min(120.0, max(1.0, len(assets) * 2.5))
     if not is_image and not is_video:
         duration = min(duration, max(1.0, info["duration"]))
     subtitles = []
     audio_info = None
-    if info.get("has_audio"):
+    fingerprint = source_fingerprint(media_path)
+    reuse_plan = current_plan and current_plan.source_filename == media_path.name
+    reuse = reuse_plan and current_plan.source_fingerprint == fingerprint and bool(current_plan.transcript)
+    if reuse_plan:
+        report('Reusing the editable transcript and timeline')
+        plan = current_plan.model_copy(deep=True)
+        plan.warnings = []
+        plan.auto_broll = auto_broll
+        plan.list_sounds = list_sounds
+    if info.get("has_audio") and not reuse:
         wav_path = UPLOAD_DIR / f"auto_edit_{uuid.uuid4().hex}.wav"
         try:
-            extract_audio_from_media(str(media_path), str(wav_path))
-            try:
-                audio_info = analyze_audio(str(wav_path))
-            except Exception as exc:
-                warnings.append(f"Beat analysis unavailable: {exc}")
-            if include_captions:
+            extract_audio_from_media(str(media_path), str(wav_path), cancel=getattr(report, 'cancel', None))
+            # Talking-head timing follows speech, not musical beats. Beat-grid
+            # analysis is only consumed by the photo-montage timeline builder.
+            if not is_video:
                 try:
-                    subtitles = transcribe_audio_file(str(wav_path), model_size=whisper_model or "tiny")
+                    report('Analyzing soundtrack beats')
+                    audio_info = analyze_audio(str(wav_path))
+                except Exception:
+                    warnings.append('Beat analysis unavailable; using evenly spaced photo cuts.')
+            if include_captions or auto_broll or list_sounds:
+                try:
+                    report('Transcribing speech locally')
+                    subtitles = transcribe_audio_file(str(wav_path), model_size=whisper_model or os.getenv('WHISPER_MODEL', 'base'), cancel=getattr(report, 'cancel', None))
+                except ProcessingCancelled:
+                    raise
                 except Exception as exc:
                     warnings.append(f"Captions unavailable: {exc}")
         finally:
             wav_path.unlink(missing_ok=True)
-    elif include_captions and is_video:
+    elif include_captions and is_video and not info.get('has_audio'):
         warnings.append("This video has no audio stream; captions were not generated.")
 
+    if reuse_plan:
+        if not reuse:
+            from app.services.caption_frames import attach_transcript
+            plan.transcript = attach_transcript(subtitles, plan, media_path.name)
+            if include_captions:
+                manual = [s for s in plan.subtitles if s.origin == 'manual']
+                plan.subtitles = manual + [s for s in plan.transcript if not any(
+                    s.start_time < m.end_time and s.end_time > m.start_time for m in manual)]
+            plan.cinematic_texts = [t for t in plan.cinematic_texts if t.origin == 'manual']
+        plan.source_fingerprint = fingerprint
+        plan.warnings.extend(warnings)
+        return _enhance_plan(plan, report)
     config = REEL_STYLES[style_key]
     sub_style = SubtitleStyle(preset=config["subtitle_preset"], caption_mode=config["caption_mode"])
+    if style_key == 'cinematic':
+        sub_style = SubtitleStyle(preset='cinematic', caption_mode='phrase', font_family='Arial', font_size=46,
+                                  stroke_width=2, highlight_color='#E7C48C')
     clipped_subtitles = []
     for seg in subtitles:
         if seg.start_time >= duration:
@@ -124,13 +163,19 @@ def generate_auto_edit_reel(
         for word in seg.words:
             word.end = min(word.end, seg.end_time)
         seg.style = sub_style
+        seg.origin = 'auto'
+        seg.source_clip_id = 'clip-main-1' if is_video else None
+        seg.source_filename = media_path.name
         seg.words = apply_word_emphasis(seg.words, sub_style)
         clipped_subtitles.append(seg)
     plan = EditingPlan(
         duration_seconds=max(1.0, duration), aspect_ratio=aspect_ratio, fit_mode=config["fit_mode"],
         style=config["style"], cut_pacing=config["pacing"], beat_sync=bool(audio_info and audio_info.beat_times),
-        title=TitleConfig(enabled=False, text=""), subtitles=clipped_subtitles,
-        audio_filename=media_path.name if info.get("has_audio") else None, warnings=warnings,
+        title=TitleConfig(enabled=False, text=""), subtitles=clipped_subtitles if include_captions else [],
+        transcript=clipped_subtitles,
+        audio_filename=media_path.name if info.get("has_audio") and not is_video else None, warnings=warnings,
+        source_filename=media_path.name, auto_broll=auto_broll, list_sounds=list_sounds,
+        source_fingerprint=fingerprint,
     )
     if is_video:
         plan.clips = [ClipConfig(id="clip-main-1", image_url=f"/api/uploads/{media_path.name}",
@@ -150,5 +195,39 @@ def generate_auto_edit_reel(
             enabled=first.transition not in ("none", "cut"),
         ))
     plan.warnings = warnings
+    return _enhance_plan(plan, report)
+
+def _enhance_plan(plan, report):
+    from app.services.broll import regenerate_broll
+    from app.services.list_sounds import generate_list_cues
+    from app.services.cinematic import suggest_cinematic_texts
+    report('Detecting spoken lists')
+    if plan.list_sounds:
+        fresh = generate_list_cues(plan.subtitles or plan.transcript, plan.clips[0].id if len(plan.clips) == 1 else None)
+        existing = {cue.id: cue for cue in plan.sound_cues}
+        plan.sound_cues += [cue for cue in fresh if cue.id not in existing
+                           and not any(abs(old.start_time - cue.start_time) < .18 for old in existing.values())]
+    if plan.auto_broll and (plan.subtitles or plan.transcript):
+        report('Finding relevant Pixabay B-roll')
+        plan = regenerate_broll(plan)
+    if not plan.cinematic_texts and plan.style == 'cinematic':
+        report('Composing cinematic typography')
+        plan.cinematic_texts = suggest_cinematic_texts(plan)
+        from app.services.segmentation import availability, prepare_masks, mask_duration
+        if plan.cinematic_texts and availability()['available']:
+            title = plan.cinematic_texts[0]
+            clip = next((c for c in plan.clips if c.id == title.source_clip_id), None)
+            if clip and clip.media_type == 'video':
+                report('Preparing the opening subject mask locally')
+                try:
+                    prepare_masks(clip, plan.aspect_ratio, plan.fit_mode, mask_duration(plan, clip), progress=report)
+                    title.behind_subject = True
+                except ProcessingCancelled:
+                    raise
+                except Exception:
+                    plan.warnings.append('Subject masking could not be prepared. The opening uses regular typography; other edits are retained.')
+        elif plan.cinematic_texts and any(c.media_type == 'video' for c in plan.clips):
+            plan.warnings.append(availability()['message'])
+    report('Draft ready')
     return plan
 

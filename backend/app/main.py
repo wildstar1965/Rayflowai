@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import CORS_ORIGINS, UPLOAD_DIR, EXPORT_DIR
 from app.api.routes import router
+from app.api.creative_routes import router as creative_router
 
 app = FastAPI(
     title="RayFlow AI — Cinematic Reel Studio",
@@ -22,10 +23,11 @@ app.add_middleware(
 
 # Mount static file directories for uploads and exports
 app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
-app.mount("/api/exports", StaticFiles(directory=str(EXPORT_DIR)), name="exports")
+# Exports are served through the completed-job route, never a directory mount.
 
 # Include API endpoints
 app.include_router(router)
+app.include_router(creative_router)
 
 @app.get("/")
 def root():

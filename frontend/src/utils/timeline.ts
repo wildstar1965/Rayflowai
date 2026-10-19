@@ -112,6 +112,32 @@ export function recalculateTimeline(
     ...plan,
     duration_seconds: totalDuration,
     clips: syncedClips,
-    transitions: syncedTransitions
+    transitions: syncedTransitions,
+    ...retimeAttached(plan, syncedClips, totalDuration)
   };
+}
+
+function retimeAttached(plan: EditingPlan, clips: ClipConfig[], duration: number) {
+  const result: Partial<EditingPlan> = {};
+  for (const key of ['subtitles', 'visual_inserts', 'sound_cues', 'cinematic_texts'] as const) {
+    const items = (plan[key] || []).flatMap(item => {
+      if (!item.source_clip_id) return item.start_time < duration ? [item] : [];
+      const previous = plan.clips.find(c => c.id === item.source_clip_id);
+      const clip = clips.find(c => c.id === item.source_clip_id);
+      if (!clip || !previous) return [];
+      const delta = clip.start_time - previous.start_time - ((clip.source_start || 0) - (previous.source_start || 0));
+      const start = item.start_time + delta;
+      const end = ('end_time' in item ? item.end_time : item.start_time + ('duration' in item ? item.duration : .1)) + delta;
+      if (start >= clip.start_time + clip.duration || end <= clip.start_time) return [];
+      const updated = { ...item, start_time: Math.max(clip.start_time, start) };
+      if ('end_time' in updated) {
+        updated.end_time = Math.min(end, clip.start_time + clip.duration);
+        updated.words = updated.words?.map(w => ({ ...w, start: Math.max(updated.start_time, w.start + delta), end: Math.min(updated.end_time, w.end + delta) })).filter(w => w.end > w.start);
+      } else if ('duration' in updated) updated.duration = Math.min(end, clip.start_time + clip.duration) - updated.start_time;
+      if ('behind_subject' in updated && clip.source_start !== previous.source_start) updated.behind_subject = false;
+      return [updated];
+    });
+    Object.assign(result, { [key]: items });
+  }
+  return result;
 }

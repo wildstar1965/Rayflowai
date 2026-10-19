@@ -104,6 +104,11 @@ def interpret_command(request: CommandRequest, allow_llm: bool = True) -> Comman
     Parses natural language video editing commands into a validated EditingPlan.
     Supports transitions, aspect ratios, fit modes, clip durations, trimming, and reordering.
     """
+    if request.current_plan:
+        from app.services.typed_commands import handle_typed_command
+        typed = handle_typed_command(request)
+        if typed is not None:
+            return typed
     plan = request.current_plan.model_copy(deep=True) if request.current_plan else EditingPlan()
     text = request.command.strip()
     lower = text.lower()
@@ -290,10 +295,15 @@ def interpret_command(request: CommandRequest, allow_llm: bool = True) -> Comman
             c_to = clips[to_idx]
             max_d = max(0.1, min(c_from.duration, c_to.duration) - 0.1)
             dur = max(0.1, min(dur, max_d, 2.0))
+            found_transition = False
             for t in plan.transitions:
                 if t.from_clip_id == c_from.id and t.to_clip_id == c_to.id:
                     t.duration = dur
                     t.enabled = True
+                    found_transition = True
+            if not found_transition and to_idx == from_idx + 1:
+                plan.transitions.append(TransitionConfig(id=f'trans-{c_from.id}-{c_to.id}',
+                    from_clip_id=c_from.id, to_clip_id=c_to.id, type='crossfade', duration=dur, enabled=True))
             changes.append(f"Set transition between photo {from_idx + 1} and photo {to_idx + 1} duration to {dur}s")
 
     # -------------------------------------------------------------
@@ -530,7 +540,7 @@ def interpret_command(request: CommandRequest, allow_llm: bool = True) -> Comman
     # 16. Subtitle Word Emphasis
     # e.g., "Emphasize important words", "Highlight keywords"
     # -------------------------------------------------------------
-    if any(k in lower for k in ["emphasize", "highlight keywords", "bold keywords", "pop keywords"]):
+    if any(k in lower for k in ["emphasize", "highlight keywords", "bold keywords", "pop keywords", "important words bigger"]):
         if plan.subtitles:
             from app.services.speech_transcription import apply_word_emphasis
             for sub in plan.subtitles:
@@ -555,6 +565,11 @@ def interpret_command(request: CommandRequest, allow_llm: bool = True) -> Comman
 
     # Ensure overall timeline consistency
     _recalc_timeline(plan)
+    if request.current_plan:
+        from app.services.timeline_edits import retime_attached
+        retime_attached(request.current_plan, plan)
+        if plan.model_dump() == request.current_plan.model_dump():
+            changes = []
 
     if not changes and allow_llm:
         # Fallback to local Ollama if running

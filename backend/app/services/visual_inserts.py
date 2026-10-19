@@ -87,14 +87,6 @@ def suggest_contextual_inserts(
                 matched_asset = asset
                 break
 
-        # If no strict keyword match, and keyword was strongly emphasized, match next available asset
-        if not matched_asset and kw.get("emphasis") and len(available_assets) > len(used_asset_urls):
-            for asset in available_assets:
-                asset_url = asset.get("url") or asset.get("filename") or ""
-                if asset_url not in used_asset_urls:
-                    matched_asset = asset
-                    break
-
         if matched_asset:
             asset_url = matched_asset.get("url") or matched_asset.get("filename") or ""
             used_asset_urls.add(asset_url)

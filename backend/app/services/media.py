@@ -26,5 +26,8 @@ def probe_media(path: Path) -> dict:
     )
     match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", result.stderr)
     duration = (int(match[1]) * 3600 + int(match[2]) * 60 + float(match[3])) if match else 0
+    dimensions = re.search(r'Video:.*? (\d{2,5})x(\d{2,5})', result.stderr)
     return {"duration": duration, "has_video": "Video:" in result.stderr,
-            "has_audio": "Audio:" in result.stderr}
+            "has_audio": "Audio:" in result.stderr,
+            'width': int(dimensions[1]) if dimensions else 0,
+            'height': int(dimensions[2]) if dimensions else 0}

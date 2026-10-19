@@ -24,6 +24,7 @@ interface InteractiveTimelineProps {
   selectedClipId: string | null;
   onSelectClip: (clipId: string | null) => void;
   onSeek: (time: number) => void;
+  onScrubCommit?: (before: number, after: number) => void;
   onUpdatePlan: (updatedPlan: EditingPlan, recordHistory?: boolean) => void;
   onOpenEffectsForBoundary?: (fromClipId: string, toClipId: string) => void;
 }
@@ -46,6 +47,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
   selectedClipId,
   onSelectClip,
   onSeek,
+  onScrubCommit,
   onUpdatePlan,
   onOpenEffectsForBoundary
 }) => {
@@ -66,13 +68,45 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
 
   // Container refs for scroll sync
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const scrubRef = useRef<{ pointerId: number; grabOffset: number } | null>(null);
+  const scrubRef = useRef<{ pointerId: number; grabOffset: number; initialTime: number; lastTime: number } | null>(null);
   const seekFrameRef = useRef<number | null>(null);
   const pendingSeekRef = useRef<number | null>(null);
   const onSeekRef = useRef(onSeek);
   useLayoutEffect(() => { onSeekRef.current = onSeek; }, [onSeek]);
   const timelineOrigin = 33; // Padding + track label + track border.
   const [isScrubbing, setIsScrubbing] = useState(false);
+  const overlayDrag = useRef<{key:'visual_inserts'|'subtitles'|'sound_cues';id:string;edge:'move'|'left'|'right';x:number;plan:EditingPlan;last:EditingPlan}|null>(null);
+  const startOverlayDrag = (event:React.PointerEvent<HTMLElement>, key:'visual_inserts'|'subtitles'|'sound_cues',id:string,edge:'move'|'left'|'right'='move') => {
+    if(event.button!==0)return;
+    event.preventDefault();event.stopPropagation();event.currentTarget.setPointerCapture(event.pointerId);
+    overlayDrag.current={key,id,edge,x:event.clientX,plan,last:plan};
+  };
+  const moveOverlayDrag = (event:React.PointerEvent<HTMLElement>) => {
+    const drag=overlayDrag.current;if(!drag)return;event.preventDefault();event.stopPropagation();
+    const delta=(event.clientX-drag.x)/pxPerSec;
+    const items=drag.plan[drag.key]?.map(item=>{
+      if(item.id!==drag.id)return item;
+      const end='end_time' in item?item.end_time:item.start_time+('duration' in item?item.duration:.1);
+      const duration=end-item.start_time;
+      const start=drag.edge==='right'?item.start_time:Math.max(0,Math.min(drag.plan.duration_seconds-(drag.edge==='move'?duration:.1),item.start_time+delta));
+      const finish=drag.edge==='move'?start+duration:drag.edge==='right'?Math.max(start+.1,Math.min(drag.plan.duration_seconds,end+delta)):Math.max(start+.1,end);
+      const updated={...item,start_time:start,origin:'manual' as const,source_clip_id:undefined};
+      if('duration' in updated) updated.duration=finish-start;
+      if('end_time' in updated){
+        updated.end_time=finish;
+        const shift=drag.edge==='move'?start-item.start_time:0;
+        updated.words=updated.words?.map(w=>({...w,start:Math.max(start,w.start+shift),end:Math.min(finish,w.end+shift)})).filter(w=>w.end>w.start);
+      }
+      if('source_start' in updated && drag.edge==='left') updated.source_start=Math.max(0,(item as {source_start?:number}).source_start||0)+start-item.start_time;
+      return updated;
+    });
+    drag.last={...drag.plan,[drag.key]:items};onUpdatePlan(drag.last,false);
+  };
+  const endOverlayDrag = (event:React.PointerEvent<HTMLElement>) => {
+    const drag=overlayDrag.current;if(!drag)return;
+    event.stopPropagation();onUpdatePlan(event.type==='pointercancel'?drag.plan:drag.last,true);overlayDrag.current=null;
+    if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);
+  };
   useEffect(() => () => {
     if (seekFrameRef.current !== null) cancelAnimationFrame(seekFrameRef.current);
     scrubRef.current = null;
@@ -91,6 +125,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
     const x = clientX - scroller.getBoundingClientRect().left + scroller.scrollLeft
       - timelineOrigin - scrubRef.current.grabOffset;
     pendingSeekRef.current = Math.max(0, Math.min(totalDuration, x / pxPerSec));
+    scrubRef.current.lastTime = pendingSeekRef.current;
     if (seekFrameRef.current === null) seekFrameRef.current = requestAnimationFrame(flushSeek);
   };
   const startScrub = (event: React.PointerEvent<HTMLElement>, fromPlayhead = false) => {
@@ -101,7 +136,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
     if (!scroller) return;
     const headX = scroller.getBoundingClientRect().left - scroller.scrollLeft
       + timelineOrigin + currentTime * pxPerSec;
-    scrubRef.current = { pointerId: event.pointerId, grabOffset: fromPlayhead ? event.clientX - headX : 0 };
+    scrubRef.current = { pointerId: event.pointerId, grabOffset: fromPlayhead ? event.clientX - headX : 0, initialTime: currentTime, lastTime: currentTime };
     event.currentTarget.setPointerCapture(event.pointerId);
     setIsScrubbing(true);
     if (!fromPlayhead) queueScrub(event.clientX);
@@ -116,6 +151,8 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
     event.stopPropagation();
     if (event.type === 'pointerup') queueScrub(event.clientX);
     flushSeek();
+    if (event.type === 'pointerup') onScrubCommit?.(scrubRef.current.initialTime, scrubRef.current.lastTime);
+    else onSeekRef.current(scrubRef.current.initialTime);
     scrubRef.current = null;
     setIsScrubbing(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -631,7 +668,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                         )}
 
                         {/* Bottom clip duration badge */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/70 via-transparent to-transparent flex items-end justify-between p-1 text-[9px] font-mono text-white pointer-events-none">
+                        <div className="absolute inset-x-0 bottom-0 bg-zinc-950/70 flex items-end justify-between p-1 text-[9px] font-mono text-white pointer-events-none">
                           <span className="font-semibold">
                             {trimmingState?.clipId === clip.id
                               ? `${trimmingState.currentDuration.toFixed(1)}s`
@@ -688,13 +725,18 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                   return (
                     <div
                       key={ins.id}
+                      data-insert-id={ins.id}
+                      onPointerDown={e=>startOverlayDrag(e,'visual_inserts',ins.id)}
+                      onPointerMove={moveOverlayDrag}
+                      onPointerUp={endOverlayDrag}
+                      onPointerCancel={endOverlayDrag}
                       onClick={e => {
                         e.stopPropagation();
                         onSeek(ins.start_time);
                       }}
                       style={{
                         left: `${leftPx}px`,
-                        width: `${widthPx}px`
+                        width: `${widthPx}px`, touchAction:'none'
                       }}
                       className={`absolute top-0.5 bottom-0.5 rounded px-1.5 flex items-center justify-between text-[10px] font-medium border cursor-pointer transition-all truncate ${
                         isCurrent
@@ -703,7 +745,9 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                       }`}
                       title={`Insert: ${ins.mode.toUpperCase()} (${ins.start_time.toFixed(1)}s - ${(ins.start_time + ins.duration).toFixed(1)}s). Click to seek.`}
                     >
-                      <span className="truncate">{ins.label || ins.mode.toUpperCase()}</span>
+                      <span className="absolute inset-y-0 left-0 w-2 cursor-ew-resize" onPointerDown={e=>startOverlayDrag(e,'visual_inserts',ins.id,'left')} />
+                      <span className="truncate pointer-events-none">{ins.label || ins.mode.toUpperCase()}</span>
+                      <span className="absolute inset-y-0 right-0 w-2 cursor-ew-resize" onPointerDown={e=>startOverlayDrag(e,'visual_inserts',ins.id,'right')} />
                     </div>
                   );
                 })}
@@ -725,13 +769,18 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                   return (
                     <div
                       key={sub.id}
+                      data-subtitle-id={sub.id}
+                      onPointerDown={e=>startOverlayDrag(e,'subtitles',sub.id)}
+                      onPointerMove={moveOverlayDrag}
+                      onPointerUp={endOverlayDrag}
+                      onPointerCancel={endOverlayDrag}
                       onClick={e => {
                         e.stopPropagation();
                         onSeek(sub.start_time);
                       }}
                       style={{
                         left: `${leftPx}px`,
-                        width: `${widthPx}px`
+                        width: `${widthPx}px`, touchAction:'none'
                       }}
                       className={`absolute top-0.5 bottom-0.5 rounded px-1 flex items-center justify-between text-[10px] font-medium border cursor-pointer transition-all truncate ${
                         isCurrent
@@ -740,7 +789,9 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                       }`}
                       title={`"${sub.text}" (${sub.start_time.toFixed(1)}s - ${sub.end_time.toFixed(1)}s). Click to seek.`}
                     >
-                      <span className="truncate">{sub.text}</span>
+                      <span className="absolute inset-y-0 left-0 w-2 cursor-ew-resize" onPointerDown={e=>startOverlayDrag(e,'subtitles',sub.id,'left')} />
+                      <span className="truncate pointer-events-none">{sub.text}</span>
+                      <span className="absolute inset-y-0 right-0 w-2 cursor-ew-resize" onPointerDown={e=>startOverlayDrag(e,'subtitles',sub.id,'right')} />
                     </div>
                   );
                 })}
@@ -748,6 +799,15 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
             </div>
           )}
 
+          {!!plan.sound_cues?.length && <div className="h-8 flex items-center relative">
+            <span className="text-[9px] font-mono w-6 shrink-0 text-center text-zinc-500">A2</span>
+            <div className="flex-1 h-full relative rounded-lg border border-zinc-300 bg-zinc-100 overflow-hidden">
+              {plan.sound_cues.map(cue=><div key={cue.id} data-cue-id={cue.id} title={`${cue.label} · ${cue.start_time.toFixed(2)}s`}
+                onPointerDown={e=>startOverlayDrag(e,'sound_cues',cue.id)} onPointerMove={moveOverlayDrag} onPointerUp={endOverlayDrag} onPointerCancel={endOverlayDrag}
+                style={{left:cue.start_time*pxPerSec,width:Math.max(14,.1*pxPerSec),touchAction:'none'}}
+                className={`absolute top-1 bottom-1 rounded cursor-ew-resize ${cue.muted||plan.list_sounds===false?'bg-zinc-300':'bg-zinc-700'}`} />)}
+            </div>
+          </div>}
           {/* AUDIO TRACK (AUD) */}
           <div className="h-12 flex items-center relative">
             <span className="text-[9px] font-mono font-semibold text-zinc-400 uppercase w-6 shrink-0 text-center">

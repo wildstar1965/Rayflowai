@@ -2,6 +2,7 @@ import os
 import json
 import urllib.request
 import urllib.error
+from urllib.parse import urlparse
 from typing import List, Dict, Optional, Any
 from pydantic import BaseModel, Field
 
@@ -28,12 +29,22 @@ class OllamaStructuredPlanUpdate(BaseModel):
 def get_ollama_host() -> str:
     return os.environ.get("OLLAMA_HOST", DEFAULT_OLLAMA_HOST).rstrip("/")
 
+def _local_host(host):
+    target = (host or get_ollama_host()).rstrip('/')
+    parsed = urlparse(target)
+    if parsed.scheme != 'http' or parsed.hostname not in ('127.0.0.1','localhost','::1') or parsed.username or parsed.password or parsed.query or parsed.path:
+        raise ValueError('Only local Ollama HTTP endpoints are supported.')
+    return target
+
 def check_ollama_status(host: Optional[str] = None, timeout: float = 2.0) -> OllamaStatusResponse:
     """
     Checks if Ollama is running locally and queries installed models via GET /api/tags.
     Times out quickly to prevent blocking the UI when Ollama is offline.
     """
-    target_host = (host or get_ollama_host()).rstrip("/")
+    try:
+        target_host = _local_host(host)
+    except ValueError as exc:
+        return OllamaStatusResponse(available=False,host='local',error=str(exc))
     url = f"{target_host}/api/tags"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "RayFlow-AI/1.0"})
@@ -67,7 +78,11 @@ def query_ollama_generate(
     Sends a generation prompt to Ollama with format="json" and stream=false.
     Strictly handles connection errors, timeouts, and missing models gracefully.
     """
-    target_host = (host or get_ollama_host()).rstrip("/")
+    try:
+        target_host = _local_host(host)
+    except ValueError:
+        return None
+
     url = f"{target_host}/api/generate"
     payload = {
         "model": model,
@@ -98,8 +113,6 @@ def query_ollama_generate(
         print(f"Ollama generation deferred or unavailable: {e}")
         return None
 
-    return None
-
 def interpret_with_ollama(
     command: str,
     current_plan: EditingPlan,
@@ -112,14 +125,6 @@ def interpret_with_ollama(
     Never executes arbitrary code.
     Returns None if Ollama is unavailable or response is invalid, allowing immediate fallback.
     """
-    status = check_ollama_status(host=host, timeout=1.5)
-    if not status.available or not status.models:
-        return None
-
-    selected_model = model or status.default_model or "llama3.2"
-    if selected_model not in status.models and status.models:
-        selected_model = status.models[0]
-
     prompt = f"""You are RayFlow Video Director Assistant.
 A user gave this instruction: "{command}"
 
@@ -142,6 +147,14 @@ Return ONLY a JSON object with this schema:
   "applied_changes": ["list of short changes"]
 }}
 """
+
+    status = check_ollama_status(host=host, timeout=1.5)
+    if not status.available or not status.models:
+        return None
+
+    selected_model = model or status.default_model or "llama3.2"
+    if selected_model not in status.models and status.models:
+        selected_model = status.models[0]
 
     raw_response = query_ollama_generate(prompt, model=selected_model, host=host)
     if not raw_response:

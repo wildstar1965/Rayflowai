@@ -488,7 +488,8 @@ export function getMediaUrl(relativeUrl: string): string {
 
 export async function startTranscription(
   mediaFilename: string,
-  modelSize: string = 'base'
+  modelSize?: string,
+  language?: string,
 ): Promise<string> {
   const res = await fetch(`${API_BASE}/transcribe`, {
     method: 'POST',
@@ -496,6 +497,7 @@ export async function startTranscription(
     body: JSON.stringify({
       media_filename: mediaFilename,
       model_size: modelSize,
+      language: language || undefined,
     }),
   });
 
@@ -572,9 +574,11 @@ export async function generateAutoEditReel(
   availableAssets?: any[],
   whisperModel: string = 'tiny',
   aspectRatio: EditingPlan['aspect_ratio'] = '9:16',
-  includeCaptions: boolean = true
+  includeCaptions: boolean = true,
+  currentPlan?: EditingPlan,
+  onStage?: (stage: string) => void
 ): Promise<EditingPlan> {
-  const res = await fetch(`${API_BASE}/auto-edit`, {
+  const res = await fetch(`${API_BASE}/auto-edit/jobs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -584,11 +588,37 @@ export async function generateAutoEditReel(
       whisper_model: whisperModel,
       aspect_ratio: aspectRatio,
       include_captions: includeCaptions,
+      current_plan: currentPlan,
+      auto_broll: currentPlan?.auto_broll !== false,
+      list_sounds: currentPlan?.list_sounds !== false,
     }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Auto-edit workflow failed' }));
     throw new Error(err.detail || 'Auto-edit workflow failed');
   }
-  return await res.json();
+  const job = await res.json();
+  return await waitCreativeJob<EditingPlan>(job.job_id, onStage);
+}
+
+export async function creativeRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {method: body === undefined ? 'GET' : 'POST',
+    headers: body === undefined ? undefined : {'Content-Type': 'application/json'},
+    body: body === undefined ? undefined : JSON.stringify(body), signal});
+  if(!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(typeof error.detail === 'string' ? error.detail : 'The request could not be completed.');
+  }
+  return response.json();
+}
+
+export async function waitCreativeJob<T>(jobId: string, onStage?: (stage: string) => void): Promise<T> {
+  for (;;) {
+    const job = await creativeRequest<{status:string; stage:string; result:T; error?:string}>(`/creative/jobs/${jobId}`);
+    onStage?.(job.stage);
+    if(job.status === 'completed') return job.result;
+    if(job.status === 'failed') throw new Error(job.error || 'Local processing failed.');
+    if(job.status === 'cancelled') throw new Error('Local processing cancelled.');
+    await new Promise(resolve => setTimeout(resolve, 700));
+  }
 }

@@ -15,6 +15,28 @@ from app.schemas.editing_plan import EditingPlan, RenderJobStatus, ClipConfig, T
 
 # Active jobs registry
 _JOBS: Dict[str, RenderJobStatus] = {}
+_JOB_LOCK = threading.Lock()
+
+def cancel_render_job(job_id):
+    with _JOB_LOCK:
+        job = _JOBS.get(job_id)
+        if not job or job.status not in ('queued', 'processing'):
+            return False
+        job.status = 'cancelled'
+        return True
+
+def _run_render(command, job_id):
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    while True:
+        if _JOBS[job_id].status == 'cancelled':
+            process.kill()
+            process.communicate()
+            raise RuntimeError('Render cancelled.')
+        try:
+            stdout, stderr = process.communicate(timeout=.25)
+            return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        except subprocess.TimeoutExpired:
+            continue
 
 def get_job_status(job_id: str) -> Optional[RenderJobStatus]:
     return _JOBS.get(job_id)
@@ -191,7 +213,10 @@ def _render_worker(
     """
     status = _JOBS[job_id]
     try:
-        status.status = "processing"
+        with _JOB_LOCK:
+            if status.status == 'cancelled':
+                return
+            status.status = "processing"
         status.progress = 5.0
 
         # 1. Output dimensions from aspect_ratio
@@ -275,7 +300,7 @@ def _render_worker(
                    "-vf", vf, "-frames:v", str(total_frames), "-an",
                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
                    "-pix_fmt", "yuv420p", "-r", str(fps), out_clip]
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            res = _run_render(cmd, job_id)
             if res.returncode != 0:
                 raise RuntimeError(f"FFmpeg failed to render clip {idx + 1} ({Path(img_file).name}): {res.stderr[-1500:]}")
 
@@ -320,7 +345,7 @@ def _render_worker(
         # 6. Build UNIFIED compositing & muxing filtergraph
         # Combines transitions, head/tail fades, title overlay, and audio in a single pass
         output_filename = f"rayflow_{job_id}.mp4"
-        final_output_path = EXPORT_DIR / output_filename
+        final_output_path = job_dir / output_filename
 
         inputs: List[str] = []
         for c_file in rendered_clip_files:
@@ -427,60 +452,116 @@ def _render_worker(
                     input_count += 1
 
                     st = max(0.0, float(ins.start_time))
-                    et = min(running_dur, st + max(0.5, float(ins.duration)))
+                    et = min(running_dur, st + float(ins.duration))
 
                     out_tag = f"vinsert_{v_idx}"
                     scaled_tag = f"sinsert_{v_idx}"
 
-                    if ins.mode == "cutaway":
-                        filter_steps.append(
-                            f"[{ins_input_idx}:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}[{scaled_tag}]"
-                        )
-                        filter_steps.append(
-                            f"[{prev_tag}][{scaled_tag}]overlay=0:0:enable='between(t,{st:.2f},{et:.2f})'[{out_tag}]"
-                        )
-                    elif ins.mode == "split":
-                        hw = width // 2
-                        filter_steps.append(
-                            f"[{ins_input_idx}:v]scale={hw}:{height}:force_original_aspect_ratio=increase,crop={hw}:{height}[{scaled_tag}]"
-                        )
-                        filter_steps.append(
-                            f"[{prev_tag}][{scaled_tag}]overlay={hw}:0:enable='between(t,{st:.2f},{et:.2f})'[{out_tag}]"
-                        )
-                    else:  # "pip" or "floating"
-                        pip_w = int(width * 0.38)
-                        filter_steps.append(
-                            f"[{ins_input_idx}:v]scale={pip_w}:-1[scaled_raw_{v_idx}]"
-                        )
-                        filter_steps.append(
-                            f"[scaled_raw_{v_idx}]pad=w=iw+8:h=ih+8:x=4:y=4:color=white[{scaled_tag}]"
-                        )
+                    from app.services.composition import insert_rect
+                    rx, ry, rw, rh = insert_rect(ins.mode, ins.position)
+                    iw, ih = round(width * rw), round(height * rh)
+                    ox, oy = round(width * rx), round(height * ry)
+                    # Reset each insert to its own source clock, then shift it to
+                    # its project start. This prevents video B-roll starting late.
+                    filter_steps.append(
+                        f"[{ins_input_idx}:v]trim=start={ins.source_start}:duration={ins.duration},"
+                        f"setpts=PTS-STARTPTS,fps={fps},scale={iw}:{ih}:force_original_aspect_ratio=increase,"
+                        f"crop={iw}:{ih},setsar=1,setpts=PTS+{st}/TB[{scaled_tag}]"
+                    )
+                    if ins.mode == 'split':
+                        # Keep the whole speaker frame visible in the left half.
+                        filter_steps.append(f"[{prev_tag}]split=2[split_base_{v_idx}][split_speaker_{v_idx}]")
+                        filter_steps.append(f"[split_speaker_{v_idx}]scale={width//2}:{height}:force_original_aspect_ratio=decrease,"
+                                            f"pad={width//2}:{height}:(ow-iw)/2:(oh-ih)/2:black[split_fit_{v_idx}]")
+                        filter_steps.append(f"[split_base_{v_idx}][split_fit_{v_idx}]overlay=0:0:enable='gte(t,{st})*lt(t,{et})'[split_left_{v_idx}]")
+                        prev_tag = f'split_left_{v_idx}'
+                    if ins.mode == 'background':
+                        from app.services.segmentation import existing_masks, mask_duration
+                        speaker = next((c for c in clips if c.start_time <= st < c.start_time+c.duration), None)
+                        if not speaker or speaker.media_type != 'video' or et > speaker.start_time+speaker.duration:
+                            raise ValueError('Keep a background insert within one video clip.')
+                        directory = existing_masks(speaker, plan.aspect_ratio, plan.fit_mode, mask_duration(plan,speaker))
+                        inputs.extend(['-framerate',str(fps),'-i',str(directory/'%05d.png')])
+                        filter_steps.append(f'[{prev_tag}]split[background_base_{v_idx}][foreground_rgb_{v_idx}]')
+                        filter_steps.append(f'[{input_count}:v]scale={width}:{height},format=gray,setpts=PTS+{speaker.start_time}/TB[foreground_mask_{v_idx}]')
+                        input_count += 1
+                        filter_steps.append(f'[foreground_rgb_{v_idx}][foreground_mask_{v_idx}]alphamerge[foreground_{v_idx}]')
+                        prev_tag = f'background_base_{v_idx}'
+                    filter_steps.append(
+                        f"[{prev_tag}][{scaled_tag}]overlay={ox}:{oy}:eof_action=pass:"
+                        f"enable='gte(t,{st})*lt(t,{et})'[{out_tag}]"
+                    )
 
-                        if ins.position == "top_left":
-                            ox, oy = str(int(width * 0.05)), str(int(height * 0.08))
-                        elif ins.position == "bottom_right":
-                            ox, oy = str(int(width * 0.57)), str(int(height * 0.70))
-                        elif ins.position == "center":
-                            ox, oy = "(W-w)/2", "(H-h)/2"
-                        else:  # "top_right"
-                            ox, oy = str(int(width * 0.57)), str(int(height * 0.08))
-
-                        filter_steps.append(
-                            f"[{prev_tag}][{scaled_tag}]overlay={ox}:{oy}:enable='between(t,{st:.2f},{et:.2f})'[{out_tag}]"
-                        )
-
+                    if ins.mode == 'background':
+                        filter_steps.append(f"[{out_tag}][foreground_{v_idx}]overlay=0:0:eof_action=pass:enable='gte(t,{st})*lt(t,{et})'[retained_{v_idx}]")
+                        out_tag = f'retained_{v_idx}'
                     prev_tag = out_tag
                 except Exception as e:
                     raise RuntimeError(f"Could not add visual insert {ins.id}: {e}") from e
 
+        # Genuine subject occlusion: multiply the title's alpha by the inverse
+        # person matte, preserving the original speaker pixels underneath.
+        for index, title in enumerate(plan.cinematic_texts):
+            from app.services.cinematic import title_track
+            def check_cancelled():
+                if status.status == 'cancelled':
+                    raise RuntimeError('Render cancelled.')
+            clip = next((c for c in clips if c.id == title.source_clip_id), None)
+            if not clip:
+                raise ValueError('A cinematic title references a missing source clip.')
+            if title.behind_subject and (title.start_time < clip.start_time or title.start_time+title.duration > clip.start_time+clip.duration+.001):
+                raise ValueError('Keep text-behind-speaker within its source video clip.')
+            title_path = title_track(title, width, height, job_dir / f'cinematic_{index}.ffconcat', check_cancelled)
+            title_input = input_count
+            inputs.extend(['-f','concat','-safe','0','-i',str(title_path)])
+            input_count += 1
+            title_tag = f'cinematic_{index}'
+            filter_steps.append(f'[{title_input}:v]fps={fps},format=rgba,setpts=PTS+{round(title.start_time*fps)/fps}/TB[title_timed_{index}]')
+            if title.behind_subject:
+                from app.services.segmentation import existing_masks, mask_duration
+                mask_directory = existing_masks(clip, plan.aspect_ratio, plan.fit_mode, mask_duration(plan, clip))
+                mask_input = input_count
+                inputs.extend(['-framerate',str(fps),'-i',str(mask_directory / '%05d.png')])
+                input_count += 1
+                filter_steps.append(f'[title_timed_{index}]split[title_rgb_{index}][title_a_{index}]')
+                filter_steps.append(f'[title_a_{index}]alphaextract[title_alpha_{index}]')
+                filter_steps.append(f'[{mask_input}:v]scale={width}:{height},format=gray,setpts=PTS+{clip.start_time}/TB[person_{index}]')
+                person_tag = f'person_{index}'
+                for insert_index, insert in enumerate(plan.visual_inserts):
+                    if insert.mode == 'background':
+                        continue
+                    from app.services.composition import insert_rect
+                    begin, finish = insert.start_time, insert.start_time+insert.duration
+                    next_person = f'person_layout_{index}_{insert_index}'
+                    if insert.mode == 'split':
+                        filter_steps.append(f'[{person_tag}]split[mask_original_{index}_{insert_index}][mask_small_{index}_{insert_index}]')
+                        filter_steps.append(f'[mask_small_{index}_{insert_index}]scale={width//2}:{height//2},pad={width}:{height}:0:{height//4}:black[mask_split_{index}_{insert_index}]')
+                        filter_steps.append(f"[mask_original_{index}_{insert_index}][mask_split_{index}_{insert_index}]blend=all_expr='if(gte(T,{begin})*lt(T,{finish}),B,A)'[{next_person}]")
+                    else:
+                        x,y,w,h = insert_rect(insert.mode,insert.position)
+                        filter_steps.append(f"[{person_tag}]drawbox=x={round(x*width)}:y={round(y*height)}:w={round(w*width)}:h={round(h*height)}:color=black:t=fill:enable='gte(t,{begin})*lt(t,{finish})'[{next_person}]")
+                    person_tag = next_person
+                filter_steps.append(f"[title_alpha_{index}][{person_tag}]blend=all_expr='A*(1-B/255)'[occlusion_{index}]")
+                filter_steps.append(f'[title_rgb_{index}][occlusion_{index}]alphamerge[{title_tag}]')
+            else:
+                filter_steps.append(f'[title_timed_{index}]null[{title_tag}]')
+            st, et = title.start_time, min(title.start_time+title.duration, running_dur)
+            filter_steps.append(f"[{prev_tag}][{title_tag}]overlay=0:0:eof_action=pass:enable='gte(t,{st})*lt(t,{et})'[title_out_{index}]")
+            prev_tag = f'title_out_{index}'
+
         # Apply Dynamic Subtitles (Stage 4) via ASS burning
-        if plan.subtitles and len(plan.subtitles) > 0:
-            from app.services.subtitles import generate_ass_subtitles
-            ass_path = str(job_dir / "subtitles.ass")
-            generate_ass_subtitles(plan.subtitles, ass_path, width, height)
-            escaped_ass = ass_path.replace('\\', '/').replace(':', '\\:')
-            filter_steps.append(f"[{prev_tag}]subtitles='{escaped_ass}'[vwithsubs]")
-            prev_tag = "vwithsubs"
+        from app.services.caption_frames import caption_events, caption_track
+        def check_caption_cancelled():
+            if status.status == 'cancelled':
+                raise RuntimeError('Render cancelled.')
+        events = caption_events(plan.subtitles, width, height, check_caption_cancelled)
+        if events:
+            track = caption_track(events, width, height, running_dur, job_dir / 'captions.ffconcat')
+            inputs.extend(['-f','concat','-safe','0','-i',track])
+            filter_steps.append(f'[{input_count}:v]fps={fps},format=rgba[caption_stream]')
+            filter_steps.append(f'[{prev_tag}][caption_stream]overlay=0:0:eof_action=pass[vwithcaptions]')
+            input_count += 1
+            prev_tag = 'vwithcaptions'
 
         # Microsecond time bases at xfade boundaries can round away the last
         # frame. Quantize the final stream to the timeline's exact frame count;
@@ -503,37 +584,49 @@ def _render_worker(
         has_audio = bool(audio_file)
         total_duration = round(running_dur, 2)
 
-        if has_audio:
-            audio_input_idx = input_count
-            inputs.extend(["-ss", "0", "-t", str(total_duration), "-i", str(audio_file)])
+        audio_tags = []
+        for i, clip in enumerate(clips):
+            source = _resolve_image_path(clip.image_url, image_paths)
+            info = probe_media(Path(source)) if Path(source).suffix.lower() in VIDEO_EXTENSIONS else {}
+            tag = f"source_audio_{i}"
+            if info.get('has_audio'):
+                inputs.extend(['-ss', str(clip.source_start), '-i', source])
+                filter_steps.append(f"[{input_count}:a]asetpts=PTS-STARTPTS,aresample=48000,"
+                    f"aformat=sample_fmts=fltp:channel_layouts=stereo,volume={clip.volume},apad,"
+                    f"atrim=duration={clip_durations[i]:.6f}[{tag}]")
+                has_audio = True
+            else:
+                inputs.extend(['-f','lavfi','-t',str(clip_durations[i]),'-i','anullsrc=channel_layout=stereo:sample_rate=48000'])
+                filter_steps.append(f"[{input_count}:a]aformat=sample_fmts=fltp[{tag}]")
             input_count += 1
-            fade_out_start = max(1.0, total_duration - 1.5)
-            filter_steps.append(f"[{audio_input_idx}:a]asetpts=PTS-STARTPTS,apad,atrim=duration={total_duration},afade=t=out:st={max(0, total_duration - 1.5):.6f}:d={min(1.5, total_duration):.6f}[afinal]")
-            a_map = "[afinal]"
-        else:
-            # Preserve source audio for video timelines, with silence in image slots.
-            audio_tags = []
-            for i, clip in enumerate(clips):
-                source = _resolve_image_path(clip.image_url, image_paths)
-                info = probe_media(Path(source)) if Path(source).suffix.lower() in VIDEO_EXTENSIONS else {}
-                tag = f"source_audio_{i}"
-                if info.get("has_audio"):
-                    inputs.extend(["-ss", str(clip.source_start), "-i", source])
-                    filter_steps.append(
-                        f"[{input_count}:a]asetpts=PTS-STARTPTS,aresample=48000,"
-                        f"aformat=sample_fmts=fltp:channel_layouts=stereo,apad,"
-                        f"atrim=duration={clip_durations[i]:.6f}[{tag}]"
-                    )
-                    has_audio = True
-                else:
-                    inputs.extend(["-f", "lavfi", "-t", str(clip_durations[i]),
-                                   "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"])
-                    filter_steps.append(f"[{input_count}:a]aformat=sample_fmts=fltp[{tag}]")
+            audio_tags.append(tag)
+        filter_steps.append(''.join(f'[{tag}]' for tag in audio_tags) + f'concat=n={len(audio_tags)}:v=0:a=1[asource]')
+        mix_tags = ['asource']
+        if audio_file:
+            inputs.extend(['-i', str(audio_file)])
+            # A photo montage's sole soundtrack retains full volume by default.
+            gain = plan.music_volume if any(c.media_type == 'video' for c in clips) else 1
+            filter_steps.append(f"[{input_count}:a]asetpts=PTS-STARTPTS,aresample=48000,volume={gain},apad,"
+                f"atrim=duration={total_duration},afade=t=out:st={max(0,total_duration-1.5)}:d={min(1.5,total_duration)}[amusic]")
+            input_count += 1
+            mix_tags.append('amusic')
+        if plan.list_sounds:
+            from app.core.config import ASSET_DIR
+            last_cue = -1
+            for index, cue in enumerate(sorted(plan.sound_cues, key=lambda c: c.start_time)):
+                if cue.muted or cue.volume <= 0 or cue.start_time >= total_duration or cue.start_time - last_cue < .18:
+                    continue
+                last_cue = cue.start_time
+                inputs.extend(['-i', str(ASSET_DIR / 'sounds' / f'{cue.sound}.wav')])
+                filter_steps.append(f"[{input_count}:a]aresample=48000,volume={cue.volume},"
+                    f"adelay={round(cue.start_time*48000)}S:all=1[cue_{index}]")
                 input_count += 1
-                audio_tags.append(tag)
-            filter_steps.append("".join(f"[{tag}]" for tag in audio_tags) +
-                                f"concat=n={len(audio_tags)}:v=0:a=1[afinal]")
-            a_map = "[afinal]"
+                mix_tags.append(f'cue_{index}')
+        filter_steps.append(''.join(f'[{tag}]' for tag in mix_tags) +
+            # Limit the combined speech, music and cues without auto-amplifying it.
+            f'amix=inputs={len(mix_tags)}:duration=longest:normalize=0,alimiter=limit=0.95:level=0:latency=1,'
+            f'apad,atrim=duration={total_duration}[afinal]')
+        a_map = '[afinal]'
 
         status.progress = 85.0
 
@@ -559,7 +652,7 @@ def _render_worker(
             str(final_output_path)
         ]
 
-        res_final = subprocess.run(cmd_unified, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        res_final = _run_render(cmd_unified, job_id)
         if res_final.returncode != 0:
             err_diag = res_final.stderr[-4000:] if res_final.stderr else "Unknown error"
             raise RuntimeError(f"FFmpeg unified rendering failed (code {res_final.returncode}): {err_diag}")
@@ -575,13 +668,18 @@ def _render_worker(
             expected_duration=timeline_duration,
         )
 
-        status.progress = 100.0
-        status.status = "completed"
-        status.output_url = f"/api/exports/{output_filename}"
-        status.download_url = f"/api/render/{job_id}/download"
+        with _JOB_LOCK:
+            if status.status == 'cancelled':
+                return
+            final_output_path.replace(EXPORT_DIR / output_filename)
+            status.progress = 100.0
+            status.status = "completed"
+            status.output_url = f"/api/exports/{output_filename}"
+            status.download_url = f"/api/render/{job_id}/download"
 
     except Exception as e:
-        status.status = "failed"
+        if status.status != 'cancelled':
+            status.status = "failed"
         status.error = str(e)
         status.progress = 0.0
     finally:
@@ -589,9 +687,13 @@ def _render_worker(
         try:
             for f in job_dir.glob("clip_*.mp4"):
                 f.unlink(missing_ok=True)
+            for f in job_dir.glob('rayflow_*.mp4'):
+                f.unlink(missing_ok=True)
             for f in job_dir.glob("*.png"):
                 f.unlink(missing_ok=True)
             for f in job_dir.glob("*.ass"):
+                f.unlink(missing_ok=True)
+            for f in job_dir.glob('*.ffconcat'):
                 f.unlink(missing_ok=True)
             if not any(job_dir.iterdir()):
                 job_dir.rmdir()

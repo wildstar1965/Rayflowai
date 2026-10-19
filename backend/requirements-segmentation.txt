@@ -1,0 +1,2 @@
+# Optional local person matting. Already present with many Whisper installations.
+onnxruntime>=1.17.0

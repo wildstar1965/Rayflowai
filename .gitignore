@@ -19,5 +19,9 @@ dist-ssr/
 *.local
 .env
 .env.production
+.env.*
+!.env.example
+backend/storage/cache/
+backend/models/
 .DS_Store
 Thumbs.db

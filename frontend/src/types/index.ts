@@ -32,7 +32,7 @@ export interface WordTiming {
   size_multiplier?: number;
 }
 
-export type SubtitlePreset = 'bold_pop' | 'fitness_energy' | 'minimalist' | 'subtle_border';
+export type SubtitlePreset = 'bold_pop' | 'fitness_energy' | 'minimalist' | 'subtle_border' | 'cinematic';
 
 export interface SubtitleStyle {
   preset: SubtitlePreset;
@@ -44,6 +44,11 @@ export interface SubtitleStyle {
   stroke_color: string;
   stroke_width: number;
   position: 'center_bottom' | 'middle' | 'top';
+  font_weight?: number;
+  tracking?: number;
+  max_chars?: number;
+  max_duration?: number;
+  highlight_active?: boolean;
 }
 
 export interface SubtitleSegment {
@@ -53,9 +58,12 @@ export interface SubtitleSegment {
   end_time: number;
   words?: WordTiming[];
   style?: SubtitleStyle;
+  source_clip_id?: string;
+  source_filename?: string;
+  origin?: 'manual' | 'auto';
 }
 
-export type VisualInsertMode = 'pip' | 'split' | 'floating' | 'cutaway';
+export type VisualInsertMode = 'pip' | 'split' | 'floating' | 'cutaway' | 'background';
 export type VisualInsertPosition = 'top_right' | 'top_left' | 'bottom_right' | 'right_half' | 'center';
 
 export interface VisualInsert {
@@ -67,6 +75,47 @@ export interface VisualInsert {
   mode: VisualInsertMode;
   position: VisualInsertPosition;
   label?: string;
+  media_type?: 'image' | 'video';
+  source_start?: number;
+  source_clip_id?: string;
+  origin?: 'manual' | 'auto';
+  query?: string;
+  source_page?: string;
+  contributor?: string;
+}
+
+export interface SoundCue {
+  id: string;
+  start_time: number;
+  label: string;
+  sound: 'soft' | 'wood' | 'tick';
+  volume: number;
+  muted: boolean;
+  source_clip_id?: string;
+  origin?: 'manual' | 'auto';
+}
+
+export interface CinematicText {
+  id: string;
+  text: string;
+  start_time: number;
+  duration: number;
+  source_clip_id: string;
+  behind_subject: boolean;
+  color: string;
+  font_family?: 'Anton' | 'Arial' | 'DejaVu Sans';
+  font_size_ratio?: number;
+  font_weight?: number;
+  tracking?: number;
+  x?: number;
+  y?: number;
+  alignment?: 'left' | 'center' | 'right';
+  uppercase?: boolean;
+  emphasis_words?: string[];
+  highlight_color?: string;
+  animation_seconds?: number;
+  scale_from?: number;
+  origin?: 'manual' | 'auto';
 }
 
 export interface ClipConfig {
@@ -79,9 +128,11 @@ export interface ClipConfig {
   motion: 'zoom_in' | 'zoom_out' | 'pan_left' | 'pan_right' | 'static';
   transition: TransitionType;
   label?: string;
+  volume?: number;
 }
 
 export interface EditingPlan {
+  playhead_time?: number;
   duration_seconds: number;
   aspect_ratio: '9:16' | '16:9' | '1:1';
   fit_mode: 'fill' | 'fit';
@@ -95,7 +146,16 @@ export interface EditingPlan {
   head_transition?: GlobalTransitionConfig;
   tail_transition?: GlobalTransitionConfig;
   subtitles?: SubtitleSegment[];
+  transcript?: SubtitleSegment[];
   visual_inserts?: VisualInsert[];
+  sound_cues?: SoundCue[];
+  cinematic_texts?: CinematicText[];
+  auto_broll?: boolean;
+  list_sounds?: boolean;
+  music_volume?: number;
+  source_filename?: string;
+  source_fingerprint?: string;
+  suppressed_auto_inserts?: string[];
   warnings?: string[];
   audio_filename?: string | null;
 }
@@ -133,7 +193,7 @@ export interface CommandResponse {
 
 export interface RenderJobStatus {
   job_id: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed';
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   output_url?: string;
   download_url?: string;

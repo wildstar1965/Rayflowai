@@ -32,6 +32,20 @@ router = APIRouter(prefix="/api")
 ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
 ALLOWED_AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
 
+def copy_upload(source, destination):
+    limit = max(1, int(os.getenv('MAX_UPLOAD_MB', '500'))) * 1024**2
+    size = 0
+    try:
+        with destination.open('wb') as output:
+            while chunk := source.read(65536):
+                size += len(chunk)
+                if size > limit:
+                    raise ValueError('Upload exceeds the configured size limit.')
+                output.write(chunk)
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+
 @router.get("/health")
 def health_check():
     return {
@@ -58,8 +72,7 @@ def upload_images(files: List[UploadFile] = File(...)):
             clean_filename = f"media_{os.urandom(8).hex()}{ext}"
             destination = UPLOAD_DIR / clean_filename
             destinations.append(destination)
-            with open(destination, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+            copy_upload(file.file, destination)
             media_type = "video" if ext in VIDEO_EXTENSIONS else "image"
             metadata = {}
             if media_type == "image":
@@ -98,8 +111,10 @@ def upload_audio(file: UploadFile = File(...)):
     clean_filename = f"audio_{os.urandom(4).hex()}{ext}"
     destination = UPLOAD_DIR / clean_filename
 
-    with open(destination, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        copy_upload(file.file, destination)
+    except ValueError as exc:
+        raise HTTPException(413, str(exc)) from None
 
     metadata = probe_media(destination)
     if not metadata["has_audio"] or metadata["duration"] <= 0:
@@ -258,12 +273,12 @@ async def render_video(request: RenderJobRequest):
         raise HTTPException(status_code=400, detail="Add at least one clip to the timeline before exporting.")
     try:
         for clip in request.plan.clips:
-            uploaded_path(clip.image_url)
+            clip.image_url = f'/api/uploads/{uploaded_path(clip.image_url).name}'
         for insert in request.plan.visual_inserts:
-            uploaded_path(insert.asset_url)
+            insert.asset_url = f'/api/uploads/{uploaded_path(insert.asset_url).name}'
         if request.audio_filename:
-            uploaded_path(request.audio_filename)
-    except FileNotFoundError as exc:
+            request.audio_filename = uploaded_path(request.audio_filename).name
+    except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     job_id = start_render_job(
@@ -297,7 +312,7 @@ async def download_rendered_video(job_id: str):
     file_path = EXPORT_DIR / output_filename
 
     status = get_job_status(job_id)
-    if not file_path.exists() or (status and status.status != "completed"):
+    if not status or status.status != "completed" or not file_path.exists():
         raise HTTPException(status_code=404, detail="Rendered video not found or not yet complete.")
 
     return FileResponse(
@@ -306,9 +321,24 @@ async def download_rendered_video(job_id: str):
         filename=output_filename
     )
 
+@router.get('/exports/{filename}')
+async def completed_export(filename: str):
+    import re
+    match = re.fullmatch(r'rayflow_([a-f0-9-]+)\.mp4', filename)
+    if not match:
+        raise HTTPException(404, 'Export not found.')
+    return await download_rendered_video(match[1])
+
+@router.post('/render/{job_id}/cancel')
+def cancel_export(job_id: str):
+    from app.services.video_renderer import cancel_render_job
+    if not cancel_render_job(job_id):
+        raise HTTPException(409, 'This render is no longer active.')
+    return {'status': 'cancelled'}
+
 class TranscribeRequest(BaseModel):
     media_filename: str
-    model_size: Optional[str] = "base"
+    model_size: Optional[str] = None
     language: Optional[str] = None
 
 @router.post("/transcribe")
@@ -322,10 +352,15 @@ async def start_transcription(request: TranscribeRequest):
     if not media_path.exists():
         raise HTTPException(status_code=404, detail=f"Media file '{request.media_filename}' not found in uploads.")
 
-    job_id = start_transcription_job(
-        media_filename=request.media_filename,
-        model_size=request.model_size or "base"
-    )
+    import os
+    try:
+        job_id = start_transcription_job(
+            media_filename=media_path.name,
+            model_size=request.model_size or os.getenv('WHISPER_MODEL', 'base'),
+            language=request.language,
+        )
+    except ValueError as exc:
+        raise HTTPException(429, str(exc)) from None
     return {
         "job_id": job_id,
         "status": "queued",
@@ -343,6 +378,13 @@ async def get_transcription_status(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Transcription job not found.")
     return job
+
+@router.post('/transcribe/{job_id}/cancel')
+def cancel_transcription(job_id: str):
+    from app.services.speech_transcription import cancel_transcription_job
+    if not cancel_transcription_job(job_id):
+        raise HTTPException(409, 'This transcription is no longer active.')
+    return {'status': 'cancelled'}
 
 @router.get("/ollama/status")
 def get_ollama_status_endpoint(host: Optional[str] = Query(default=None)):
@@ -370,7 +412,7 @@ def interpret_with_ollama_endpoint(req: OllamaInterpretRequest):
     # restricted update schema cannot perform trims or reordering.
     fallback_req = CommandRequest(command=req.command, current_plan=req.plan)
     deterministic = interpret_command(fallback_req, allow_llm=False)
-    if deterministic.applied_changes:
+    if deterministic.applied_changes or deterministic.handled:
         return deterministic
     # Attempt Ollama structured interpretation
     res = interpret_with_ollama(command=req.command, current_plan=req.plan, model=req.model, host=req.host)
@@ -399,11 +441,26 @@ async def suggest_inserts_endpoint(req: SuggestInsertsRequest):
 
 class AutoEditRequest(BaseModel):
     media_filename: str
-    style_key: Optional[str] = "fitness_energy"
+    style_key: Optional[str] = "cinematic"
     available_assets: Optional[List[Dict[str, Any]]] = None
-    whisper_model: Optional[str] = "tiny"
+    whisper_model: Optional[str] = None
     aspect_ratio: str = "9:16"
     include_captions: bool = True
+    current_plan: Optional[EditingPlan] = None
+    auto_broll: bool = True
+    list_sounds: bool = True
+
+@router.post('/auto-edit/jobs')
+def auto_edit_job(req: AutoEditRequest):
+    from app.services.creative_jobs import start_job
+    from app.services.auto_edit import generate_auto_edit_reel
+    try:
+        uploaded_path(req.media_filename)
+        identity = start_job(lambda report: generate_auto_edit_reel(**req.model_dump(exclude={'current_plan'}),
+                    current_plan=req.current_plan, progress=report).model_dump())
+        return {'job_id': identity}
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(400, str(exc)) from None
 
 @router.post("/auto-edit", response_model=EditingPlan)
 def auto_edit_endpoint(req: AutoEditRequest):
@@ -414,8 +471,9 @@ def auto_edit_endpoint(req: AutoEditRequest):
     try:
         return generate_auto_edit_reel(
             media_filename=req.media_filename, style_key=req.style_key or "fitness_energy",
-            available_assets=req.available_assets, whisper_model=req.whisper_model or "tiny",
+            available_assets=req.available_assets, whisper_model=req.whisper_model,
             aspect_ratio=req.aspect_ratio, include_captions=req.include_captions,
+            current_plan=req.current_plan, auto_broll=req.auto_broll, list_sounds=req.list_sounds,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

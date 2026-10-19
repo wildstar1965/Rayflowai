@@ -7,10 +7,7 @@ import {
   Film,
   Download,
   ArrowRight,
-  Sliders,
-  Sparkles,
-  Layers,
-  CheckCircle2
+  Layers
 } from 'lucide-react';
 
 interface LandingPageProps {

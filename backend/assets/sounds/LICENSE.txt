@@ -1,0 +1,10 @@
+RayFlow original synthesized click sounds
+
+soft.wav, wood.wav and tick.wav are synthesized from mathematical sine waves
+and deterministic noise for this project. No third-party recordings are used.
+
+To the extent possible under law, the authors dedicate these audio assets to
+the public domain under CC0 1.0 Universal:
+https://creativecommons.org/publicdomain/zero/1.0/
+
+48 kHz mono PCM16; 100 ms; peak amplitude -6 dBFS before project volume.

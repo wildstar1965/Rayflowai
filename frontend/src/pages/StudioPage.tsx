@@ -24,12 +24,16 @@ import {
   startTranscription,
   getTranscriptionStatus,
   checkOllamaStatus,
-  suggestVisualInserts,
   generateAutoEditReel
 } from '../services/api';
 import { recalculateTimeline } from '../utils/timeline';
 import { interpretWithOllama } from '../services/api';
 import { InteractiveTimeline } from '../components/studio/InteractiveTimeline';
+import { CreativePanel } from '../components/studio/CreativePanel';
+import { useCreativePreview } from '../components/studio/useCreativePreview';
+import { CaptionSettings } from '../components/studio/CaptionSettings';
+import { attachTranscript, editCaptionTiming, newCaptionInterval } from '../utils/subtitles';
+import { creativeRequest } from '../services/api';
 import { EffectsPanel } from '../components/studio/EffectsPanel';
 import {
   Mic,
@@ -93,6 +97,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   // Speech Transcription State (Faster-Whisper)
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionProgress, setTranscriptionProgress] = useState(0);
+  const [transcriptionSource, setTranscriptionSource] = useState('');
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState('');
+  const transcriptionJobRef = useRef<string | null>(null);
 
   // Ollama Client State
   const [ollamaStatus, setOllamaStatus] = useState<{ available: boolean; host: string; models: string[]; default_model?: string }>({
@@ -104,9 +111,12 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
   // Auto-Edit Workflow Modal State
   const [isAutoEditModalOpen, setIsAutoEditModalOpen] = useState(false);
-  const [autoEditStyle, setAutoEditStyle] = useState<'fitness_energy' | 'minimalist' | 'cinematic'>('fitness_energy');
+  const [autoEditStyle, setAutoEditStyle] = useState<'fitness_energy' | 'minimalist' | 'cinematic'>('cinematic');
   const [isAutoEditing, setIsAutoEditing] = useState(false);
   const [includeCaptions, setIncludeCaptions] = useState(true);
+  const [autoStage, setAutoStage] = useState('');
+  const [whisperModel, setWhisperModel] = useState('tiny');
+  const [seekVersion, setSeekVersion] = useState(0);
   const [mobilePanel, setMobilePanel] = useState<'media' | 'director' | null>(null);
 
   // Editing Plan State
@@ -182,6 +192,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [viewRenderedVideo, setViewRenderedVideo] = useState(false);
 
+  const renderCreative = useCreativePreview(plan, isPlaying, seekVersion, currentTimeRef, drawFrameRef, setErrorMessage);
+
   // Load state from localStorage on initial render
   useEffect(() => {
     try {
@@ -253,6 +265,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     editOriginRef.current = null;
     setViewRenderedVideo(false);
     setPlan(previous);
+    if (previous.playhead_time !== undefined) { currentTimeRef.current = previous.playhead_time; setCurrentTime(previous.playhead_time); setSeekVersion(v => v + 1); }
   };
 
   const handleRedo = () => {
@@ -264,6 +277,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     editOriginRef.current = null;
     setViewRenderedVideo(false);
     setPlan(next);
+    if (next.playhead_time !== undefined) { currentTimeRef.current = next.playhead_time; setCurrentTime(next.playhead_time); setSeekVersion(v => v + 1); }
   };
 
   // Re-generate timeline whenever plan, images, or audio changes
@@ -327,7 +341,6 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
         }
       } else liveImages.add(clip.image_url);
     }
-    for (const insert of plan.visual_inserts || []) liveImages.add(insert.asset_url);
     liveImages.forEach(url => {
       if (!imageCacheRef.current.has(url)) {
         const image = new Image();
@@ -356,7 +369,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       Number.isFinite(video.duration) ? Math.max(0, video.duration - 1 / 30) : Infinity));
     const active = time >= clip.start_time && time < clip.start_time + clip.duration;
     const shouldPlay = active && playbackRef.current;
-    video.muted = Boolean(audio) || !active;
+    video.muted = !active;
+    video.volume = Math.min(1, clip.volume ?? 1);
     if (video.readyState >= 1 && !video.seeking && Math.abs(video.currentTime - target) > (shouldPlay ? 0.12 : 1 / 60)) {
       video.currentTime = target;
     }
@@ -576,7 +590,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
   // Speech-to-Text Transcription via local Faster-Whisper
   const handleAutoTranscribe = async () => {
-    const speechSource = audio?.filename || images.find(item => item.media_type === 'video')?.filename;
+    const speechSource = transcriptionSource || images.find(item => item.media_type === 'video')?.filename || audio?.filename;
     if (!speechSource) {
       setErrorMessage('Please upload speech audio or video first.');
       return;
@@ -585,22 +599,29 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     setTranscriptionProgress(0);
     setErrorMessage(null);
     try {
-      const jobId = await startTranscription(speechSource, 'tiny');
+      const before = planRef.current;
+      const jobId = await startTranscription(speechSource, whisperModel, transcriptionLanguage);
+      transcriptionJobRef.current = jobId;
       setTranscriptionProgress(0);
 
       const pollTimer = setInterval(async () => {
         try {
           const job = await getTranscriptionStatus(jobId);
+          if(transcriptionJobRef.current!==jobId){clearInterval(pollTimer);return;}
           if (job.status === 'processing') {
             setTranscriptionProgress(Math.round(job.progress || 50));
           } else if (job.status === 'completed') {
             clearInterval(pollTimer);
             setIsTranscribing(false);
             setTranscriptionProgress(100);
+            transcriptionJobRef.current = null;
+            if(planRef.current!==before){setErrorMessage('The project changed during transcription. Your edits were preserved; generate captions again to use the cached transcript.');return;}
             if (job.subtitles && job.subtitles.length > 0) {
+              const subtitles = attachTranscript(job.subtitles,planRef.current,speechSource);
               const updatedPlan: EditingPlan = {
                 ...planRef.current,
-                subtitles: job.subtitles
+                subtitles, transcript: subtitles,
+                source_filename:speechSource,source_fingerprint:job.source_fingerprint,
               };
               updatePlanWithHistory(updatedPlan);
               setActiveTab('captions');
@@ -608,15 +629,16 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 ...prev,
                 {
                   sender: 'assistant',
-                  text: `Faster-Whisper transcribed audio locally with int8 quantization. Generated ${job.subtitles.length} subtitle segments with word-level timestamps and keyword highlights.`,
+                  text: `Local transcription generated ${subtitles.length} captions. ${subtitles.some(s=>s.words?.length) ? 'Recorded word timings are available.' : 'These captions use phrase-level timing.'}`,
                   time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 }
               ]);
-            }
-          } else if (job.status === 'failed') {
+            } else setErrorMessage('No speech was detected in the selected source. Existing captions were retained.');
+          } else if (job.status === 'failed' || job.status === 'cancelled') {
             clearInterval(pollTimer);
             setIsTranscribing(false);
-            setErrorMessage(`Transcription failed: ${job.error || 'Unknown error'}`);
+            transcriptionJobRef.current = null;
+            if(job.status==='failed')setErrorMessage(`Transcription failed: ${job.error || 'Unknown error'}`);
           }
         } catch (e: any) {
           clearInterval(pollTimer);
@@ -628,46 +650,6 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     } catch (err: any) {
       setIsTranscribing(false);
       setErrorMessage(err.message || 'Failed to start local transcription.');
-    }
-  };
-
-  // Contextual Visual Inserts Suggestion from Subtitles
-  const handleAutoSuggestInserts = async () => {
-    if (!plan.subtitles || plan.subtitles.length === 0) {
-      setErrorMessage('No subtitles available. Transcribe speech first.');
-      return;
-    }
-    if (images.length === 0) {
-      setErrorMessage('Please upload photos or B-roll images first.');
-      return;
-    }
-    try {
-      const assets = images.map(img => ({
-        id: img.filename,
-        filename: img.filename,
-        original_name: img.original_name,
-        url: img.url
-      }));
-      const suggested = await suggestVisualInserts(plan.subtitles, assets, 'pip');
-      if (suggested && suggested.length > 0) {
-        updatePlanWithHistory({
-          ...plan,
-          visual_inserts: suggested
-        });
-        setActiveTab('inserts');
-        setConversation(prev => [
-          ...prev,
-          {
-            sender: 'assistant',
-            text: `Matched ${suggested.length} contextual visual inserts from your media library based on speech transcript keywords.`,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }
-        ]);
-      } else {
-        setErrorMessage('No matching keywords found between transcript and uploaded images.');
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to suggest visual inserts.');
     }
   };
 
@@ -688,7 +670,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       }));
       const video = images.find(item => item.media_type === 'video');
       const mediaTarget = video?.filename || audio?.filename || images[0].filename;
-      const newPlan = await generateAutoEditReel(mediaTarget, autoEditStyle, assets, 'tiny', plan.aspect_ratio, includeCaptions);
+      const before = planRef.current;
+      const newPlan = await generateAutoEditReel(mediaTarget, autoEditStyle, assets, whisperModel, plan.aspect_ratio, includeCaptions, plan, setAutoStage);
+      if (planRef.current !== before) throw new Error('The project changed during Auto Reel. Your edits were preserved; run again to apply a fresh draft.');
       setIsPlaying(false);
       currentTimeRef.current = 0;
       setCurrentTime(0);
@@ -781,7 +765,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       updatePlanWithHistory(res.plan);
 
       // Re-calculate clips if images exist and clips were not specifically modified
-      if (images.length > 0 && (!res.plan.clips || res.plan.clips.length === 0)) {
+      if (images.length > 0 && plan.clips.length === 0 && (!res.plan.clips || res.plan.clips.length === 0)) {
         await refreshTimeline(res.plan, images, audio);
       }
 
@@ -833,7 +817,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
           const status = await getRenderProgress(jobId);
           setRenderStatus(status);
 
-          if (status.status === 'completed' || status.status === 'failed') {
+          if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
             clearInterval(interval);
             if (status.status === 'completed') {
               setConversation(prev => [
@@ -1072,134 +1056,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
           ctx.restore();
         }
 
-        // Render Active Visual Inserts (Stage 6)
-        if (plan.visual_inserts && plan.visual_inserts.length > 0) {
-          const activeIns = plan.visual_inserts.find(ins => time >= ins.start_time && time <= ins.start_time + ins.duration);
-          if (activeIns) {
-            const insUrl = activeIns.asset_url;
-            let imgEl = imageCacheRef.current.get(insUrl);
-            if (!imgEl) {
-              imgEl = new Image();
-              imgEl.src = getMediaUrl(insUrl);
-              imageCacheRef.current.set(insUrl, imgEl);
-            }
-            if (imgEl.complete && imgEl.naturalWidth > 0) {
-              ctx.save();
-              if (activeIns.mode === 'cutaway') {
-                ctx.drawImage(imgEl, 0, 0, w, h);
-              } else if (activeIns.mode === 'split') {
-                const hw = Math.round(w / 2);
-                ctx.drawImage(imgEl, hw, 0, hw, h);
-              } else {
-                // PIP overlay with clean border
-                const pipW = Math.round(w * 0.38);
-                const pipH = Math.round(pipW * (imgEl.naturalHeight / imgEl.naturalWidth));
-                let px = Math.round(w * 0.57);
-                let py = Math.round(h * 0.08);
-                if (activeIns.position === 'top_left') {
-                  px = Math.round(w * 0.05);
-                } else if (activeIns.position === 'bottom_right') {
-                  py = Math.round(h * 0.70);
-                } else if (activeIns.position === 'center') {
-                  px = Math.round((w - pipW) / 2);
-                  py = Math.round((h - pipH) / 2);
-                }
-                ctx.fillStyle = '#FFFFFF';
-                ctx.fillRect(px - 3, py - 3, pipW + 6, pipH + 6);
-                ctx.drawImage(imgEl, px, py, pipW, pipH);
-              }
-              ctx.restore();
-            }
-          }
-        }
+        renderCreative(ctx, time, w, h);
 
-        // Render Dynamic Subtitles (Stage 4)
-        if (plan.subtitles && plan.subtitles.length > 0) {
-          const activeSub = plan.subtitles.find(s => time >= s.start_time && time <= s.end_time);
-          if (activeSub) {
-            ctx.save();
-            const subStyle = activeSub.style || {
-              preset: 'bold_pop',
-              caption_mode: 'word_by_word',
-              font_size: 42,
-              color: '#FFFFFF',
-              highlight_color: '#FACC15',
-              stroke_color: '#000000',
-              stroke_width: 4,
-              position: 'center_bottom'
-            };
-            const isWordByWord = (subStyle.caption_mode || 'word_by_word') === 'word_by_word';
-            const baseFontSize = (subStyle.font_size || 42) * w / (ratio === '16:9' ? 1920 : 1080);
-            const primaryColor = subStyle.color || '#FFFFFF';
-            const highlightColor = subStyle.highlight_color || '#FACC15';
-            const strokeColor = subStyle.stroke_color || '#000000';
-            const strokeWidth = (subStyle.stroke_width ?? 3) * w / (ratio === '16:9' ? 1920 : 1080);
-
-            const yPos = subStyle.position === 'top'
-              ? h * 0.12
-              : subStyle.position === 'middle'
-              ? h * 0.50
-              : h * 0.86;
-
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.lineJoin = 'round';
-            ctx.miterLimit = 2;
-
-            if (isWordByWord && activeSub.words && activeSub.words.length > 0) {
-              const activeWord = activeSub.words.find(word => time >= word.start && time < word.end);
-
-              if (activeWord) {
-                const isEmph = Boolean(activeWord.emphasis);
-                const fontSize = isEmph ? Math.round(baseFontSize * 1.15) : baseFontSize;
-                ctx.font = `800 ${fontSize}px Inter, Arial, sans-serif`;
-
-                ctx.strokeStyle = strokeColor;
-                ctx.lineWidth = strokeWidth + (isEmph ? 2 : 0);
-                const wordText = isEmph ? activeWord.word.toUpperCase() : activeWord.word;
-                ctx.strokeText(wordText, w / 2, yPos);
-
-                ctx.fillStyle = isEmph ? highlightColor : primaryColor;
-                ctx.fillText(wordText, w / 2, yPos);
-              }
-            } else {
-              // Phrase display
-              const fontSize = baseFontSize;
-              ctx.font = `700 ${fontSize}px Inter, Arial, sans-serif`;
-
-              if (activeSub.words && activeSub.words.length > 0) {
-                const words = activeSub.words;
-                const wordMeasures = words.map(item => ({
-                  word: item,
-                  width: ctx.measureText(item.word + ' ').width
-                }));
-                const totalWidth = wordMeasures.reduce((acc, curr) => acc + curr.width, 0);
-                let currentX = Math.max(10, (w - totalWidth) / 2);
-
-                ctx.textAlign = 'left';
-                for (const wm of wordMeasures) {
-                  const isEmph = Boolean(wm.word.emphasis);
-                  ctx.font = isEmph ? `800 ${Math.round(fontSize * 1.1)}px Inter, Arial, sans-serif` : `700 ${fontSize}px Inter, Arial, sans-serif`;
-                  ctx.strokeStyle = strokeColor;
-                  ctx.lineWidth = strokeWidth;
-                  ctx.strokeText(wm.word.word, currentX, yPos);
-
-                  ctx.fillStyle = isEmph ? highlightColor : primaryColor;
-                  ctx.fillText(wm.word.word, currentX, yPos);
-                  currentX += wm.width;
-                }
-              } else {
-                ctx.strokeStyle = strokeColor;
-                ctx.lineWidth = strokeWidth;
-                ctx.strokeText(activeSub.text, w / 2, yPos);
-
-                ctx.fillStyle = primaryColor;
-                ctx.fillText(activeSub.text, w / 2, yPos);
-              }
-            }
-            ctx.restore();
-          }
-        }
       } else {
         // Drawing placeholder while image decodes
         ctx.fillStyle = '#27272A';
@@ -1251,7 +1109,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
         }
 
         currentTimeRef.current = next;
-        if (synchronizedAudioRef.current) synchronizedAudioRef.current.volume = Math.max(0, Math.min(1, (plan.duration_seconds - next) / Math.min(1.5, plan.duration_seconds)));
+        if (synchronizedAudioRef.current) synchronizedAudioRef.current.volume = (plan.clips.some(c => c.media_type === 'video') ? (plan.music_volume ?? .25) : 1) * Math.max(0, Math.min(1, (plan.duration_seconds - next) / Math.min(1.5, plan.duration_seconds)));
 
         // Keep audio synchronized with playback position
         if (synchronizedAudioRef.current && !synchronizedAudioRef.current.paused) {
@@ -1321,6 +1179,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   };
 
   const handleSeek = (newTime: number) => {
+    setSeekVersion(version => version + 1);
     newTime = Math.max(0, Math.min(plan.duration_seconds, newTime));
     setViewRenderedVideo(false);
     currentTimeRef.current = newTime;
@@ -2075,6 +1934,18 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             {/* CAPTIONS TAB (Stage 4) */}
             {activeTab === 'captions' && (
               <div className="space-y-4">
+                <div className="space-y-2 text-xs text-zinc-700">
+                  <label>Speech source<select aria-label="Transcription source" className="w-full border rounded p-1" value={transcriptionSource} onChange={e=>setTranscriptionSource(e.target.value)}>
+                    <option value="">First video, or uploaded audio</option>
+                    {images.filter(item=>item.media_type==='video').map(item=><option key={item.filename} value={item.filename}>{item.original_name}</option>)}
+                    {audio && <option value={audio.filename}>{audio.original_name}</option>}
+                  </select></label>
+                  <label>Local speech model<select aria-label="Caption transcription model" className="w-full border rounded p-1" value={whisperModel} onChange={e=>setWhisperModel(e.target.value)}><option value="tiny">Tiny</option><option value="base">Base</option><option value="small">Small</option></select></label>
+                  <label>Language code<input aria-label="Transcription language" className="w-full border rounded p-1" placeholder="Auto-detect, or en, hi?" value={transcriptionLanguage} onChange={e=>setTranscriptionLanguage(e.target.value)} /></label>
+                  {isTranscribing && <button className="border rounded px-2 py-1" onClick={()=>{if(transcriptionJobRef.current)void creativeRequest('/transcribe/'+transcriptionJobRef.current+'/cancel',{}).catch(error=>setErrorMessage(error.message));}}>Cancel transcription</button>}
+                </div>
+                <CaptionSettings plan={plan} onChange={updatePlanWithHistory} />
+
                 {/* Auto-Transcribe Action Card */}
                 <div className="p-3.5 bg-amber-500/10 border border-amber-200 rounded-xl space-y-2.5">
                   <div className="flex items-center justify-between">
@@ -2117,6 +1988,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
+                      { id: 'cinematic', name: 'Cinematic', color: '#E7C48C', desc: 'Warm emphasis and balanced phrase captions' },
                       { id: 'bold_pop', name: 'Bold Pop', color: '#FACC15', desc: 'Neon Yellow Active Pop' },
                       { id: 'fitness_energy', name: 'Fitness Energy', color: '#38BDF8', desc: 'Electric Cyan & Amber' },
                       { id: 'minimalist', name: 'Minimalist Clean', color: '#E11D48', desc: 'Subtle Crimson Accent' },
@@ -2131,6 +2003,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                             if (!plan.subtitles || plan.subtitles.length === 0) return;
                             const updatedSubs = plan.subtitles.map(s => ({
                               ...s,
+                              words:s.words?.map(w=>({...w,color:undefined})),
                               style: {
                                 ...(s.style || {
                                   preset: 'bold_pop' as SubtitlePreset,
@@ -2144,7 +2017,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                                 }),
                                 preset: preset.id as SubtitlePreset,
                                 highlight_color: preset.color,
-                                caption_mode: preset.id === 'minimalist' || preset.id === 'subtle_border' ? 'phrase' as const : 'word_by_word' as const
+                                caption_mode: ['cinematic', 'minimalist', 'subtle_border'].includes(preset.id) ? 'phrase' as const : 'word_by_word' as const
                               }
                             }));
                             updatePlanWithHistory({ ...plan, subtitles: updatedSubs });
@@ -2237,16 +2110,13 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                     </label>
                     <button
                       onClick={() => {
+                        const interval=newCaptionInterval(plan,currentTime);
+                        if(!interval){setErrorMessage('Choose an uncaptioned part of the timeline to add a caption.');return;}
                         const newSub: SubtitleSegment = {
-                          id: `sub-${(plan.subtitles?.length || 0) + 1}`,
+                          id: crypto.randomUUID(),
                           text: 'NEW CAPTION PHRASE',
-                          start_time: Math.round(currentTime * 10) / 10,
-                          end_time: Math.round((currentTime + 2.0) * 10) / 10,
-                          words: [
-                            { word: 'NEW', start: currentTime, end: currentTime + 0.6, emphasis: true },
-                            { word: 'CAPTION', start: currentTime + 0.6, end: currentTime + 1.3, emphasis: false },
-                            { word: 'PHRASE', start: currentTime + 1.3, end: currentTime + 2.0, emphasis: true }
-                          ]
+                          ...interval,
+                          words: [], origin:'manual',
                         };
                         updatePlanWithHistory({
                           ...plan,
@@ -2284,107 +2154,31 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                        <p className="text-xs font-semibold text-zinc-900 leading-snug">
-                          {seg.text}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+                        <textarea aria-label="Caption text" key={seg.id + seg.text} defaultValue={seg.text}
+                          className="w-full border rounded p-1.5 text-xs text-zinc-900" onBlur={e => {
+                            if(e.target.value===seg.text)return;
+                            const tokens=e.target.value.trim().split(/\s+/);
+                            updatePlanWithHistory({...plan,subtitles:plan.subtitles?.map(s=>s.id===seg.id?{...s,text:e.target.value,origin:'manual',
+                              words:tokens.length===s.words?.length?s.words.map((word,index)=>({...word,word:tokens[index]})):[]}:s)});
+                          }} />
 
-            {/* VISUAL INSERTS TAB (Stage 6) */}
-            {activeTab === 'inserts' && (
-              <div className="space-y-4">
-                {/* Auto-Suggest Action Card */}
-                <div className="p-3.5 bg-blue-500/10 border border-blue-200 rounded-xl space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
-                      <Layers className="w-4 h-4 text-blue-600" />
-                      Contextual B-Roll Matching
-                    </span>
-                    <span className="text-[10px] font-mono bg-blue-200/60 text-blue-900 px-1.5 py-0.5 rounded font-semibold">
-                      AI Timeline
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-blue-800 leading-relaxed">
-                    Analyzes spoken keywords from your transcript and places matching uploaded photos as PiP or split overlays.
-                  </p>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleAutoSuggestInserts}
-                    disabled={!plan.subtitles || plan.subtitles.length === 0 || images.length === 0}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-1.5 shadow-xs"
-                  >
-                    <Wand2 className="w-3.5 h-3.5" />
-                    <span>Auto-Match B-Roll from Speech</span>
-                  </Button>
-                </div>
-
-                {/* Inserts List */}
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-zinc-900 block">
-                    Active Visual Overlays ({plan.visual_inserts?.length || 0})
-                  </label>
-                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                    {(plan.visual_inserts || []).map(ins => (
-                      <div
-                        key={ins.id}
-                        className="p-2.5 rounded-lg border border-zinc-200 bg-white hover:border-zinc-300 transition-colors space-y-2"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-zinc-900 truncate max-w-[170px]">
-                            {ins.label || 'Visual Overlay'}
-                          </span>
-                          <button
-                            onClick={() => {
-                              const updated = (plan.visual_inserts || []).filter(i => i.id !== ins.id);
-                              updatePlanWithHistory({ ...plan, visual_inserts: updated });
-                            }}
-                            className="text-zinc-400 hover:text-red-500 transition-colors"
-                            title="Remove insert"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <img
-                            src={getMediaUrl(ins.asset_url)}
-                            alt=""
-                            className="w-12 h-12 object-cover rounded border border-zinc-200"
-                          />
-                          <div className="flex-1 space-y-1">
-                            <div className="flex items-center gap-1 text-[11px] text-zinc-500 font-mono">
-                              <span>{ins.start_time.toFixed(1)}s</span>
-                              <span>•</span>
-                              <span>{ins.duration.toFixed(1)}s dur</span>
-                            </div>
-
-                            {/* Mode selector */}
-                            <div className="flex items-center gap-1 text-[10px]">
-                              {(['pip', 'split', 'cutaway'] as const).map(m => (
-                                <button
-                                  key={m}
-                                  onClick={() => {
-                                    const updated = (plan.visual_inserts || []).map(i =>
-                                      i.id === ins.id ? { ...i, mode: m } : i
-                                    );
-                                    updatePlanWithHistory({ ...plan, visual_inserts: updated });
-                                  }}
-                                  className={`px-1.5 py-0.5 rounded uppercase font-semibold ${
-                                    ins.mode === m
-                                      ? 'bg-blue-600 text-white'
-                                      : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                                  }`}
-                                >
-                                  {m}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
+                        {!!seg.words?.length && <div className="flex flex-wrap gap-1" aria-label="Word emphasis">
+                          {seg.words.map((word,index)=><button key={index} aria-pressed={!!word.emphasis} className={word.emphasis?'border rounded p-1 text-xs bg-amber-100':'border rounded p-1 text-xs'}
+                            onClick={()=>updatePlanWithHistory({...plan,subtitles:plan.subtitles?.map(s=>s.id===seg.id?{...s,origin:'manual',words:s.words?.map((w,i)=>i===index?{...w,emphasis:!w.emphasis,color:undefined}:w)}:s)})}>{word.word}</button>)}
+                        </div>}
+                        <div className="flex gap-2 text-[10px]">
+                          <label>Start<input aria-label="Caption start" key={`start-${seg.id}-${seg.start_time}`} type="number" step="0.01" min="0" max={seg.end_time-.01} defaultValue={seg.start_time}
+                            className="w-full rounded border p-1" onBlur={e=>{
+                              const value=Math.max(0,Math.min(seg.end_time-.01,Number(e.target.value)));
+                              if(value===seg.start_time)return;
+                              updatePlanWithHistory(editCaptionTiming(plan,seg.id,'start_time',value));
+                            }} /></label>
+                          <label>End<input aria-label="Caption end" key={`end-${seg.id}-${seg.end_time}`} type="number" step="0.01" min={seg.start_time+.01} max={plan.duration_seconds} defaultValue={seg.end_time}
+                            className="w-full rounded border p-1" onBlur={e=>{
+                              const value=Math.min(plan.duration_seconds,Math.max(seg.start_time+.01,Number(e.target.value)));
+                              if(value===seg.end_time)return;
+                              updatePlanWithHistory(editCaptionTiming(plan,seg.id,'end_time',value));
+                            }} /></label>
                         </div>
                       </div>
                     ))}
@@ -2392,6 +2186,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 </div>
               </div>
             )}
+
+            {activeTab === 'inserts' && <CreativePanel plan={plan} currentTime={currentTime} onChange={updatePlanWithHistory} onSeek={handleSeek} />}
+
           </div>
         </aside>
 
@@ -2640,6 +2437,11 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
         selectedClipId={selectedClipId}
         onSelectClip={setSelectedClipId}
         onSeek={handleSeek}
+        onScrubCommit={(before, after) => {
+          if (Math.abs(after - before) < .001) return;
+          editOriginRef.current = { ...planRef.current, playhead_time: before };
+          updatePlanWithHistory({ ...planRef.current, playhead_time: after });
+        }}
         onUpdatePlan={updatePlanWithHistory}
         onOpenEffectsForBoundary={handleOpenEffectsForBoundary}
       />
@@ -2693,6 +2495,11 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
             {/* Actions */}
             <div className="pt-2 flex items-center justify-center gap-2.5">
+              {renderJobId && (renderStatus?.status==='processing'||renderStatus?.status==='queued') && <button
+                className="text-xs border rounded px-3 py-2" onClick={async()=>{
+                  try{await creativeRequest(`/render/${renderJobId}/cancel`,{});setRenderStatus(previous=>previous?{...previous,status:'cancelled'}:previous);}
+                  catch(error){setErrorMessage(error instanceof Error?error.message:'Could not cancel render.');}
+                }}>Cancel render</button>}
               {renderStatus?.status === 'completed' && renderJobId && (
                 <>
                   <a
@@ -2729,7 +2536,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       {/* Auto-Edit Talking-Head Reel Workflow Modal (Stage 7) */}
       {isAutoEditModalOpen && (
         <div className="fixed inset-0 z-50 bg-zinc-950/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-zinc-200 rounded-2xl max-w-md w-full p-6 shadow-xl space-y-5 animate-in fade-in zoom-in-95">
+          <div className="bg-white border border-zinc-200 rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 shadow-xl space-y-5 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-600">
@@ -2753,6 +2560,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               Generate captions from speech
             </label>
             <p className="text-xs text-zinc-500">Output: {plan.aspect_ratio}. Uses your uploaded photos or primary video.</p>
+            <label className="flex gap-2 text-xs"><input type="checkbox" checked={plan.auto_broll !== false} onChange={e => updatePlanWithHistory({...plan,auto_broll:e.target.checked})} />Find contextual B-roll on Pixabay</label>
+            <label className="flex gap-2 text-xs"><input type="checkbox" checked={plan.list_sounds !== false} onChange={e => updatePlanWithHistory({...plan,list_sounds:e.target.checked})} />Add clicks to spoken list items</label>
+            <label className="flex gap-2 text-xs">Local speech model<select aria-label="Whisper model" value={whisperModel} onChange={e => setWhisperModel(e.target.value)}><option value="tiny">Tiny</option><option value="base">Base</option><option value="small">Small</option></select></label>
             {/* Choose Reel Style */}
             <div className="space-y-2">
               <label className="text-xs font-semibold text-zinc-800 block">
@@ -2822,7 +2632,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 {isAutoEditing ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Analyzing & Building Reel...</span>
+                    <span>{autoStage || 'Starting local processing'}?</span>
                   </>
                 ) : (
                   <>

@@ -192,9 +192,9 @@ def test_auto_reel_command_preview_export(studio):
     page.get_by_role('button', name='16:9', exact=True).click()
     page.get_by_role('button', name='Auto Reel', exact=True).click()
     page.get_by_label('Generate captions from speech').uncheck()
-    with page.expect_response(lambda response: '/api/auto-edit' in response.url) as result:
+    with page.expect_response(lambda response: '/api/creative/jobs/' in response.url and response.json().get('status') == 'completed') as result:
         page.get_by_role('button', name='Generate Reel Draft').click()
-    generated = result.value.json()
+    generated = result.value.json()['result']
     assert generated['aspect_ratio'] == '16:9'
     wait_plan(page, 'p.duration_seconds === 7.5')
     assert plan(page)['clips'] == generated['clips']
@@ -242,6 +242,8 @@ def test_video_only_auto_reel_and_seeking(studio, tmp_path):
     wait_plan(page, "p.clips.length === 1 && p.clips[0].media_type === 'video'")
     page.get_by_role('button', name='Auto Reel', exact=True).click()
     page.get_by_label('Generate captions from speech').uncheck()
+    page.get_by_label('Find contextual B-roll on Pixabay').uncheck()
+    page.get_by_label('Add clicks to spoken list items').uncheck()
     page.get_by_role('button', name='Generate Reel Draft').click()
     wait_plan(page, 'p.duration_seconds === 3')
     page.get_by_role('button', name='Captions', exact=True).click()
@@ -264,3 +266,103 @@ def test_video_only_auto_reel_and_seeking(studio, tmp_path):
         page.get_by_role('link', name='Download MP4').click()
     download.value.save_as(str(ROOT / 'test_artifacts/browser-video-reel.mp4'))
     assert errors == []
+
+
+def test_multitrack_insert_caption_sound_controls_and_undo(studio):
+    page,errors=studio
+    page.evaluate(f"""() => {{
+      const state=JSON.parse(localStorage.getItem('{KEY}'));
+      state.plan={{...state.plan,duration_seconds:6,aspect_ratio:'16:9',title:{{...state.plan.title,enabled:false}},
+        clips:[{{...state.plan.clips[0],duration:6,start_time:0,motion:'static'}}],transitions:[],
+        visual_inserts:[{{id:'manual-broll',asset_id:'image',asset_url:state.images[1].url,start_time:1,duration:2,mode:'pip',position:'top_right',origin:'manual'}}],
+        subtitles:[{{id:'caption',text:'A camera and a microphone',start_time:1,end_time:3,style:{{preset:'cinematic',caption_mode:'phrase',font_size:48,font_family:'Arial',color:'#FFFFFF',highlight_color:'#E7C48C',stroke_color:'#000000',stroke_width:2,position:'center_bottom'}},words:[]}}],
+        sound_cues:[{{id:'cue1',label:'camera',start_time:1,sound:'soft',volume:.35,muted:false}},{{id:'cue2',label:'microphone',start_time:2.5,sound:'wood',volume:.3,muted:false}}]}};
+      localStorage.setItem('{KEY}',JSON.stringify(state));
+    }}""")
+    page.reload();page.get_by_role('button',name='Open Studio',exact=True).first.click()
+    wait_plan(page,'p.visual_inserts?.length === 1 && p.sound_cues?.length === 2')
+    insert=page.locator('footer [data-insert-id="manual-broll"]');box=insert.bounding_box();assert box
+    page.mouse.move(box['x']+box['width']/2,box['y']+box['height']/2);page.mouse.down()
+    page.mouse.move(box['x']+box['width']/2+37.5,box['y']+box['height']/2,steps=10);page.mouse.up()
+    wait_plan(page,'Math.abs(p.visual_inserts[0].start_time-1.5)<.03')
+    page.keyboard.press('Control+z');wait_plan(page,'p.visual_inserts[0].start_time===1')
+    page.keyboard.press('Control+Shift+z');wait_plan(page,'Math.abs(p.visual_inserts[0].start_time-1.5)<.03')
+    page.get_by_role('button',name='Inserts',exact=False).click()
+    page.get_by_label('Mute click 2').check();wait_plan(page,'p.sound_cues[1].muted')
+    page.get_by_label('Click 1 volume').fill('0.2');wait_plan(page,'p.sound_cues[0].volume===.2')
+    page.get_by_label('Insert 1 layout').select_option('split');wait_plan(page,"p.visual_inserts[0].mode==='split'")
+    page.get_by_role('button',name='Listen',exact=True).first.click()
+    page.get_by_role('button',name='Captions',exact=False).click()
+    editor=page.get_by_label('Caption text');editor.fill('A corrected caption');editor.press('Tab')
+    wait_plan(page,"p.subtitles[0].text==='A corrected caption'")
+    page.get_by_role('button',name='Inserts',exact=False).click()
+    page.get_by_role('button',name='Remove',exact=True).click()
+    wait_plan(page,"p.visual_inserts.length===0 && p.suppressed_auto_inserts.includes('manual-broll')")
+    assert errors==[]
+
+
+def test_cinematic_preset_and_manual_title_layout(studio):
+    page,errors=studio
+    page.get_by_role('button',name='Inserts',exact=False).click()
+    page.get_by_role('button',name='Add display text',exact=True).click()
+    page.get_by_label('Cinematic text',exact=True).fill('YOUR\nSTORY')
+    wait_plan(page,"p.cinematic_texts[0].text==='YOUR\\nSTORY'")
+    page.get_by_label('Cinematic text color',exact=True).fill('#e7c48c')
+    wait_plan(page,"p.cinematic_texts[0].color==='#e7c48c'")
+    page.get_by_label('Cinematic tracking',exact=True).fill('2')
+    wait_plan(page,'p.cinematic_texts[0].tracking===2')
+    page.get_by_label('Cinematic vertical position',exact=True).fill('20')
+    wait_plan(page,'p.cinematic_texts[0].y===.2')
+    page.get_by_role('button',name='Captions',exact=False).click()
+    page.get_by_role('button',name='+ Add Segment',exact=True).click()
+    page.get_by_role('button',name='Cinematic Warm emphasis',exact=False).click()
+    wait_plan(page,"p.subtitles[0].style.preset==='cinematic' && p.subtitles[0].style.caption_mode==='phrase'")
+    page.get_by_label('Caption font size',exact=True).fill('60')
+    wait_plan(page,'p.subtitles[0].style.font_size===60')
+    page.get_by_label('Caption text',exact=True).fill('Corrected words remain editable.')
+    page.get_by_label('Caption text',exact=True).press('Tab')
+    wait_plan(page,"p.subtitles[0].text==='Corrected words remain editable.'")
+    assert errors==[]
+
+
+def test_reference_subject_preview_uses_prepared_mattes(studio):
+    path=ROOT/'test_artifacts/sections67/plan.json'
+    if not path.exists():path=ROOT/'test_artifacts/reference-edit-plan.json'
+    if not path.exists():pytest.skip('Run verify_reference_edit.py once with the local reference reel.')
+    reference_plan=json.loads(path.read_text(encoding='utf8'))
+    page,errors=studio
+    page.evaluate(f"""p => {{ const state=JSON.parse(localStorage.getItem('{KEY}'));state.plan=p;
+      state.images=[{{filename:p.source_filename,original_name:'Speech sample.mp4',url:p.clips[0].image_url,media_type:'video',size:1}}];
+      localStorage.setItem('{KEY}',JSON.stringify(state)); }}""",reference_plan)
+    page.reload()
+    with page.expect_response(lambda r:'/api/cinematic/matte' in r.url) as matte_response:
+        page.get_by_role('button',name='Open Studio',exact=True).first.click()
+    assert matte_response.value.status==200,matte_response.value.text()
+    head=page.get_by_role('slider',name='Timeline playhead');head.focus();head.press('Shift+ArrowRight');head.press('Shift+ArrowRight')
+    expect(head).to_have_attribute('aria-valuenow','2')
+    page.wait_for_timeout(1500)
+    # Compare the actual canvas against the independently encoded frame at the seek time.
+    if (ROOT/'test_artifacts/sections67/9x16.mp4').exists() and path.name=='plan.json':
+        import io
+        import numpy as np
+        import base64
+        sys.path.insert(0,str(ROOT/'backend'))
+        from app.core.config import FFMPEG_PATH
+        data=page.locator('main canvas').evaluate("c=>({width:c.width,height:c.height,png:c.toDataURL()})")
+        actual=np.asarray(Image.open(io.BytesIO(base64.b64decode(data['png'].split(',')[1]))).convert('RGB')).astype(float)
+        raw=subprocess.check_output([FFMPEG_PATH,'-v','error','-ss','2','-i',str(ROOT/'test_artifacts/sections67/9x16.mp4'),'-frames:v','1','-vf',f"scale={data['width']}:{data['height']}",'-f','rawvideo','-pix_fmt','rgb24','-'])
+        expected=np.frombuffer(raw,np.uint8).reshape(data['height'],data['width'],3).astype(float)
+        difference=float(np.abs(actual-expected).mean())
+        (ROOT/'test_artifacts/sections67/preview-comparison.json').write_text(json.dumps({'time':2,'mean_absolute_rgb_error':difference}))
+        assert difference<12,difference
+    else:
+        assert page.locator('main canvas').evaluate("c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some(v=>v>200)")
+    page.locator('main canvas').screenshot(path=str(ROOT/'test_artifacts/reference-preview.png'))
+    # Exercise moving mattes and title exit during actual playback, then seek back.
+    page.get_by_role('button', name='Play', exact=True).click()
+    page.wait_for_timeout(450)
+    page.get_by_role('button', name='Pause', exact=True).click()
+    assert float(head.get_attribute('aria-valuenow')) > 2.2
+    page.get_by_title('Reset to 0s').click()
+    expect(head).to_have_attribute('aria-valuenow','0')
+    assert errors==[]
