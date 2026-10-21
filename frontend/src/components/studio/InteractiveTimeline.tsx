@@ -287,13 +287,19 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
   const handleTrimPointerMove = (e: React.PointerEvent) => {
     if (!trimmingState) return;
     const deltaPx = e.clientX - trimmingState.startX;
-    const deltaSec = deltaPx / pxPerSec;
+    if (deltaPx === 0) return;
+    const deltaSec = Math.round(deltaPx / pxPerSec * 10) / 10;
+    const clip = clips.find(c => c.id === trimmingState.clipId);
+    const maxDuration = clip?.media_type === 'video'
+      ? (trimmingState.edge === 'left' ? trimmingState.initialDuration + trimmingState.initialSourceStart
+        : (clip.source_duration ?? Infinity) - trimmingState.initialSourceStart) : 30;
+    const minDuration = Math.min(0.5, trimmingState.initialDuration);
 
     let nextDur = trimmingState.initialDuration;
     if (trimmingState.edge === 'right') {
-      nextDur = Math.max(0.5, Math.min(30.0, Math.round((trimmingState.initialDuration + deltaSec) * 10) / 10));
+      nextDur = Math.max(minDuration, Math.min(maxDuration, trimmingState.initialDuration + deltaSec));
     } else {
-      nextDur = Math.max(0.5, Math.min(30.0, Math.round((trimmingState.initialDuration - deltaSec) * 10) / 10));
+      nextDur = Math.max(minDuration, Math.min(maxDuration, trimmingState.initialDuration - deltaSec));
     }
 
     setTrimmingState(prev => prev ? { ...prev, currentDuration: nextDur } : null);
@@ -374,7 +380,9 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
   // Selected clip duration adjustment via buttons
   const handleAdjustDuration = (delta: number) => {
     if (!activeSelectedClip) return;
-    const newDur = Math.max(0.5, Math.min(30.0, Math.round((activeSelectedClip.duration + delta) * 10) / 10));
+    const maxDuration = activeSelectedClip.media_type === 'video'
+      ? (activeSelectedClip.source_duration ?? Infinity) - (activeSelectedClip.source_start ?? 0) : 30;
+    const newDur = Math.max(Math.min(0.5, activeSelectedClip.duration), Math.min(maxDuration, activeSelectedClip.duration + delta));
     const updated = clips.map(c => (c.id === activeSelectedClip.id ? { ...c, duration: newDur } : c));
     applyTimelineUpdate(updated);
   };

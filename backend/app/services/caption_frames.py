@@ -147,9 +147,14 @@ def _paint(words, style, width, height, active=None):
         size -= 2
     image = Image.new('RGBA', (width, height))
     draw = ImageDraw.Draw(image)
-    center = height*(.12 if style.position == 'top' else .5 if style.position == 'middle' else .86)
+    center = height*(.12 if style.position == 'top' else .5 if style.position == 'middle' else .78 if style.safe_area else .86)
     block_height = len(lines)*line_height
     y = min(max(height*.05, center-block_height/2), height*.95-block_height)
+    if style.background_opacity and lines:
+        longest = max(length for _,length in lines)
+        padding = size*.25
+        draw.rounded_rectangle(((width-longest)/2-padding,y-padding,(width+longest)/2+padding,y+block_height+padding),
+                               radius=size*.2,fill=(8,8,10,round(255*style.background_opacity)))
     for line, length in lines:
         x = (width-length)/2
         for token, font, token_width, word, index, gap in line:

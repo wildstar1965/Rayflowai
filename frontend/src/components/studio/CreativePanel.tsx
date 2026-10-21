@@ -1,3 +1,4 @@
+import { NumericInput } from '../ui/NumericInput';
 import { useRef, useState, useLayoutEffect, useEffect } from 'react';
 import type { EditingPlan, VisualInsert, SoundCue, CinematicText } from '../../types';
 import { creativeRequest, getMediaUrl, waitCreativeJob } from '../../services/api';
@@ -88,10 +89,10 @@ export function CreativePanel({ plan, currentTime, onChange, onSeek }: Props) {
           <img src={getMediaUrl(ins.asset_url)} alt={ins.label || 'B-roll'} className="w-full max-h-32 object-contain rounded" />}
         {ins.source_page && <a href={ins.source_page} target="_blank" rel="noreferrer" className="underline block">Pixabay · {ins.contributor || 'Source'}</a>}
         <div className="grid grid-cols-2 gap-2">
-          <label>Start (s)<input aria-label={`Insert ${index+1} start`} type="number" min={0} max={Math.max(0,plan.duration_seconds-ins.duration)} step={.1}
-            className={field} value={ins.start_time} onChange={e => updateInsert(ins.id, { start_time: Math.max(0,Math.min(plan.duration_seconds-ins.duration,Number(e.target.value))) })} /></label>
-          <label>Duration (s)<input aria-label={`Insert ${index+1} duration`} type="number" min={.1} max={plan.duration_seconds-ins.start_time} step={.1}
-            className={field} value={ins.duration} onChange={e => updateInsert(ins.id, { duration: Math.max(.1,Math.min(plan.duration_seconds-ins.start_time,Number(e.target.value))) })} /></label>
+          <label>Start (s)<NumericInput aria-label={`Insert ${index+1} start`} min={0} max={Math.max(0,plan.duration_seconds-ins.duration)} step={.1}
+            className={field} value={ins.start_time} onCommit={nextValue => updateInsert(ins.id, { start_time: Math.max(0,Math.min(plan.duration_seconds-ins.duration,nextValue)) })} /></label>
+          <label>Duration (s)<NumericInput aria-label={`Insert ${index+1} duration`} min={.1} max={plan.duration_seconds-ins.start_time} step={.1}
+            className={field} value={ins.duration} onCommit={nextValue => updateInsert(ins.id, { duration: Math.max(.1,Math.min(plan.duration_seconds-ins.start_time,nextValue)) })} /></label>
         </div>
         <select aria-label={`Insert ${index+1} layout`} className={field} value={ins.mode} disabled={!!busy} onChange={e => {
           if(e.target.value!=='background'){updateInsert(ins.id,{mode:e.target.value as VisualInsert['mode']});return;}
@@ -126,8 +127,8 @@ export function CreativePanel({ plan, currentTime, onChange, onSeek }: Props) {
         </div>
         <label className="flex items-center gap-2">Volume<input aria-label={`Click ${index+1} volume`} type="range" min={0} max={1} step={.05} value={cue.volume}
           onChange={e => updateSound(cue.id,{volume:Number(e.target.value)})} /></label>
-        <label>Time (s)<input aria-label={`Click ${index+1} time`} className={field} type="number" min={0} max={plan.duration_seconds} step={.01} value={cue.start_time}
-          onChange={e => updateSound(cue.id,{start_time:Math.min(plan.duration_seconds,Math.max(0,Number(e.target.value)))})} /></label>
+        <label>Time (s)<NumericInput aria-label={`Click ${index+1} time`} className={field} min={0} max={plan.duration_seconds} step={.01} value={cue.start_time}
+          onCommit={nextValue => updateSound(cue.id,{start_time:Math.min(plan.duration_seconds,Math.max(0,nextValue))})} /></label>
       </div>)}
     </section>
     <section className="space-y-2 border-t border-zinc-300 pt-4" aria-label="Cinematic typography controls">
@@ -144,20 +145,20 @@ export function CreativePanel({ plan, currentTime, onChange, onSeek }: Props) {
         <div className="grid grid-cols-2 gap-2">
           <label>Font<select aria-label="Cinematic font" className={field} value={title.font_family??'Anton'} onChange={e=>updateTitle(title.id,{font_family:e.target.value as CinematicText['font_family']})}><option value="Anton">Anton condensed</option><option value="Arial">Arial</option><option value="DejaVu Sans">DejaVu Sans</option></select></label>
           <label>Weight<select aria-label="Cinematic weight" className={field} value={title.font_weight??700} onChange={e=>updateTitle(title.id,{font_weight:Number(e.target.value)})}><option value={400}>Regular</option><option value={700}>Bold</option></select></label>
-          <label>Size (% width)<input aria-label="Cinematic size" className={field} type="number" min={3} max={30} value={Math.round((title.font_size_ratio??.15)*100)} onChange={e=>updateTitle(title.id,{font_size_ratio:Math.max(3,Math.min(30,Number(e.target.value)))/100})}/></label>
-          <label>Tracking<input aria-label="Cinematic tracking" className={field} type="number" min={-2} max={15} step={.5} value={title.tracking??0} onChange={e=>updateTitle(title.id,{tracking:Math.max(-2,Math.min(15,Number(e.target.value)))})}/></label>
-          <label>Horizontal (%)<input aria-label="Cinematic horizontal position" className={field} type="number" min={5} max={95} value={Math.round((title.x??.5)*100)} onChange={e=>updateTitle(title.id,{x:Math.max(5,Math.min(95,Number(e.target.value)))/100})}/></label>
-          <label>Vertical (%)<input aria-label="Cinematic vertical position" className={field} type="number" min={5} max={85} value={Math.round((title.y??.09)*100)} onChange={e=>updateTitle(title.id,{y:Math.max(5,Math.min(85,Number(e.target.value)))/100})}/></label>
+          <label>Size (% width)<NumericInput aria-label="Cinematic size" className={field} min={3} max={30} value={Math.round((title.font_size_ratio??.15)*100)} onCommit={nextValue =>updateTitle(title.id,{font_size_ratio:Math.max(3,Math.min(30,nextValue))/100})}/></label>
+          <label>Tracking<NumericInput aria-label="Cinematic tracking" className={field} min={-2} max={15} step={.5} value={title.tracking??0} onCommit={nextValue =>updateTitle(title.id,{tracking:Math.max(-2,Math.min(15,nextValue))})}/></label>
+          <label>Horizontal (%)<NumericInput aria-label="Cinematic horizontal position" className={field} min={5} max={95} value={Math.round((title.x??.5)*100)} onCommit={nextValue =>updateTitle(title.id,{x:Math.max(5,Math.min(95,nextValue))/100})}/></label>
+          <label>Vertical (%)<NumericInput aria-label="Cinematic vertical position" className={field} min={5} max={85} value={Math.round((title.y??.09)*100)} onCommit={nextValue =>updateTitle(title.id,{y:Math.max(5,Math.min(85,nextValue))/100})}/></label>
           <label>Alignment<select aria-label="Cinematic alignment" className={field} value={title.alignment??'center'} onChange={e=>updateTitle(title.id,{alignment:e.target.value as CinematicText['alignment']})}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
-          <label>Fade seconds<input aria-label="Cinematic fade" className={field} type="number" min={0} max={1} step={.05} value={title.animation_seconds??.16} onChange={e=>updateTitle(title.id,{animation_seconds:Math.max(0,Math.min(1,Number(e.target.value)))})}/></label>
-          <label>Entrance scale (%)<input aria-label="Cinematic entrance scale" className={field} type="number" min={80} max={100} value={Math.round((title.scale_from??.97)*100)} onChange={e=>updateTitle(title.id,{scale_from:Math.max(80,Math.min(100,Number(e.target.value)))/100})}/></label>
+          <label>Fade seconds<NumericInput aria-label="Cinematic fade" className={field} min={0} max={1} step={.05} value={title.animation_seconds??.16} onCommit={nextValue =>updateTitle(title.id,{animation_seconds:Math.max(0,Math.min(1,nextValue))})}/></label>
+          <label>Entrance scale (%)<NumericInput aria-label="Cinematic entrance scale" className={field} min={80} max={100} value={Math.round((title.scale_from??.97)*100)} onCommit={nextValue =>updateTitle(title.id,{scale_from:Math.max(80,Math.min(100,nextValue))/100})}/></label>
           <label>Emphasis color<input aria-label="Cinematic emphasis color" type="color" className={field} value={title.highlight_color??'#E7C48C'} onChange={e=>updateTitle(title.id,{highlight_color:e.target.value})}/></label>
         </div>
         <label className="flex gap-2"><input type="checkbox" checked={title.uppercase??true} onChange={e=>updateTitle(title.id,{uppercase:e.target.checked})}/>Uppercase</label>
         <label>Emphasized words<input aria-label="Cinematic emphasized words" className={field} key={title.id+'-emphasis'} defaultValue={title.emphasis_words?.join(' ')??''} onBlur={e=>updateTitle(title.id,{emphasis_words:e.target.value.split(/\s+/).filter(Boolean).slice(0,20)})}/></label>
         <label className="flex gap-2 items-center">Text color<input aria-label="Cinematic text color" type="color" value={title.color} onChange={e => updateTitle(title.id,{color:e.target.value})} /></label>
-        <div className="grid grid-cols-2 gap-2"><label>Start (s)<input className={field} type="number" min={0} max={plan.duration_seconds-title.duration} step={.1} value={title.start_time} onChange={e => updateTitle(title.id,{start_time:Math.max(0,Math.min(plan.duration_seconds-title.duration,Number(e.target.value))),behind_subject:false})} /></label>
-          <label>Duration (s)<input className={field} type="number" min={.1} max={plan.duration_seconds-title.start_time} step={.1} value={title.duration} onChange={e => updateTitle(title.id,{duration:Math.max(.1,Math.min(plan.duration_seconds-title.start_time,Number(e.target.value))),behind_subject:false})} /></label></div>
+        <div className="grid grid-cols-2 gap-2"><label>Start (s)<NumericInput aria-label="Cinematic start" className={field} min={0} max={plan.duration_seconds-title.duration} step={.1} value={title.start_time} onCommit={nextValue => updateTitle(title.id,{start_time:Math.max(0,Math.min(plan.duration_seconds-title.duration,nextValue)),behind_subject:false})} /></label>
+          <label>Duration (s)<NumericInput aria-label="Cinematic duration" className={field} min={.1} max={plan.duration_seconds-title.start_time} step={.1} value={title.duration} onCommit={nextValue => updateTitle(title.id,{duration:Math.max(.1,Math.min(plan.duration_seconds-title.start_time,nextValue)),behind_subject:false})} /></label></div>
         <label className="flex gap-2 items-center"><input type="checkbox" checked={title.behind_subject} disabled={!!busy}
           onChange={e => { if(!e.target.checked){updateTitle(title.id,{behind_subject:false});return;}
             run('Preparing subject mask',async()=>{

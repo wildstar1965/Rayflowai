@@ -1,4 +1,5 @@
 import os
+import shutil
 from pathlib import Path
 import imageio_ffmpeg
 
@@ -26,6 +27,11 @@ try:
     FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 except Exception:
     FFMPEG_PATH = "ffmpeg"
+
+# FFprobe is a companion executable, not included in imageio-ffmpeg's wheel.
+FFPROBE_PATH = os.environ.get("FFPROBE_PATH") or shutil.which("ffprobe") or str(
+    BASE_DIR / "tools" / ("ffprobe.exe" if os.name == "nt" else "ffprobe")
+)
 
 CORS_ORIGINS = [
     "http://localhost:5173",

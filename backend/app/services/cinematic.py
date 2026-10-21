@@ -64,7 +64,7 @@ def title_image(text, color, width, height, title=None, frame=None):
     title = title or CinematicText(id='raster', text=text, color=color, start_time=0, duration=2.5, source_clip_id='raster')
     fields = title.model_dump(exclude={'id', 'source_clip_id', 'origin', 'behind_subject', 'start_time', 'duration'})
     state = animation_state(title, frame) if frame is not None else (1.0, 1.0)
-    key = hashlib.sha256(json.dumps(['type-v4', fields, width, height, state], sort_keys=True).encode()).hexdigest()
+    key = hashlib.sha256(json.dumps(['type-v5', fields, width, height, state], sort_keys=True).encode()).hexdigest()
     path = CACHE_DIR / f'type_{key}.png'
     with _TITLE_LOCK:
         if not path.exists():
@@ -126,9 +126,11 @@ def _paint_title(title, width, height):
         prefix = ''
         for token in line.split(' '):
             color = title.highlight_color if token.casefold().strip('.,!?') in emphasis else title.color
+            rgb = tuple(int(color[i:i+2],16) for i in (1,3,5))
+            outline = '#EAE5DC' if sum(rgb)/3 < 110 else '#25201a'
             offset = font.getlength(prefix)+len(prefix)*tracking
             draw_tracked(draw, (x+offset, y-top), token, font, tracking, fill=color,
-                         stroke_width=max(1, width//600), stroke_fill='#25201a')
+                         stroke_width=max(1, width//540), stroke_fill=outline)
             prefix += token+' '
         y += size*1.08
     return image
@@ -166,22 +168,108 @@ def title_track(title, width, height, destination, check=None):
 
 
 def suggest_cinematic_texts(plan):
-    if not plan.subtitles or not plan.clips:
-        return []
-    candidates = [s for s in plan.subtitles if len(s.text.split()) >= 3 and s.end_time-s.start_time >= .6
-                  and not re.match(r'^(hi|hello|hey|thanks|thank you)\b', s.text.strip(), re.I)]
-    if not candidates:
-        return []
-    first = next((s for s in candidates if any(w.emphasis for w in s.words)), candidates[0])
-    clip = next((c for c in plan.clips if c.start_time <= first.start_time < c.start_time+c.duration), None)
-    if not clip:
-        return []
-    selected = first.words[:6]
-    text = ' '.join(first.text.split()[:6]).strip(' ,.!?')
-    if not text:
-        return []
-    end = selected[-1].end if selected else first.end_time
-    return [CinematicText(id='opening-'+first.id, text=text, start_time=first.start_time,
-                duration=min(2.5, end-first.start_time, clip.start_time+clip.duration-first.start_time),
-                source_clip_id=clip.id, behind_subject=False, origin='auto',
-                emphasis_words=[w.word for w in selected if w.emphasis])]
+    """Choose complete, transcript-grounded phrases; never truncate to six words."""
+    candidates = []
+    stop = {'i', 'we', 'my', 'our', 'the', 'a', 'an', 'to', 'and', 'or', 'but', 'at', 'from',
+            'in', 'on', 'of', 'is', 'am', 'are', 'it', 'this', 'that', 'you', 'your', 'various'}
+    for segment in plan.subtitles or plan.transcript:
+        text = segment.text.strip()
+        sentences = re.split(r'[.;!?]', text)
+        phrases = sentences + [sentence.split(',')[0] for sentence in sentences if ',' in sentence]
+        # A prepositional subject often makes a useful display phrase in an introduction.
+        phrases += re.findall(r'\b(?:from|about|across)\s+(.+?)(?:\s+at\s|[.!?]|$)', text, re.I)
+        for phrase in phrases:
+            phrase = re.sub(r'^(?:coming to|moving on to|let us talk about|let.s talk about)\s+(?:(?:my|our|the)\s+)?', '', phrase.strip(), flags=re.I)
+            tokens = phrase.split()
+            clean = [re.sub(r'[^\w]', '', word.casefold()) for word in tokens]
+            if not 2 <= len(tokens) <= 8 or clean[-1] in stop or len(phrase)>72:
+                continue
+            if clean[0] in {'hi','hello','hey','thanks','thank'} or sum(w not in stop for w in clean)<2:
+                continue
+            # Don't excerpt away a qualification or negation.
+            if re.search(r"\b(?:not|never|no|without|unless|don.t|can.t|isn.t)\b", text, re.I) and phrase not in [text.rstrip('.!?')]:
+                continue
+            source = [re.sub(r'[^\w]', '', w.word.casefold()) for w in segment.words]
+            offset = next((i for i in range(len(source)-len(clean)+1) if source[i:i+len(clean)] == clean), None)
+            if offset is None:
+                if segment.words or phrase != text.rstrip('.!?'):
+                    continue
+                start,end = segment.start_time,segment.end_time
+            else:
+                selected = segment.words[offset:offset+len(clean)]
+                start,end = selected[0].start,selected[-1].end
+            if end-start<.65:
+                continue
+            clip = next((c for c in plan.clips if c.start_time<=start<c.start_time+c.duration),None)
+            if not clip:
+                continue
+            finish = min(clip.start_time+clip.duration,end+.16,plan.duration_seconds)
+            if finish-start<.65:
+                continue
+            candidates.append((start,finish,phrase,clip,segment.id))
+    titles=[]
+    for start,end,text,clip,identity in sorted(candidates,key=lambda row:(row[0],len(row[2]))):
+        if len(titles)>=3 or any(start<t.start_time+t.duration+2 for t in titles):
+            continue
+        if any(start<i.start_time+i.duration and end>i.start_time for i in plan.visual_inserts):
+            continue
+        tokens=text.split()
+        font=local_font(108)
+        # Balance two lines, with conjunctions kept with the preceding words.
+        splits=[i for i in range(1,len(tokens)) if tokens[i].lower() not in {'and','or','of'}]
+        split=min(splits,key=lambda i:max(font.getlength(' '.join(tokens[:i]).upper()),font.getlength(' '.join(tokens[i:]).upper()))) if splits else 0
+        lines=[' '.join(tokens[:split]),' '.join(tokens[split:])] if split else [text]
+        widest=max(font.getlength(line.upper()) for line in lines)
+        ratio=min(.16,.1*940/max(1,widest))
+        if ratio<.11 and len(splits)>=2:
+            from itertools import combinations
+            first,second=min(combinations(splits,2),key=lambda pair:max(
+                font.getlength(' '.join(part).upper()) for part in
+                (tokens[:pair[0]],tokens[pair[0]:pair[1]],tokens[pair[1]:])))
+            lines=[' '.join(tokens[:first]),' '.join(tokens[first:second]),' '.join(tokens[second:])]
+            widest=max(font.getlength(line.upper()) for line in lines)
+            ratio=min(.14,.1*940/max(1,widest))
+        emphasis=max(tokens,key=lambda token:len(token.strip(',.'))).strip(',.')
+        titles.append(CinematicText(id='display-'+identity+'-'+str(len(titles)),text='\n'.join(lines),
+            start_time=start,duration=min(2.8,end-start),source_clip_id=clip.id,origin='auto',
+            font_size_ratio=max(.06,ratio),y=.065,tracking=.2,emphasis_words=[emphasis],
+            animation_seconds=.12,scale_from=.985))
+    return titles
+
+
+def place_title_with_mattes(title, mattes):
+    """Use sampled real mattes to keep at least 72% of a generated heading visible."""
+    import numpy as np
+    width,height=mattes[0].size
+    masks=[np.asarray(matte,dtype=float)/255 for matte in mattes]
+    choices=[]
+    for y in [.065,.09,.12,.15,.18]:
+        candidate=title.model_copy(update={'y':y})
+        alpha=np.asarray(_paint_title(candidate,width,height).getchannel('A'),dtype=float)/255
+        overlaps=[float((alpha*mask).sum()/max(1,alpha.sum())) for mask in masks]
+        if max(overlaps)<=.28:
+            choices.append((abs(sum(overlaps)/len(overlaps)-.09),y))
+    title.y=min(choices)[1] if choices else .05
+    title.behind_subject=bool(choices)
+
+
+def choose_title_palette(title, clip, ratio, fit_mode):
+    """Choose light/dark display ink from the actual source's upper composition."""
+    import subprocess
+    import numpy as np
+    from app.core.config import FFMPEG_PATH
+    from app.services.media import uploaded_path
+    width,height={'9:16':(180,320),'1:1':(240,240),'16:9':(320,180)}[ratio]
+    scale = (f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}' if fit_mode=='fill' else
+             f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2')
+    try:
+        raw=subprocess.check_output([FFMPEG_PATH,'-v','error','-ss',str(clip.source_start+title.start_time-clip.start_time+title.duration/2),
+            '-i',str(uploaded_path(clip.image_url)),'-frames:v','1','-vf',scale,'-f','rawvideo','-pix_fmt','rgb24','-'],
+            timeout=20,stderr=subprocess.DEVNULL)
+        pixels=np.frombuffer(raw,np.uint8).reshape(height,width,3)[round(height*.05):round(height*.25)]
+        luma=pixels@np.array([.2126,.7152,.0722])
+        if float(np.median(luma))>165:
+            title.color='#29251F'
+            title.highlight_color='#86451F'
+    except (OSError,ValueError,subprocess.SubprocessError):
+        pass  # Optional contrast sampling must not discard an otherwise usable draft.

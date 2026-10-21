@@ -79,10 +79,9 @@ def _recalc_timeline(plan: EditingPlan):
     if plan.clips:
         curr_time = 0.0
         for clip in plan.clips:
-            clip.start_time = round(curr_time, 2)
-            clip.duration = max(0.5, round(clip.duration, 2))
+            clip.start_time = curr_time
             curr_time += clip.duration
-        plan.duration_seconds = round(curr_time, 2)
+        plan.duration_seconds = curr_time
 
     # Clamp transitions safely
     if plan.transitions and len(plan.clips) > 1:

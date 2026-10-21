@@ -6,7 +6,8 @@ import threading
 import re
 from pathlib import Path
 from urllib.parse import unquote, urlparse
-from app.services.media import probe_media, VIDEO_EXTENSIONS
+from app.services.media import probe_media, probe_streams, stream_duration, VIDEO_EXTENSIONS
+from app.services.frame_timing import OUTPUT_FPS, frame_at, clip_frame_counts
 from typing import Dict, List, Optional
 from PIL import Image, ImageDraw, ImageFont
 
@@ -102,76 +103,56 @@ def _validate_rendered_video(
     expected_h: int,
     has_audio: bool,
     expected_duration: Optional[float] = None,
+    expected_frames: Optional[int] = None,
+    fps: int = OUTPUT_FPS,
 ):
-    """
-    Validates output MP4 file exists, has content, matches requested dimensions, and has required streams.
-    """
+    """Probe actual streams and independently decode every video/audio packet."""
     if not file_path.exists() or file_path.stat().st_size < 1000:
         raise RuntimeError(f"Export validation failed: File is missing or empty ({file_path})")
-
-    res = subprocess.run(
-        [FFMPEG_PATH, "-hide_banner", "-i", str(file_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    text = res.stderr
-
-    # Check video stream and dimensions
-    dim_match = re.search(r'Stream #.*Video:.* ([0-9]{2,4})x([0-9]{2,4})', text)
-    if not dim_match:
-        raise RuntimeError("Export validation failed: Video stream not found in rendered file")
-
-    actual_w = int(dim_match.group(1))
-    actual_h = int(dim_match.group(2))
-    if actual_w != expected_w or actual_h != expected_h:
-        raise RuntimeError(
-            f"Export validation failed: Expected {expected_w}x{expected_h}, but rendered file has {actual_w}x{actual_h}"
-        )
-
-    # Check audio stream if requested
-    if has_audio and "Audio:" not in text:
+    data = probe_streams(file_path, count_frames=True)
+    video = next((s for s in data['streams'] if s['codec_type'] == 'video'), {})
+    audio = next((s for s in data['streams'] if s['codec_type'] == 'audio'), {})
+    if (video.get('width'), video.get('height')) != (expected_w, expected_h):
+        raise RuntimeError(f"Export validation failed: Expected {expected_w}x{expected_h} video.")
+    if has_audio and not audio:
         raise RuntimeError("Export validation failed: Expected audio stream not present in rendered file")
-
-    # A valid stream probe alone does not catch truncated/frozen exports. Decode the
-    # complete file and require a positive duration so partial MP4s cannot be marked
-    # complete.
-    duration_match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", text)
-    if not duration_match:
-        raise RuntimeError("Export validation failed: Video duration could not be read")
-    duration = (
-        int(duration_match.group(1)) * 3600
-        + int(duration_match.group(2)) * 60
-        + float(duration_match.group(3))
-    )
+    from fractions import Fraction
+    if Fraction(video.get('avg_frame_rate', '0/1')) != fps:
+        raise RuntimeError(f"Export validation failed: Expected {fps} fps.")
+    if abs(float(video.get('start_time', 0))) > 1e-5:
+        raise RuntimeError("Export validation failed: Video does not start at timeline zero.")
+    duration = stream_duration(video)
     if duration <= 0:
         raise RuntimeError("Export validation failed: Rendered video has no duration")
-    if expected_duration is not None and abs(duration - expected_duration) > 0.25:
-        raise RuntimeError(
-            f"Export validation failed: Expected duration {expected_duration:.2f}s, "
-            f"but rendered file has {duration:.2f}s"
-        )
-
+    if expected_frames is None and expected_duration is not None:
+        expected_frames = frame_at(expected_duration, fps)
+    if expected_frames is not None:
+        expected_duration = expected_frames / fps
+        actual_frames = int(video.get('nb_read_frames', 0))
+        if actual_frames != expected_frames:
+            raise RuntimeError(f"Export validation failed: Decoded frame count does not match the timeline "
+                               f"(expected {expected_frames}, FFprobe decoded {actual_frames}).")
+        if abs(duration - expected_duration) > 1e-5:
+            raise RuntimeError(f"Export validation failed: Expected duration {expected_duration:.6f}s, "
+                               f"but video stream has {duration:.6f}s")
+    # AAC durations can differ by one encoder packet, but cannot hide a short video.
+    if audio and (abs(float(audio.get('start_time', 0))) > 1 / fps or
+                  abs(stream_duration(audio) - duration) > max(1 / fps, 1024 / 48000)):
+        raise RuntimeError("Export validation failed: Audio timing does not match the video.")
     decode = subprocess.run(
-        [
-            FFMPEG_PATH,
-            "-v", "error", "-xerror",
-            "-i", str(file_path),
-            "-map", "0:v:0",
-            "-progress", "pipe:1", "-nostats",
-            "-f", "null",
-            "-",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
+        [FFMPEG_PATH, "-v", "error", "-xerror", "-i", str(file_path),
+         "-map", "0:v:0", "-map", "0:a:0?", "-fps_mode", "passthrough",
+         "-progress", "pipe:1", "-nostats", "-f", "null", "-"],
+        capture_output=True, text=True, check=False,
     )
     if decode.returncode != 0 or decode.stderr.strip():
-        detail = decode.stderr[-500:] if decode.stderr else "unknown decode error"
-        raise RuntimeError(f"Export validation failed: Video could not be decoded: {detail}")
-    decoded_counts = re.findall(r"frame=(\d+)", decode.stdout)
-    if expected_duration is not None and (not decoded_counts or int(decoded_counts[-1]) != round(expected_duration * 30)):
-        raise RuntimeError("Export validation failed: Decoded frame count does not match the timeline.")
+        raise RuntimeError(f"Export validation failed: Media could not be decoded: {decode.stderr[-500:]}")
+    decoded_counts = re.findall(r"^frame=\s*(\d+)$", decode.stdout, re.MULTILINE)
+    if expected_frames is not None and (not decoded_counts or int(decoded_counts[-1]) != expected_frames):
+        actual = decoded_counts[-1] if decoded_counts else 'unknown'
+        raise RuntimeError(f"Export validation failed: Decoded frame count does not match the timeline "
+                           f"(expected {expected_frames}, FFmpeg decoded {actual}).")
+
 
 def _resolve_image_path(img_path: str, fallback_paths: List[str]) -> str:
     p = Path(unquote(urlparse(img_path).path)) if '://' in img_path or img_path.startswith('/api/') else Path(img_path)
@@ -228,7 +209,7 @@ def _render_worker(
         else:  # "9:16"
             width, height = 1080, 1920
 
-        fps = 30
+        fps = OUTPUT_FPS
         clips = plan.clips
 
         if not clips:
@@ -256,7 +237,7 @@ def _render_worker(
         elif style == "minimal":
             color_filter = ",eq=contrast=1.05:saturation=0.9"
         else:  # cinematic
-            color_filter = ",eq=contrast=1.1:saturation=1.15"
+            color_filter = f",eq=contrast={1+.1*plan.color_strength:.4f}:saturation={1+.15*plan.color_strength:.4f}"
 
         # 3. Fit mode filter setup
         fit_mode = getattr(plan, "fit_mode", "fill")
@@ -273,7 +254,8 @@ def _render_worker(
                 f"crop={width}:{height}"
             )
         rendered_clip_files: List[str] = []
-        clip_durations: List[float] = []
+        clip_frames = clip_frame_counts(clips, fps)
+        clip_durations = [count / fps for count in clip_frames]
         total_clips = len(clips)
 
         # 4. Render individual clips (images or video clips)
@@ -281,14 +263,19 @@ def _render_worker(
             img_file = _resolve_image_path(clip.image_url, image_paths)
             out_clip = str(job_dir / f"clip_{idx:03d}.mp4")
             # Round cumulative boundaries, avoiding per-clip duration drift.
-            total_frames = max(1, round((clip.start_time + clip.duration) * fps) - round(clip.start_time * fps))
+            total_frames = clip_frames[idx]
             clip_dur = total_frames / fps
-            clip_durations.append(clip_dur)
             is_video_file = clip.media_type == "video" or Path(img_file).suffix.lower() in VIDEO_EXTENSIONS
             if is_video_file:
-                vf = (f"setpts=PTS-STARTPTS,{scale_filter},setsar=1,fps={fps},"
-                      f"tpad=stop_mode=clone:stop_duration={clip_dur},trim=duration={clip_dur},"
-                      f"setpts=PTS-STARTPTS{color_filter},format=yuv420p")
+                # Input seeking keeps a common source clock for both A/V streams.
+                # CFR sampling uses timestamps, including VFR gaps. Only hold
+                # EOF to cover the source's last frame/audio tail, not a bad edit.
+                info = probe_media(Path(img_file))
+                if clip.source_start + clip.duration > info['duration'] + 1e-5:
+                    raise ValueError(f"Clip {clip.id} extends beyond its source duration.")
+                vf = (f"{scale_filter},setsar=1,fps={fps}:start_time=0,"
+                      f"tpad=stop_mode=clone:stop_duration={clip_dur},trim=end_frame={total_frames},"
+                      f"settb=1/{fps},setpts=N,fps={fps}:eof_action=pass{color_filter},format=yuv420p")
                 input_args = ["-ss", str(clip.source_start), "-i", img_file]
             elif fit_mode == "fill" and clip.motion != "static":
                 vf = build_motion_filter(width, height, fps, total_frames, clip.motion) + color_filter + ",format=yuv420p,setsar=1"
@@ -296,10 +283,10 @@ def _render_worker(
             else:
                 vf = f"{scale_filter}{color_filter},setsar=1,format=yuv420p"
                 input_args = ["-loop", "1", "-framerate", str(fps), "-i", img_file]
-            cmd = [FFMPEG_PATH, "-y", "-filter_threads", "1", *input_args,
+            cmd = [FFMPEG_PATH, "-y", "-xerror", "-filter_threads", "1", *input_args,
                    "-vf", vf, "-frames:v", str(total_frames), "-an",
                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
-                   "-pix_fmt", "yuv420p", "-r", str(fps), out_clip]
+                   "-pix_fmt", "yuv420p", "-enc_time_base:v", f"1/{fps}", "-fps_mode", "passthrough", out_clip]
             res = _run_render(cmd, job_id)
             if res.returncode != 0:
                 raise RuntimeError(f"FFmpeg failed to render clip {idx + 1} ({Path(img_file).name}): {res.stderr[-1500:]}")
@@ -334,8 +321,10 @@ def _render_worker(
                 t_type = "none"
                 t_dur = 0.0
 
-            max_dur = max(0.1, min(clip_durations[i], clip_durations[i + 1]) - 0.1)
-            t_dur = round(max(0.0, min(t_dur, max_dur, 2.0)) * fps) / fps
+            # Leave at least one frame outside the overlap on BOTH sides.
+            # A 0.1s floor can exceed a short clip and truncate an xfade chain.
+            max_frames = max(0, min(clip_frames[i], clip_frames[i + 1]) - 1)
+            t_dur = min(max_frames, frame_at(max(0.0, min(t_dur, min(clip_durations[i:i + 2]) - 0.1, 2.0)), fps)) / fps
             boundary_transitions.append((t_type, t_dur))
 
         # Check global head/tail transitions
@@ -360,7 +349,7 @@ def _render_worker(
         for i in range(len(rendered_clip_files)):
             tag = f"clip_norm_{i}"
             filter_steps.append(
-                f"[{i}:v]setsar=1,format=yuv420p,setpts=PTS-STARTPTS,fps={fps},settb=AVTB[{tag}]"
+                f"[{i}:v]setsar=1,format=yuv420p,settb=1/{fps},setpts=N,fps={fps}:eof_action=pass[{tag}]"
             )
             normalized_tags.append(tag)
 
@@ -373,7 +362,7 @@ def _render_worker(
         elif not has_active_transitions:
             # Fast concat filter
             concat_ins = "".join(f"[{tag}]" for tag in normalized_tags)
-            filter_steps.append(f"{concat_ins}concat=n={len(clips)}:v=1:a=0[vconcat]")
+            filter_steps.append(f"{concat_ins}concat=n={len(clips)}:v=1:a=0,settb=1/{fps},setpts=N,fps={fps}:eof_action=pass[vconcat]")
             prev_tag = "vconcat"
             running_dur = sum(clip_durations)
         else:
@@ -384,7 +373,7 @@ def _render_worker(
                 out_tag = f"vx{i + 1}"
                 if t_type in ("none", "cut") or t_dur <= 0:
                     filter_steps.append(
-                        f"[{prev_tag}][{next_tag}]concat=n=2:v=1:a=0,fps={fps},settb=AVTB[{out_tag}]"
+                        f"[{prev_tag}][{next_tag}]concat=n=2:v=1:a=0,settb=1/{fps},setpts=N,fps={fps}:eof_action=pass[{out_tag}]"
                     )
                 else:
                     transition = {"crossfade": "fade", "dip_black": "fadeblack",
@@ -392,8 +381,8 @@ def _render_worker(
                                   "fade_out": "fadeblack"}.get(t_type, "fade")
                     lead_tag = f"lead_{i + 1}"
                     filter_steps.append(
-                        f"[{next_tag}]tpad=start_mode=clone:start_duration={t_dur:.6f},"
-                        f"setpts=PTS-STARTPTS,fps={fps},settb=AVTB[{lead_tag}]"
+                        f"[{next_tag}]tpad=start_mode=clone:start={frame_at(t_dur, fps)},"
+                        f"settb=1/{fps},setpts=N,fps={fps}:eof_action=pass[{lead_tag}]"
                     )
                     filter_steps.append(
                         f"[{prev_tag}][{lead_tag}]xfade=transition={transition}:"
@@ -563,15 +552,9 @@ def _render_worker(
             input_count += 1
             prev_tag = 'vwithcaptions'
 
-        # Microsecond time bases at xfade boundaries can round away the last
-        # frame. Quantize the final stream to the timeline's exact frame count;
-        # Round at most one frame per clip boundary (never the overlap duration).
-        output_frames = round(timeline_duration * fps)
-        filter_steps.append(
-            f"[{prev_tag}]fps=fps={fps}:eof_action=pass,tpad=stop_mode=clone:stop={len(clips)},"
-            f"trim=end_frame={output_frames},setpts=N/({fps}*TB)[vexact]"
-        )
-        prev_tag = 'vexact'
+        # Every stage is already on the frame grid. Do not pad/trim the final
+        # composition: missing or extra frames must fail validation.
+        output_frames = sum(clip_frames)
         status.progress = 75.0
 
         # Audio setup
@@ -582,7 +565,7 @@ def _render_worker(
         if audio_file and not os.path.isfile(audio_file):
             raise FileNotFoundError("The selected soundtrack is missing.")
         has_audio = bool(audio_file)
-        total_duration = round(running_dur, 2)
+        total_duration = output_frames / fps
 
         audio_tags = []
         for i, clip in enumerate(clips):
@@ -591,13 +574,13 @@ def _render_worker(
             tag = f"source_audio_{i}"
             if info.get('has_audio'):
                 inputs.extend(['-ss', str(clip.source_start), '-i', source])
-                filter_steps.append(f"[{input_count}:a]asetpts=PTS-STARTPTS,aresample=48000,"
+                filter_steps.append(f"[{input_count}:a]aresample=48000:async=1:first_pts=0,"
                     f"aformat=sample_fmts=fltp:channel_layouts=stereo,volume={clip.volume},apad,"
-                    f"atrim=duration={clip_durations[i]:.6f}[{tag}]")
+                    f"atrim=end_sample={clip_frames[i] * 48000 // fps},asetpts=N/SR/TB[{tag}]")
                 has_audio = True
             else:
                 inputs.extend(['-f','lavfi','-t',str(clip_durations[i]),'-i','anullsrc=channel_layout=stereo:sample_rate=48000'])
-                filter_steps.append(f"[{input_count}:a]aformat=sample_fmts=fltp[{tag}]")
+                filter_steps.append(f"[{input_count}:a]aformat=sample_fmts=fltp,atrim=end_sample={clip_frames[i] * 48000 // fps},asetpts=N/SR/TB[{tag}]")
             input_count += 1
             audio_tags.append(tag)
         filter_steps.append(''.join(f'[{tag}]' for tag in audio_tags) + f'concat=n={len(audio_tags)}:v=0:a=1[asource]')
@@ -640,12 +623,13 @@ def _render_worker(
             "-filter_complex", fc,
             "-map", f"[{prev_tag}]",
             "-map", a_map,
+            # Bound looping image overlays using the exact frame-grid duration.
             "-t", str(total_duration),
             "-c:v", "libx264",
             "-preset", "veryfast",
             "-crf", "18",
             "-pix_fmt", "yuv420p",
-            "-r", str(fps),
+            "-enc_time_base:v", f"1/{fps}", "-fps_mode", "passthrough",
             "-c:a", "aac",
             "-b:a", "192k",
             "-movflags", "+faststart",
@@ -666,6 +650,7 @@ def _render_worker(
             height,
             has_audio=has_audio,
             expected_duration=timeline_duration,
+            expected_frames=output_frames, fps=fps,
         )
 
         with _JOB_LOCK:

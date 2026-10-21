@@ -5,7 +5,7 @@ from app.schemas.editing_plan import SoundCue
 
 ORDINALS = {'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'finally'}
 NUMBERS = {'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'}
-INTRO = re.compile(r'\b(?:you need|we need|include|includes|such as|consist of|things:|foods are|favorites are|favourites are|are:)\b|\b(?:things|steps|items|foods|tools)\s*:', re.I)
+INTRO = re.compile(r'\b(?:you need|we need|include|includes|such as|consist of|things:|foods are|favorites are|favourites are|are:)\b|\b(?:things|steps|items|foods|tools)\s*:|\b(?:fields|areas)\s+across\b', re.I)
 
 def _sentences(words):
     """Keep a spoken sentence together even when Whisper splits its segments."""

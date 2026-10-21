@@ -13,8 +13,9 @@ class ClipConfig(BaseModel):
     id: str
     image_url: str
     start_time: float = Field(ge=0, allow_inf_nan=False)
-    duration: float = Field(gt=0, le=120, allow_inf_nan=False)
+    duration: float = Field(gt=0, allow_inf_nan=False)
     source_start: float = Field(default=0, ge=0, allow_inf_nan=False)
+    source_duration: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
     media_type: str = "image"  # "image", "video"
     motion: str = "zoom_in"  # "zoom_in", "zoom_out", "pan_left", "pan_right", "static"
     transition: str = "none"  # "none", "crossfade", "dip_black", "dip_white", "fade"
@@ -44,6 +45,8 @@ class SubtitleStyle(BaseModel):
     max_chars: int = Field(default=38, ge=10, le=100)
     max_duration: float = Field(default=4, ge=.5, le=15, allow_inf_nan=False)
     highlight_active: bool = False
+    background_opacity: float = Field(default=0, ge=0, le=1, allow_inf_nan=False)
+    safe_area: bool = False
 
 class SubtitleSegment(BaseModel):
     id: str
@@ -66,13 +69,13 @@ class VisualInsert(BaseModel):
     id: str
     asset_id: str
     asset_url: str
-    start_time: float = Field(ge=0, le=120, allow_inf_nan=False)
-    duration: float = Field(gt=0, le=120, allow_inf_nan=False)
+    start_time: float = Field(ge=0, allow_inf_nan=False)
+    duration: float = Field(gt=0, allow_inf_nan=False)
     mode: Literal['pip', 'split', 'floating', 'cutaway', 'background'] = "pip"
     position: Literal['top_right', 'top_left', 'bottom_right', 'right_half', 'center'] = "top_right"
     label: Optional[str] = None
     media_type: Literal['image', 'video'] = 'image'
-    source_start: float = Field(default=0, ge=0, le=120, allow_inf_nan=False)
+    source_start: float = Field(default=0, ge=0, allow_inf_nan=False)
     source_clip_id: Optional[str] = None
     origin: Literal['manual', 'auto'] = 'manual'
     query: Optional[str] = None
@@ -81,7 +84,7 @@ class VisualInsert(BaseModel):
 
 class SoundCue(BaseModel):
     id: str
-    start_time: float = Field(ge=0, le=120, allow_inf_nan=False)
+    start_time: float = Field(ge=0, allow_inf_nan=False)
     label: str
     sound: Literal['soft', 'wood', 'tick'] = 'soft'
     volume: float = Field(default=0.35, ge=0, le=1, allow_inf_nan=False)
@@ -92,8 +95,8 @@ class SoundCue(BaseModel):
 class CinematicText(BaseModel):
     id: str
     text: str = Field(max_length=120)
-    start_time: float = Field(ge=0, le=120, allow_inf_nan=False)
-    duration: float = Field(gt=0, le=120, allow_inf_nan=False)
+    start_time: float = Field(ge=0, allow_inf_nan=False)
+    duration: float = Field(gt=0, allow_inf_nan=False)
     source_clip_id: str
     behind_subject: bool = False
     color: str = Field(default='#F2E9D8', pattern=r'^#[0-9a-fA-F]{6}$')
@@ -125,10 +128,11 @@ class GlobalTransitionConfig(BaseModel):
     duration: float = 0.5
 
 class EditingPlan(BaseModel):
-    duration_seconds: float = Field(default=15.0, ge=0.0, le=120.0, allow_inf_nan=False)
+    duration_seconds: float = Field(default=15.0, ge=0.0, allow_inf_nan=False)
     aspect_ratio: Literal['9:16', '16:9', '1:1'] = '9:16'
     fit_mode: Literal['fill', 'fit'] = 'fill'
     style: str = Field(default="cinematic")  # "cinematic", "vintage", "noir", "vibrant", "minimal"
+    color_strength: float = Field(default=1, ge=0, le=1, allow_inf_nan=False)
     beat_sync: bool = True
     cut_pacing: str = Field(default="balanced")  # "slow", "balanced", "fast", "beat_driven"
     motion: str = Field(default="slow_zoom")  # "slow_zoom", "dynamic", "static"

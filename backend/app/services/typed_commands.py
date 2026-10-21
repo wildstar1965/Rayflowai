@@ -127,8 +127,8 @@ def handle_typed_command(request):
         if not duration: return result('Specify a duration in seconds.')
         seconds=_parse_num(duration[1])
         value=item.duration+seconds if action=='extend' else item.duration-seconds if action=='shorten' else seconds
-        if value is None or value<.1 or value>120:
-            return result('Duration must be between 0.1 and 120 seconds.')
+        if value is None or value<.1:
+            return result('Duration must be at least 0.1 seconds.')
         if collection=='visual_inserts':
             if item.start_time+value>plan.duration_seconds:
                 return result('The insert would extend past the project end.')
@@ -141,6 +141,4 @@ def handle_typed_command(request):
         plan.transitions=[t for t in plan.transitions if ((t.get('from_clip_id'),t.get('to_clip_id')) if isinstance(t,dict)
                           else (t.from_clip_id,t.to_clip_id)) in adjacent]
         retime_attached(before,plan)
-    if plan.duration_seconds>120:
-        plan=before.model_copy(deep=True);return result('The edit would exceed the 120-second project limit.')
     return result(f'Applied {action} to the {ordinal} {kind}.')

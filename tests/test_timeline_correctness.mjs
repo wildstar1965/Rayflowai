@@ -6,7 +6,30 @@ const require = createRequire(new URL('../frontend/package.json', import.meta.ur
 const ts = require('typescript');
 const source = await readFile(new URL('../frontend/src/utils/timeline.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
-const { reorderClips, reconcileTransitions, recalculateTimeline } = await import('data:text/javascript;base64,' + Buffer.from(compiled).toString('base64'));
+const { reorderClips, reconcileTransitions, recalculateTimeline, uploadedClip } = await import('data:text/javascript;base64,' + Buffer.from(compiled).toString('base64'));
+
+test('Video upload, initialization and reordering retain precise full source ranges', () => {
+  const videos = [121.23333333333333, 10.01001, 0.06666666666666667].map((duration, i) =>
+    uploadedClip({ filename: `${i}.mp4`, original_name: `${i}.mp4`, url: `/api/uploads/${i}.mp4`,
+      media_type: 'video', duration }, 0));
+  const image = uploadedClip({ filename: 'a.png', url: '/api/uploads/a.png', media_type: 'image' }, 0);
+  assert.equal(image.duration, 2.5);
+  const original = { clips: [...videos, image], transitions: [], duration_seconds: 0 };
+  const initialized = recalculateTimeline(original.clips, [], original);
+  const reordered = recalculateTimeline(reorderClips(initialized.clips, videos[0].id, image.id, 'after'), [], initialized);
+  for (const video of videos) {
+    const clip = reordered.clips.find(c => c.id === video.id);
+    assert.equal(clip.duration, video.source_duration);
+    assert.equal(clip.source_start, 0);
+  }
+  const trimmed = { ...reordered.clips[0], duration: .4137, source_start: .237 };
+  const edited = recalculateTimeline([trimmed, ...reordered.clips.slice(1)], [], reordered);
+  assert.equal(edited.clips[0].duration, .4137);
+  assert.equal(edited.clips[0].source_start, .237);
+  assert.equal(edited.clips[0].source_duration, trimmed.source_duration);
+  assert.deepEqual(recalculateTimeline(edited.clips, [], edited), edited);
+  assert.throws(() => uploadedClip({media_type: 'video', original_name: 'unknown.mp4'}, 0), /source duration/);
+});
 
 test('Reorder first clip to last position', () => {
   const clips = [

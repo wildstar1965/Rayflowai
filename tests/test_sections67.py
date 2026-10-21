@@ -63,7 +63,7 @@ def test_auto_display_text_skips_short_greetings():
     assert cinematic.suggest_cinematic_texts(plan)==[]
     plan.subtitles.append(segment('Practice makes real progress.',start=1.5,end=4))
     titles=cinematic.suggest_cinematic_texts(plan)
-    assert len(titles)==1 and titles[0].text=='Practice makes real progress' and titles[0].start_time==1.5
+    assert len(titles)==1 and titles[0].text.replace('\n',' ')=='Practice makes real progress' and titles[0].start_time==1.5
 
 
 def test_phrase_punctuation_gaps_and_honest_fallback(raster_cache):

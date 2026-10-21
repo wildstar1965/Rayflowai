@@ -256,8 +256,9 @@ def create_or_update_plan(
         actual_plan.clips = build_timeline(image_urls, actual_plan, analysis_result)
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    existing_transitions = {(t.from_clip_id, t.to_clip_id): t for t in actual_plan.transitions}
     actual_plan.transitions = [
-        TransitionConfig(id=f"trans-{a.id}-{b.id}", from_clip_id=a.id, to_clip_id=b.id,
+        existing_transitions.get((a.id, b.id)) or TransitionConfig(id=f"trans-{a.id}-{b.id}", from_clip_id=a.id, to_clip_id=b.id,
                          type=a.transition, duration=min(0.5, a.duration - 0.1, b.duration - 0.1),
                          enabled=a.transition not in ("none", "cut"))
         for a, b in zip(actual_plan.clips, actual_plan.clips[1:])
@@ -449,6 +450,7 @@ class AutoEditRequest(BaseModel):
     current_plan: Optional[EditingPlan] = None
     auto_broll: bool = True
     list_sounds: bool = True
+    tighten_speech: bool = False
 
 @router.post('/auto-edit/jobs')
 def auto_edit_job(req: AutoEditRequest):
@@ -474,6 +476,7 @@ def auto_edit_endpoint(req: AutoEditRequest):
             available_assets=req.available_assets, whisper_model=req.whisper_model,
             aspect_ratio=req.aspect_ratio, include_captions=req.include_captions,
             current_plan=req.current_plan, auto_broll=req.auto_broll, list_sounds=req.list_sounds,
+            tighten_speech=req.tighten_speech,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

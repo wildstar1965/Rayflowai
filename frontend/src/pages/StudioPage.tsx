@@ -1,3 +1,4 @@
+import { NumericInput } from '../components/ui/NumericInput';
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Button } from '../components/ui/Button';
 import {
@@ -26,7 +27,7 @@ import {
   checkOllamaStatus,
   generateAutoEditReel
 } from '../services/api';
-import { recalculateTimeline } from '../utils/timeline';
+import { recalculateTimeline, uploadedClip } from '../utils/timeline';
 import { interpretWithOllama } from '../services/api';
 import { InteractiveTimeline } from '../components/studio/InteractiveTimeline';
 import { CreativePanel } from '../components/studio/CreativePanel';
@@ -112,6 +113,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   // Auto-Edit Workflow Modal State
   const [isAutoEditModalOpen, setIsAutoEditModalOpen] = useState(false);
   const [autoEditStyle, setAutoEditStyle] = useState<'fitness_energy' | 'minimalist' | 'cinematic'>('cinematic');
+  const [tightenSpeech, setTightenSpeech] = useState(false);
   const [isAutoEditing, setIsAutoEditing] = useState(false);
   const [includeCaptions, setIncludeCaptions] = useState(true);
   const [autoStage, setAutoStage] = useState('');
@@ -236,10 +238,6 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
   // Push new plan to history
   const updatePlanWithHistory = (newPlan: EditingPlan, recordHistory = true) => {
-    if (newPlan.duration_seconds > 120) {
-      setErrorMessage('Reels can be up to 120 seconds. Shorten or remove clips first.');
-      return;
-    }
     timelineRefreshIdRef.current++;
     setViewRenderedVideo(false);
     if (recordHistory) {
@@ -403,10 +401,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       if (planRef.current.clips.length) {
         let start = planRef.current.duration_seconds;
         const appended: ClipConfig[] = uploaded.map(item => {
-          const duration = item.media_type === 'video' ? Math.min(10, item.duration || 3) : 2.5;
-          const clip: ClipConfig = { id: crypto.randomUUID(), image_url: item.url, start_time: start,
-            duration, media_type: item.media_type || 'image', motion: item.media_type === 'video' ? 'static' : 'zoom_in', transition: 'none' };
-          start += duration;
+          const clip = uploadedClip(item, start);
+          start += clip.duration;
           return clip;
         });
         updatePlanWithHistory(recalculateTimeline([...planRef.current.clips, ...appended], planRef.current.transitions, planRef.current));
@@ -671,7 +667,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       const video = images.find(item => item.media_type === 'video');
       const mediaTarget = video?.filename || audio?.filename || images[0].filename;
       const before = planRef.current;
-      const newPlan = await generateAutoEditReel(mediaTarget, autoEditStyle, assets, whisperModel, plan.aspect_ratio, includeCaptions, plan, setAutoStage);
+      const newPlan = await generateAutoEditReel(mediaTarget, autoEditStyle, assets, whisperModel, plan.aspect_ratio, includeCaptions, plan, setAutoStage, tightenSpeech);
       if (planRef.current !== before) throw new Error('The project changed during Auto Reel. Your edits were preserved; run again to apply a fresh draft.');
       setIsPlaying(false);
       currentTimeRef.current = 0;
@@ -854,6 +850,10 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   ) => {
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    if (plan.style === 'cinematic') {
+      const strength = plan.color_strength ?? 1;
+      ctx.filter = `contrast(${1 + .1 * strength}) saturate(${1 + .15 * strength})`;
+    }
 
     const fitMode = plan.fit_mode || 'fill';
     const naturalWidth = img instanceof HTMLVideoElement ? img.videoWidth : img.naturalWidth;
@@ -1218,6 +1218,12 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     const originals = updated.clips;
     if (!originals.length) { updatePlanWithHistory(updated); return; }
     const seconds = updated.cut_pacing === 'fast' ? 1.5 : updated.cut_pacing === 'slow' ? 4 : 2.5;
+    if (originals.some(clip => clip.media_type === 'video')) {
+      const clips = originals.map(clip => clip.media_type === 'video' || keepDuration
+        ? clip : { ...clip, duration: seconds });
+      updatePlanWithHistory(recalculateTimeline(clips, updated.transitions, updated));
+      return;
+    }
     const duration = keepDuration ? updated.duration_seconds : Math.min(120, originals.length * seconds);
     let cursor = 0;
     const clips = originals.map((clip, i) => {
@@ -1809,6 +1815,11 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                   </div>
                 </div>
 
+                {plan.style === 'cinematic' && <label className="block text-xs text-zinc-700">Cinematic color strength
+                  <NumericInput aria-label="Cinematic color strength" className="w-full rounded border p-1 mt-1" min={0} max={100}
+                    value={Math.round((plan.color_strength ?? 1)*100)} onCommit={value=>updatePlanWithHistory({...plan,color_strength:value/100})}/>
+                  <span className="text-[10px] text-zinc-500">0 preserves source color. Auto Reel starts at 30 for gentle contrast.</span>
+                </label>}
                 {/* Pacing Speed */}
                 <div>
                   <label className="text-xs font-medium text-zinc-700 block mb-2">
@@ -1849,7 +1860,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                   <input
                     type="range"
                     min="5"
-                    max="60"
+                    max={Math.max(60, Math.ceil(plan.duration_seconds))}
                     step="0.5"
                     value={plan.duration_seconds}
                     onChange={e => {
@@ -2167,15 +2178,15 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                             onClick={()=>updatePlanWithHistory({...plan,subtitles:plan.subtitles?.map(s=>s.id===seg.id?{...s,origin:'manual',words:s.words?.map((w,i)=>i===index?{...w,emphasis:!w.emphasis,color:undefined}:w)}:s)})}>{word.word}</button>)}
                         </div>}
                         <div className="flex gap-2 text-[10px]">
-                          <label>Start<input aria-label="Caption start" key={`start-${seg.id}-${seg.start_time}`} type="number" step="0.01" min="0" max={seg.end_time-.01} defaultValue={seg.start_time}
-                            className="w-full rounded border p-1" onBlur={e=>{
-                              const value=Math.max(0,Math.min(seg.end_time-.01,Number(e.target.value)));
+                          <label>Start<NumericInput aria-label="Caption start" step="0.01" min="0" max={seg.end_time-.01} value={seg.start_time}
+                            className="w-full rounded border p-1" onCommit={nextValue=>{
+                              const value=Math.max(0,Math.min(seg.end_time-.01,nextValue));
                               if(value===seg.start_time)return;
                               updatePlanWithHistory(editCaptionTiming(plan,seg.id,'start_time',value));
                             }} /></label>
-                          <label>End<input aria-label="Caption end" key={`end-${seg.id}-${seg.end_time}`} type="number" step="0.01" min={seg.start_time+.01} max={plan.duration_seconds} defaultValue={seg.end_time}
-                            className="w-full rounded border p-1" onBlur={e=>{
-                              const value=Math.min(plan.duration_seconds,Math.max(seg.start_time+.01,Number(e.target.value)));
+                          <label>End<NumericInput aria-label="Caption end" step="0.01" min={seg.start_time+.01} max={plan.duration_seconds} value={seg.end_time}
+                            className="w-full rounded border p-1" onCommit={nextValue=>{
+                              const value=Math.min(plan.duration_seconds,Math.max(seg.start_time+.01,nextValue));
                               if(value===seg.end_time)return;
                               updatePlanWithHistory(editCaptionTiming(plan,seg.id,'end_time',value));
                             }} /></label>
@@ -2561,6 +2572,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             </label>
             <p className="text-xs text-zinc-500">Output: {plan.aspect_ratio}. Uses your uploaded photos or primary video.</p>
             <label className="flex gap-2 text-xs"><input type="checkbox" checked={plan.auto_broll !== false} onChange={e => updatePlanWithHistory({...plan,auto_broll:e.target.checked})} />Find contextual B-roll on Pixabay</label>
+            <label className="flex gap-2 text-xs"><input type="checkbox" checked={tightenSpeech} onChange={e=>setTightenSpeech(e.target.checked)}/>Trim greetings and long quiet pauses in new drafts</label>
             <label className="flex gap-2 text-xs"><input type="checkbox" checked={plan.list_sounds !== false} onChange={e => updatePlanWithHistory({...plan,list_sounds:e.target.checked})} />Add clicks to spoken list items</label>
             <label className="flex gap-2 text-xs">Local speech model<select aria-label="Whisper model" value={whisperModel} onChange={e => setWhisperModel(e.target.value)}><option value="tiny">Tiny</option><option value="base">Base</option><option value="small">Small</option></select></label>
             {/* Choose Reel Style */}
@@ -2585,7 +2597,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                   {
                     id: 'cinematic',
                     name: 'Cinematic Story',
-                    desc: 'Smooth slow-zoom motion, bold centered typography, and cinematic crossfades',
+                    desc: 'Natural color, concise display phrases, and speech-led cuts',
                     tag: 'Storytelling & Lifestyle'
                   }
                 ].map(style => (

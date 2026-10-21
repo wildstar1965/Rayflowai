@@ -1,7 +1,8 @@
 from typing import List, Optional
 from pathlib import Path
+import uuid
 from app.schemas.editing_plan import ClipConfig, EditingPlan, AudioAnalysisResult
-from app.services.media import VIDEO_EXTENSIONS
+from app.services.media import VIDEO_EXTENSIONS, probe_media, uploaded_path
 
 MOTION_PRESETS = ["zoom_in", "zoom_out", "pan_left", "pan_right"]
 
@@ -11,13 +12,35 @@ def build_timeline(
     plan: EditingPlan,
     audio_analysis: Optional[AudioAnalysisResult] = None
 ) -> List[ClipConfig]:
-    """Build ordered clips, retaining every asset and respecting minimum duration."""
+    """Keep existing edits; initialize videos from their complete source range."""
     if not image_urls:
         return []
+    if plan.clips or any(Path(url).suffix.lower() in VIDEO_EXTENSIONS for url in image_urls):
+        urls = {Path(url).name: url for url in image_urls}
+        clips = [c.model_copy(deep=True) for c in plan.clips if Path(c.image_url).name in urls]
+        retained = {Path(c.image_url).name for c in clips}
+        for url in image_urls:
+            if Path(url).name in retained:
+                continue
+            is_video = Path(url).suffix.lower() in VIDEO_EXTENSIONS
+            duration = probe_media(uploaded_path(url))['duration'] if is_video else 2.5
+            if duration <= 0:
+                raise ValueError(f"Cannot read source duration: {url}")
+            clips.append(ClipConfig(
+                id=f"clip-{uuid.uuid4().hex[:12]}", image_url=url, start_time=0,
+                duration=duration, source_start=0, source_duration=duration if is_video else None,
+                media_type='video' if is_video else 'image', motion='static' if is_video else 'zoom_in',
+                transition='crossfade' if duration >= 1.5 else 'cut',
+            ))
+            retained.add(Path(url).name)
+        cursor = 0.0
+        for clip in clips:
+            clip.start_time = cursor
+            cursor += clip.duration
+        plan.duration_seconds = cursor
+        return clips
     minimum = 0.5
     target = max(plan.duration_seconds, len(image_urls) * minimum)
-    if target > 120:
-        raise ValueError("Too many assets for a 120-second reel; use at most 240.")
     plan.duration_seconds = target
     pacing_seconds = {"slow": 4.0, "balanced": 2.5, "fast": 1.5, "beat_driven": 1.0}
     count = max(len(image_urls), round(target / pacing_seconds.get(plan.cut_pacing, 2.5)))

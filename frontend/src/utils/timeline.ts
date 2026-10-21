@@ -1,4 +1,15 @@
-import { ClipConfig, TransitionConfig, EditingPlan } from '../types';
+import { ClipConfig, TransitionConfig, EditingPlan, UploadedImage } from '../types';
+
+export function uploadedClip(item: UploadedImage, start: number): ClipConfig {
+  const video = item.media_type === 'video';
+  const duration = video ? item.duration : 2.5;
+  if (duration === undefined || !Number.isFinite(duration) || duration <= 0) {
+    throw new Error(`Cannot read source duration: ${item.original_name}`);
+  }
+  return { id: crypto.randomUUID(), image_url: item.url, start_time: start, duration,
+    source_start: 0, source_duration: video ? duration : undefined,
+    media_type: video ? 'video' : 'image', motion: video ? 'static' : 'zoom_in', transition: 'none' };
+}
 
 /**
  * Reorders clips using stable clip IDs and explicit drop positioning ('before' | 'after').
@@ -95,8 +106,8 @@ export function recalculateTimeline(
 ): EditingPlan {
   let accTime = 0.0;
   const syncedClips: ClipConfig[] = clips.map(c => {
-    const start = Math.round(accTime * 100) / 100;
-    const dur = Math.max(0.5, Math.round(c.duration * 100) / 100);
+    const start = accTime;
+    const dur = c.duration;
     accTime += dur;
     return {
       ...c,
@@ -105,7 +116,7 @@ export function recalculateTimeline(
     };
   });
 
-  const totalDuration = Math.round(accTime * 100) / 100;
+  const totalDuration = accTime;
   const syncedTransitions = reconcileTransitions(syncedClips, existingTransitions);
 
   return {

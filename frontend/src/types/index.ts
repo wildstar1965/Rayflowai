@@ -49,6 +49,8 @@ export interface SubtitleStyle {
   max_chars?: number;
   max_duration?: number;
   highlight_active?: boolean;
+  background_opacity?: number;
+  safe_area?: boolean;
 }
 
 export interface SubtitleSegment {
@@ -124,6 +126,7 @@ export interface ClipConfig {
   start_time: number;
   duration: number;
   source_start?: number;
+  source_duration?: number;
   media_type?: 'image' | 'video';
   motion: 'zoom_in' | 'zoom_out' | 'pan_left' | 'pan_right' | 'static';
   transition: TransitionType;
@@ -132,6 +135,7 @@ export interface ClipConfig {
 }
 
 export interface EditingPlan {
+  color_strength?: number;
   playhead_time?: number;
   duration_seconds: number;
   aspect_ratio: '9:16' | '16:9' | '1:1';

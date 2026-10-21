@@ -26,8 +26,8 @@ class SelectAsset(BaseModel):
     asset_id: int = Field(gt=0)
     kind: Literal['image', 'video']
     replace_id: str | None = None
-    start_time: float = Field(default=0, ge=0, le=120)
-    duration: float = Field(default=2.5, gt=0, le=120)
+    start_time: float = Field(default=0, ge=0)
+    duration: float = Field(default=2.5, gt=0)
 
 @router.post('/broll/select', response_model=EditingPlan)
 def select_asset(req: SelectAsset):

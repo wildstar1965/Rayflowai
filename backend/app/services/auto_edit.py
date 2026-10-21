@@ -67,6 +67,7 @@ def generate_auto_edit_reel(
     auto_broll: bool = True,
     list_sounds: bool = True,
     progress=None,
+    tighten_speech: bool = False,
 ) -> EditingPlan:
     """Generate an editable plan from validated uploads, with explicit partial-result warnings."""
     from app.services.media import uploaded_path, probe_media, VIDEO_EXTENSIONS, IMAGE_EXTENSIONS, AUDIO_EXTENSIONS
@@ -98,17 +99,21 @@ def generate_auto_edit_reel(
     info = probe_media(media_path) if not is_image else {}
     if not is_image and info["duration"] <= 0:
         raise ValueError(f"Cannot read media duration: {media_path.name}")
-    duration = min(120.0, info["duration"]) if is_video else min(120.0, max(1.0, len(assets) * 2.5))
+    duration = info["duration"] if is_video else min(120.0, max(1.0, len(assets) * 2.5))
     if not is_image and not is_video:
         duration = min(duration, max(1.0, info["duration"]))
     subtitles = []
     audio_info = None
+    quiet = []
     fingerprint = source_fingerprint(media_path)
-    reuse_plan = current_plan and current_plan.source_filename == media_path.name
+    reuse_plan = current_plan and (current_plan.source_filename == media_path.name or (
+        is_video and not tighten_speech and any(Path(c.image_url).name == media_path.name for c in current_plan.clips)
+    ))
     reuse = reuse_plan and current_plan.source_fingerprint == fingerprint and bool(current_plan.transcript)
     if reuse_plan:
         report('Reusing the editable transcript and timeline')
         plan = current_plan.model_copy(deep=True)
+        plan.source_filename = media_path.name
         plan.warnings = []
         plan.auto_broll = auto_broll
         plan.list_sounds = list_sounds
@@ -116,6 +121,9 @@ def generate_auto_edit_reel(
         wav_path = UPLOAD_DIR / f"auto_edit_{uuid.uuid4().hex}.wav"
         try:
             extract_audio_from_media(str(media_path), str(wav_path), cancel=getattr(report, 'cancel', None))
+            if is_video and tighten_speech and not reuse_plan:
+                from app.services.speech_edit import quiet_windows
+                quiet = quiet_windows(wav_path)
             # Talking-head timing follows speech, not musical beats. Beat-grid
             # analysis is only consumed by the photo-montage timeline builder.
             if not is_video:
@@ -153,7 +161,8 @@ def generate_auto_edit_reel(
     sub_style = SubtitleStyle(preset=config["subtitle_preset"], caption_mode=config["caption_mode"])
     if style_key == 'cinematic':
         sub_style = SubtitleStyle(preset='cinematic', caption_mode='phrase', font_family='Arial', font_size=46,
-                                  stroke_width=2, highlight_color='#E7C48C')
+                                  stroke_width=2, highlight_color='#E7C48C', max_chars=28, max_duration=2.6,
+                                  background_opacity=.62, safe_area=True)
     clipped_subtitles = []
     for seg in subtitles:
         if seg.start_time >= duration:
@@ -169,20 +178,33 @@ def generate_auto_edit_reel(
         seg.words = apply_word_emphasis(seg.words, sub_style)
         clipped_subtitles.append(seg)
     plan = EditingPlan(
-        duration_seconds=max(1.0, duration), aspect_ratio=aspect_ratio, fit_mode=config["fit_mode"],
+        duration_seconds=duration if is_video else max(1.0, duration), aspect_ratio=aspect_ratio, fit_mode=config["fit_mode"],
         style=config["style"], cut_pacing=config["pacing"], beat_sync=bool(audio_info and audio_info.beat_times),
         title=TitleConfig(enabled=False, text=""), subtitles=clipped_subtitles if include_captions else [],
         transcript=clipped_subtitles,
         audio_filename=media_path.name if info.get("has_audio") and not is_video else None, warnings=warnings,
         source_filename=media_path.name, auto_broll=auto_broll, list_sounds=list_sounds,
         source_fingerprint=fingerprint,
+        color_strength=.3 if style_key == 'cinematic' else 1,
     )
     if is_video:
         plan.clips = [ClipConfig(id="clip-main-1", image_url=f"/api/uploads/{media_path.name}",
-                                start_time=0, duration=plan.duration_seconds, media_type="video",
+                                start_time=0, duration=plan.duration_seconds, source_duration=info['duration'], media_type="video",
                                 motion="static", label=media_path.name)]
+        if tighten_speech and clipped_subtitles:
+            from app.services.speech_edit import speech_clips
+            from app.services.caption_frames import attach_transcript
+            plan.clips = speech_clips(media_path.name, duration, clipped_subtitles, quiet)
+            plan.duration_seconds = sum(c.duration for c in plan.clips)
+            plan.transcript = attach_transcript(clipped_subtitles, plan, media_path.name)
+            plan.subtitles = plan.transcript if include_captions else []
+        # Preserve the whole portrait/landscape source when filling would discard over 30%.
+        source_ratio = info.get('width',1)/max(1,info.get('height',1))
+        output_ratio = {'9:16':9/16,'1:1':1,'16:9':16/9}[aspect_ratio]
+        if min(source_ratio/output_ratio,output_ratio/source_ratio)<.7:
+            plan.fit_mode = 'fit'
         if assets and clipped_subtitles:
-            plan.visual_inserts = suggest_contextual_inserts(clipped_subtitles, assets,
+            plan.visual_inserts = suggest_contextual_inserts(plan.transcript, assets,
                 default_mode="split" if style_key == "minimalist" else "pip")
         elif assets:
             warnings.append("Additional visual assets remain in the library; no speech keywords matched them.")
@@ -204,6 +226,11 @@ def _enhance_plan(plan, report):
     report('Detecting spoken lists')
     if plan.list_sounds:
         fresh = generate_list_cues(plan.subtitles or plan.transcript, plan.clips[0].id if len(plan.clips) == 1 else None)
+        for cue in fresh:
+            clip = next((c for c in plan.clips if c.start_time<=cue.start_time<c.start_time+c.duration), None)
+            cue.source_clip_id = clip.id if clip else None
+            if plan.style == 'cinematic':
+                cue.volume = .22
         existing = {cue.id: cue for cue in plan.sound_cues}
         plan.sound_cues += [cue for cue in fresh if cue.id not in existing
                            and not any(abs(old.start_time - cue.start_time) < .18 for old in existing.values())]
@@ -213,6 +240,11 @@ def _enhance_plan(plan, report):
     if not plan.cinematic_texts and plan.style == 'cinematic':
         report('Composing cinematic typography')
         plan.cinematic_texts = suggest_cinematic_texts(plan)
+        from app.services.cinematic import choose_title_palette
+        for title in plan.cinematic_texts:
+            clip = next((c for c in plan.clips if c.id==title.source_clip_id),None)
+            if clip:
+                choose_title_palette(title,clip,plan.aspect_ratio,plan.fit_mode)
         from app.services.segmentation import availability, prepare_masks, mask_duration
         if plan.cinematic_texts and availability()['available']:
             title = plan.cinematic_texts[0]
@@ -221,7 +253,16 @@ def _enhance_plan(plan, report):
                 report('Preparing the opening subject mask locally')
                 try:
                     prepare_masks(clip, plan.aspect_ratio, plan.fit_mode, mask_duration(plan, clip), progress=report)
-                    title.behind_subject = True
+                    from PIL import Image
+                    from app.services.segmentation import existing_masks
+                    from app.services.cinematic import place_title_with_mattes
+                    directory = existing_masks(clip, plan.aspect_ratio, plan.fit_mode, mask_duration(plan, clip))
+                    samples = []
+                    for fraction in (.1, .5, .9):
+                        frame = max(0, int((title.start_time-clip.start_time+title.duration*fraction)*30))
+                        with Image.open(directory / f'{frame:05d}.png') as matte:
+                            samples.append(matte.convert('L'))
+                    place_title_with_mattes(title, samples)
                 except ProcessingCancelled:
                     raise
                 except Exception:

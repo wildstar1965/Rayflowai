@@ -70,6 +70,10 @@ def regenerate_broll(plan, use_ai=True):
         duration = min(2.5, updated.duration_seconds - start)
         if duration < .5 or len(generated) >= 4 or query_count >= 6:
             continue
+        # Let the speaker establish the opening, and preserve an existing display moment.
+        if start < 2 or any(start < t.start_time+t.duration+.3 and start+duration > t.start_time-.3
+                            for t in updated.cinematic_texts):
+            continue
         if any(start < ins.start_time + ins.duration + 1 and start + duration > ins.start_time - 1 for ins in protected + generated):
             continue
         identity = 'broll-' + hashlib.sha256(f'{updated.source_filename}:{concept["segment"]}:{concept["phrase"]}'.encode()).hexdigest()[:16]
@@ -96,7 +100,8 @@ def regenerate_broll(plan, use_ai=True):
             clip = next((c for c in updated.clips if c.start_time <= start < c.start_time + c.duration), None)
             generated.append(VisualInsert(id=identity, asset_id=str(asset['id']), asset_url=asset['url'],
                 media_type=asset['media_type'], start_time=start, duration=min(duration, asset['duration']) if asset['media_type'] == 'video' else duration,
-                mode='split', label=concept['phrase'].title(), query=query, source_page=asset['source_page'],
+                mode='cutaway' if updated.aspect_ratio == '9:16' else 'pip', position='top_right',
+                label=concept['phrase'].title(), query=query, source_page=asset['source_page'],
                 contributor=asset['contributor'], origin='auto', source_clip_id=clip.id if clip else None))
         except pixabay.MediaProviderError as exc:
             warnings.append(str(exc))

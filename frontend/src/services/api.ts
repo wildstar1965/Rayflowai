@@ -158,11 +158,10 @@ export function localInterpretCommand(command: string, currentPlan?: EditingPlan
   const recalcTimeline = () => {
     let cur = 0;
     for (const c of plan.clips) {
-      c.start_time = Math.round(cur * 100) / 100;
-      c.duration = Math.max(0.5, Math.round(c.duration * 100) / 100);
+      c.start_time = cur;
       cur += c.duration;
     }
-    plan.duration_seconds = Math.round(cur * 100) / 100;
+    plan.duration_seconds = cur;
   };
 
   const clipCount = plan.clips.length;
@@ -576,7 +575,8 @@ export async function generateAutoEditReel(
   aspectRatio: EditingPlan['aspect_ratio'] = '9:16',
   includeCaptions: boolean = true,
   currentPlan?: EditingPlan,
-  onStage?: (stage: string) => void
+  onStage?: (stage: string) => void,
+  tightenSpeech: boolean = false
 ): Promise<EditingPlan> {
   const res = await fetch(`${API_BASE}/auto-edit/jobs`, {
     method: 'POST',
@@ -591,6 +591,7 @@ export async function generateAutoEditReel(
       current_plan: currentPlan,
       auto_broll: currentPlan?.auto_broll !== false,
       list_sounds: currentPlan?.list_sounds !== false,
+      tighten_speech: tightenSpeech,
     }),
   });
   if (!res.ok) {
