@@ -6,22 +6,34 @@ import {
   CommandResponse,
   RenderJobStatus,
   TransitionConfig,
+  AIEditingPlan,
+  TranscriptionJob,
+  CaptionFormat,
 } from '../types';
+import { getWorkspaceSession, uploadEditorAsset, editorRequest } from './editorClient';
 
-const configuredApiBase = import.meta.env.VITE_API_BASE_URL as string | undefined;
-const API_BASE = configuredApiBase || (typeof window !== 'undefined' ? `${window.location.origin}/api` : 'http://127.0.0.1:8000/api');
+const configuredApiBase = (import.meta.env?.VITE_API_BASE_URL || import.meta.env?.VITE_API_URL) as string | undefined;
+const API_BASE = (configuredApiBase || '/api').replace(/\/$/, '');
 const API_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
 
 export async function checkBackendHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/health`);
-    return res.ok;
+    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(6000) });
+    return res.ok && (await res.json()).status === 'healthy';
   } catch {
     return false;
   }
 }
 
 export async function uploadImages(files: File[]): Promise<UploadedImage[]> {
+  if (getWorkspaceSession()?.storage === 'supabase') {
+    const uploaded: UploadedImage[] = [];
+    for (const file of files) {
+      const asset = await uploadEditorAsset(file);
+      uploaded.push(await editorRequest(`/editor/assets/${asset.id}/studio`, { method: 'POST' }));
+    }
+    return uploaded;
+  }
   const formData = new FormData();
   for (const file of files) {
     formData.append('files', file);
@@ -42,6 +54,10 @@ export async function uploadImages(files: File[]): Promise<UploadedImage[]> {
 }
 
 export async function uploadAudio(file: File): Promise<UploadedAudio> {
+  if (getWorkspaceSession()?.storage === 'supabase') {
+    const asset = await uploadEditorAsset(file);
+    return editorRequest(`/editor/assets/${asset.id}/studio`, { method: 'POST' });
+  }
   const formData = new FormData();
   formData.append('file', file);
 
@@ -409,12 +425,35 @@ export async function interpretNaturalCommand(
     if (res.ok) {
       return await res.json();
     }
+
   } catch (err) {
     console.warn('Backend interpret endpoint unavailable, using local parser:', err);
   }
 
   // Fallback to local parser
   return localInterpretCommand(command, currentPlan);
+}
+
+export async function createOpenRouterPlan(command: string, currentPlan: EditingPlan): Promise<AIEditingPlan> {
+  const res = await fetch(`${API_BASE}/ai/plan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command, current_plan: currentPlan }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'The AI planning request failed.');
+  return body;
+}
+
+export async function applyOpenRouterPlan(aiPlan: AIEditingPlan, currentPlan: EditingPlan): Promise<AIEditingPlan> {
+  const res = await fetch(`${API_BASE}/ai/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ai_plan: aiPlan, current_plan: currentPlan }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'The approved edit could not be applied.');
+  return body;
 }
 
 export async function generateProjectPlan(
@@ -509,7 +548,7 @@ export async function startTranscription(
   return data.job_id;
 }
 
-export async function getTranscriptionStatus(jobId: string): Promise<any> {
+export async function getTranscriptionStatus(jobId: string): Promise<TranscriptionJob> {
   const res = await fetch(`${API_BASE}/transcribe/${jobId}`);
   if (!res.ok) {
     throw new Error('Failed to fetch transcription status');
@@ -517,14 +556,31 @@ export async function getTranscriptionStatus(jobId: string): Promise<any> {
   return await res.json();
 }
 
-export async function checkOllamaStatus(host?: string): Promise<{ available: boolean; host: string; models: string[]; default_model?: string; error?: string }> {
+export async function downloadCaptions(plan: EditingPlan, format: CaptionFormat): Promise<void> {
+  const res = await fetch(`${API_BASE}/captions/export/${format}?aspect_ratio=${encodeURIComponent(plan.aspect_ratio)}`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({duration_seconds: plan.duration_seconds, subtitles: plan.subtitles || []}),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    const detail = typeof error.detail === 'string' ? error.detail : error.detail?.[0]?.msg;
+    throw new Error(detail || 'Caption export failed. Check caption text and timestamps.');
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const anchor = document.createElement('a');
+  anchor.href = url; anchor.download = `rayflow-captions.${format}`;
+  document.body.appendChild(anchor); anchor.click(); anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export async function checkOllamaStatus(host?: string): Promise<{ available: boolean; ready?: boolean; host: string; models: string[]; default_model?: string; error?: string }> {
   try {
     const url = host ? `${API_BASE}/ollama/status?host=${encodeURIComponent(host)}` : `${API_BASE}/ollama/status`;
-    const res = await fetch(url);
-    if (!res.ok) return { available: false, host: host || 'http://127.0.0.1:11434', models: [] };
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error('Ollama status request failed.');
     return await res.json();
   } catch {
-    return { available: false, host: host || 'http://127.0.0.1:11434', models: [] };
+    return { available: false, host: host || '', models: [], error: 'The backend could not check Ollama. Check the backend connection and retry.' };
   }
 }
 
@@ -538,6 +594,7 @@ export async function interpretWithOllama(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ command, plan, model, host }),
+    signal: AbortSignal.timeout(615000),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Failed to interpret with Ollama' }));
@@ -608,7 +665,7 @@ export async function creativeRequest<T>(path: string, body?: unknown, signal?: 
     body: body === undefined ? undefined : JSON.stringify(body), signal});
   if(!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(typeof error.detail === 'string' ? error.detail : 'The request could not be completed.');
+    throw new Error(typeof error.detail === 'string' ? error.detail : error.detail?.[0]?.msg || 'The request could not be completed.');
   }
   return response.json();
 }

@@ -1,0 +1,89 @@
+:root {
+  color-scheme: dark;
+  /* Ink, pale sage, vermilion, and brass continue the landing scene's palette. */
+  --rayflow-canvas: 5 7 10;       /* #05070a */
+  --rayflow-panel: 13 20 23;     /* #0d1417 */
+  --rayflow-raised: 21 31 34;    /* #151f22 */
+  --rayflow-hover: 34 48 50;     /* #223032 */
+  --rayflow-border: 59 78 80;    /* #3b4e50 */
+  --rayflow-line: 38 53 56;      /* #263538 */
+  --rayflow-track: 105 132 118; /* #698476; visible on ink and raised panels */
+  --rayflow-text: 223 231 224;   /* #dfe7e0 */
+  --rayflow-muted: 174 189 179;  /* #aebdb3 */
+  --rayflow-quiet: 145 164 152;  /* #91a498 */
+  --rayflow-vermilion: 224 35 28;/* #e0231c */
+  --rayflow-vermilion-hover: 185 31 27; /* #b91f1b */
+  --rayflow-brass: 201 166 106;  /* #c9a66a */
+  --rayflow-brass-soft: 48 41 30;/* #30291e */
+  --rayflow-brass-border: 114 91 54; /* #725b36 */
+  --rayflow-jade: 155 182 172;   /* #9bb6ac */
+  --rayflow-jade-soft: 23 43 41; /* #172b29 */
+  --rayflow-jade-border: 65 102 93; /* #41665d */
+  --rayflow-danger: 244 164 152; /* #f4a498 */
+  --rayflow-danger-soft: 50 27 27; /* #321b1b */
+  --rayflow-danger-border: 120 64 55; /* #784037 */
+}
+
+.rayflow-studio {
+  color-scheme: dark;
+}
+
+.rayflow-studio :where(input, select, textarea) {
+  accent-color: rgb(var(--rayflow-vermilion));
+}
+
+/* Match native sliders to the ink and sage panels in every Studio tab. */
+.rayflow-studio input[type='range'] {
+  appearance: none;
+  background: transparent;
+}
+
+.rayflow-studio input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(var(--rayflow-track));
+}
+
+.rayflow-studio input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: 1px solid rgb(var(--rayflow-text) / .35);
+  border-radius: 50%;
+  background: rgb(var(--rayflow-vermilion));
+}
+
+.rayflow-studio input[type='range']::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(var(--rayflow-track));
+}
+
+.rayflow-studio input[type='range']::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgb(var(--rayflow-text) / .35);
+  border-radius: 50%;
+  background: rgb(var(--rayflow-vermilion));
+}
+
+.rayflow-studio :where(select, textarea, input:not([type='checkbox']):not([type='range']):not([type='color'])) {
+  background-color: rgb(var(--rayflow-panel));
+  color: rgb(var(--rayflow-text));
+}
+
+.rayflow-studio :where(input, textarea)::placeholder {
+  color: rgb(var(--rayflow-quiet));
+  opacity: 1;
+}
+
+.rayflow-studio :where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid rgb(var(--rayflow-brass));
+  outline-offset: 3px;
+}
+
+.rayflow-studio ::selection {
+  background-color: rgb(var(--rayflow-vermilion));
+  color: #fff;
+}

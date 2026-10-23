@@ -34,22 +34,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onEnterStudio }) => {
   }, [mobileMenuOpen]);
 
   const navLinks = [
-    { label: 'Overview', href: '#overview' },
-    { label: 'Workflow', href: '#workflow' },
-    { label: 'Features', href: '#features' },
-    { label: 'About', href: '#about' },
+    { label: 'Home', href: '#/' },
+    { label: 'Dashboard', href: '#/dashboard' },
+    { label: 'AI Editor', href: '#/editor' },
+    { label: 'Connections', href: '#/connections' },
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-sm border-b border-zinc-200">
+    <header className="sticky top-0 z-40 w-full bg-studio-panel/95 backdrop-blur-sm border-b border-studio-border">
       <div className="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between">
         {/* Brand */}
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-zinc-900 inline-block" />
-          <span className="font-semibold text-sm tracking-tight text-zinc-900">
-            RayFlow
+          <span className="w-2.5 h-2.5 rounded-full bg-accent inline-block" />
+          <span className="font-semibold text-sm tracking-tight text-studio-text">
+            Rayflow
           </span>
-          <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 border border-zinc-200">
+          <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-studio-hover text-studio-muted border border-studio-border">
             AI Studio
           </span>
         </div>
@@ -60,7 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onEnterStudio }) => {
             <a
               key={link.label}
               href={link.href}
-              className="text-xs font-medium text-zinc-500 hover:text-zinc-900 transition-colors"
+              className="text-xs font-medium text-studio-muted hover:text-studio-text transition-colors"
             >
               {link.label}
             </a>
@@ -78,8 +78,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onEnterStudio }) => {
         {/* Mobile menu trigger */}
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="md:hidden p-1.5 text-zinc-600 hover:text-zinc-900 transition-colors"
+          className="md:hidden p-1.5 text-studio-muted hover:text-studio-text transition-colors"
           aria-label={mobileMenuOpen ? 'Close Menu' : 'Open Menu'}
+          aria-expanded={mobileMenuOpen}
         >
           {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
@@ -87,14 +88,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onEnterStudio }) => {
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 top-14 bg-white z-50 flex flex-col p-6 space-y-6 md:hidden animate-in fade-in duration-150">
+        <div className="fixed inset-0 top-14 bg-studio-panel z-50 flex flex-col p-6 space-y-6 md:hidden animate-in fade-in duration-150">
           <div className="flex flex-col space-y-4">
             {navLinks.map(link => (
               <a
                 key={link.label}
                 href={link.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className="text-base font-medium text-zinc-800 hover:text-zinc-950 py-2 border-b border-zinc-100"
+                className="text-base font-medium text-studio-text hover:text-studio-text py-2 border-b border-studio-line"
               >
                 {link.label}
               </a>
@@ -111,7 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onEnterStudio }) => {
                 onEnterStudio();
               }}
             >
-              <span>Launch Studio</span>
+              <span>Open Studio</span>
               <ArrowRight className="w-4 h-4" />
             </Button>
           </div>

@@ -1,0 +1,16 @@
+{
+  "name": "@designcodeio/threeui",
+  "version": "0.0.0-kage.c8e06b90397a",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Local Kage entry point for the SHA-256 verified ThreeUI source bundle.",
+  "exports": {
+    ".": "./index.tsx",
+    "./style.css": "./src/shaders/threeui.css"
+  },
+  "sideEffects": ["**/*.css"],
+  "peerDependencies": {
+    "react": ">=18 <20"
+  }
+}

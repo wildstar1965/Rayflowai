@@ -16,9 +16,9 @@ from app.schemas.editing_plan import (
 from app.services.speech_transcription import (
     extract_audio_from_media,
     transcribe_audio_file,
-    apply_word_emphasis
 )
 from app.services.speech_transcription import source_fingerprint
+from app.services.speech_models import default_model
 from app.services.processing import ProcessingCancelled
 from app.services.visual_inserts import suggest_contextual_inserts
 from app.services.audio_analysis import analyze_audio
@@ -103,13 +103,16 @@ def generate_auto_edit_reel(
     if not is_image and not is_video:
         duration = min(duration, max(1.0, info["duration"]))
     subtitles = []
+    transcript_refreshed = False
     audio_info = None
     quiet = []
     fingerprint = source_fingerprint(media_path)
     reuse_plan = current_plan and (current_plan.source_filename == media_path.name or (
         is_video and not tighten_speech and any(Path(c.image_url).name == media_path.name for c in current_plan.clips)
     ))
-    reuse = reuse_plan and current_plan.source_fingerprint == fingerprint and bool(current_plan.transcript)
+    requested_model = whisper_model or default_model()
+    reuse = (reuse_plan and current_plan.source_fingerprint == fingerprint and bool(current_plan.transcript)
+             and current_plan.transcript_model == requested_model)
     if reuse_plan:
         report('Reusing the editable transcript and timeline')
         plan = current_plan.model_copy(deep=True)
@@ -135,7 +138,12 @@ def generate_auto_edit_reel(
             if include_captions or auto_broll or list_sounds:
                 try:
                     report('Transcribing speech locally')
-                    subtitles = transcribe_audio_file(str(wav_path), model_size=whisper_model or os.getenv('WHISPER_MODEL', 'base'), cancel=getattr(report, 'cancel', None))
+                    subtitles = transcribe_audio_file(str(wav_path), model_size=requested_model,
+                        cancel=getattr(report, 'cancel', None),
+                        report=lambda progress, stage, language: report(f'{stage} · {progress:.0f}%'))
+                    transcript_refreshed = bool(subtitles)
+                    if not subtitles and reuse_plan:
+                        warnings.append('No speech was detected; existing captions and transcript were retained.')
                 except ProcessingCancelled:
                     raise
                 except Exception as exc:
@@ -146,7 +154,7 @@ def generate_auto_edit_reel(
         warnings.append("This video has no audio stream; captions were not generated.")
 
     if reuse_plan:
-        if not reuse:
+        if not reuse and transcript_refreshed:
             from app.services.caption_frames import attach_transcript
             plan.transcript = attach_transcript(subtitles, plan, media_path.name)
             if include_captions:
@@ -154,15 +162,13 @@ def generate_auto_edit_reel(
                 plan.subtitles = manual + [s for s in plan.transcript if not any(
                     s.start_time < m.end_time and s.end_time > m.start_time for m in manual)]
             plan.cinematic_texts = [t for t in plan.cinematic_texts if t.origin == 'manual']
-        plan.source_fingerprint = fingerprint
+        if reuse or transcript_refreshed:
+            plan.source_fingerprint = fingerprint
+            plan.transcript_model = requested_model if plan.transcript else None
         plan.warnings.extend(warnings)
         return _enhance_plan(plan, report)
     config = REEL_STYLES[style_key]
-    sub_style = SubtitleStyle(preset=config["subtitle_preset"], caption_mode=config["caption_mode"])
-    if style_key == 'cinematic':
-        sub_style = SubtitleStyle(preset='cinematic', caption_mode='phrase', font_family='Arial', font_size=46,
-                                  stroke_width=2, highlight_color='#E7C48C', max_chars=28, max_duration=2.6,
-                                  background_opacity=.62, safe_area=True)
+    sub_style = SubtitleStyle(preset=config['subtitle_preset'], caption_mode='phrase')
     clipped_subtitles = []
     for seg in subtitles:
         if seg.start_time >= duration:
@@ -175,8 +181,9 @@ def generate_auto_edit_reel(
         seg.origin = 'auto'
         seg.source_clip_id = 'clip-main-1' if is_video else None
         seg.source_filename = media_path.name
-        seg.words = apply_word_emphasis(seg.words, sub_style)
         clipped_subtitles.append(seg)
+    from app.services.caption_engine import readable_segments
+    clipped_subtitles = readable_segments(clipped_subtitles)
     plan = EditingPlan(
         duration_seconds=duration if is_video else max(1.0, duration), aspect_ratio=aspect_ratio, fit_mode=config["fit_mode"],
         style=config["style"], cut_pacing=config["pacing"], beat_sync=bool(audio_info and audio_info.beat_times),
@@ -185,6 +192,7 @@ def generate_auto_edit_reel(
         audio_filename=media_path.name if info.get("has_audio") and not is_video else None, warnings=warnings,
         source_filename=media_path.name, auto_broll=auto_broll, list_sounds=list_sounds,
         source_fingerprint=fingerprint,
+        transcript_model=requested_model if clipped_subtitles else None,
         color_strength=.3 if style_key == 'cinematic' else 1,
     )
     if is_video:

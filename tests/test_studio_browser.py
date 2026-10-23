@@ -47,10 +47,10 @@ def local_servers():
             log = (artifacts / f'browser-server-{index}.log').open('w', encoding='utf8')
             logs.append(log)
             process = subprocess.Popen(command, cwd=cwd, stdout=log, stderr=log,
-                                       env={**os.environ, 'RAYFLOW_API_PROXY_TARGET': api_url},
+                                       env={**os.environ, 'RAYFLOW_API_PROXY_TARGET': api_url, 'AI_PROVIDER': 'local'},
                                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
             processes.append(process)
-            deadline = time.monotonic() + 15
+            deadline = time.monotonic() + 60
             while not ready(url) and time.monotonic() < deadline and process.poll() is None:
                 time.sleep(0.2)
             assert ready(url), f'Local test server did not start: {url}'
@@ -80,8 +80,7 @@ def studio(tmp_path, local_servers):
         page.set_default_timeout(15000)
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
-        page.goto(local_servers)
-        page.get_by_role('button', name='Open Studio', exact=True).first.click()
+        page.goto(local_servers + '/#/studio')
         paths = []
         for i, color in enumerate(['red', 'green', 'blue']):
             path = tmp_path / f'browser_{i}.png'
@@ -177,7 +176,6 @@ def test_layout_playhead_trimming_undo_reorder_and_playback(studio):
     page.screenshot(path=str(artifacts / 'studio-landscape.png'))
     saved_plan = plan(page)
     page.reload()
-    page.get_by_role('button', name='Open Studio', exact=True).first.click()
     wait_plan(page, 'p.clips.length === 3')
     assert plan(page) == saved_plan
     page.once('dialog', lambda dialog: dialog.accept())
@@ -199,7 +197,7 @@ def test_auto_reel_command_preview_export(studio):
     wait_plan(page, 'p.duration_seconds === 7.5')
     assert plan(page)['clips'] == generated['clips']
     expect(page.get_by_role('slider', name='Timeline playhead')).to_have_attribute('aria-valuenow', '0')
-    command = page.get_by_placeholder('Type or speak your direction...')
+    command = page.get_by_role('textbox', name='Tell Rayflow what to edit…')
     command.fill('Make the second image last three seconds.')
     command.press('Enter')
     wait_plan(page, 'p.clips[1].duration === 3')
@@ -207,7 +205,7 @@ def test_auto_reel_command_preview_export(studio):
     with page.expect_request(lambda request: request.url.endswith('/api/render') and request.method == 'POST') as request:
         page.get_by_role('button', name='Export MP4', exact=True).click()
     assert request.value.post_data_json['plan'] == edited
-    expect(page.get_by_text('Reel Export Complete', exact=True)).to_be_visible(timeout=120000)
+    expect(page.get_by_role('heading', name='Your Rayflow reel is ready')).to_be_visible(timeout=120000)
     with page.expect_download() as download:
         page.get_by_role('link', name='Download MP4').click()
     artifacts = ROOT / 'test_artifacts'
@@ -247,7 +245,7 @@ def test_video_only_auto_reel_and_seeking(studio, tmp_path):
     page.get_by_role('button', name='Generate Reel Draft').click()
     wait_plan(page, 'p.duration_seconds === 3')
     page.get_by_role('button', name='Captions', exact=True).click()
-    expect(page.get_by_role('button', name='Transcribe', exact=False)).to_be_enabled()
+    expect(page.get_by_role('button', name='Generate speech captions', exact=True)).to_be_enabled(timeout=120000)
     head = page.get_by_role('slider', name='Timeline playhead')
     page.wait_for_function("() => {const c=document.querySelector('main canvas'); return c && c.getContext('2d').getImageData(100,100,1,1).data[0] !== 39;}")
     initial = page.locator('main canvas').screenshot()
@@ -261,7 +259,7 @@ def test_video_only_auto_reel_and_seeking(studio, tmp_path):
     page.get_by_role('button', name='Pause', exact=True).click()
     assert float(head.get_attribute('aria-valuenow')) > 1.2
     page.get_by_role('button', name='Export MP4', exact=True).click()
-    expect(page.get_by_text('Reel Export Complete', exact=True)).to_be_visible(timeout=120000)
+    expect(page.get_by_role('heading', name='Your Rayflow reel is ready')).to_be_visible(timeout=120000)
     with page.expect_download() as download:
         page.get_by_role('link', name='Download MP4').click()
     download.value.save_as(str(ROOT / 'test_artifacts/browser-video-reel.mp4'))
@@ -279,7 +277,7 @@ def test_multitrack_insert_caption_sound_controls_and_undo(studio):
         sound_cues:[{{id:'cue1',label:'camera',start_time:1,sound:'soft',volume:.35,muted:false}},{{id:'cue2',label:'microphone',start_time:2.5,sound:'wood',volume:.3,muted:false}}]}};
       localStorage.setItem('{KEY}',JSON.stringify(state));
     }}""")
-    page.reload();page.get_by_role('button',name='Open Studio',exact=True).first.click()
+    page.reload()
     wait_plan(page,'p.visual_inserts?.length === 1 && p.sound_cues?.length === 2')
     insert=page.locator('footer [data-insert-id="manual-broll"]');box=insert.bounding_box();assert box
     page.mouse.move(box['x']+box['width']/2,box['y']+box['height']/2);page.mouse.down()
@@ -316,7 +314,7 @@ def test_cinematic_preset_and_manual_title_layout(studio):
     page.get_by_label('Cinematic vertical position',exact=True).press('Enter')
     wait_plan(page,'p.cinematic_texts[0].y===.2')
     page.get_by_role('button',name='Captions',exact=False).click()
-    page.get_by_role('button',name='+ Add Segment',exact=True).click()
+    page.get_by_role('button',name='+ Add caption',exact=True).click()
     page.get_by_role('button',name='Cinematic Warm emphasis',exact=False).click()
     wait_plan(page,"p.subtitles[0].style.preset==='cinematic' && p.subtitles[0].style.caption_mode==='phrase'")
     page.get_by_label('Caption font size',exact=True).fill('60')
@@ -333,13 +331,15 @@ def test_reference_subject_preview_uses_prepared_mattes(studio):
     if not path.exists():path=ROOT/'test_artifacts/reference-edit-plan.json'
     if not path.exists():pytest.skip('Run verify_reference_edit.py once with the local reference reel.')
     reference_plan=json.loads(path.read_text(encoding='utf8'))
+    storage = Path(os.getenv('RAYFLOW_STORAGE_DIR') or ROOT / 'backend/storage')
+    if not (storage / 'uploads' / Path(reference_plan['source_filename']).name).is_file():
+        pytest.skip('The opt-in reference source is not present in this test storage.')
     page,errors=studio
     page.evaluate(f"""p => {{ const state=JSON.parse(localStorage.getItem('{KEY}'));state.plan=p;
       state.images=[{{filename:p.source_filename,original_name:'Speech sample.mp4',url:p.clips[0].image_url,media_type:'video',size:1}}];
       localStorage.setItem('{KEY}',JSON.stringify(state)); }}""",reference_plan)
-    page.reload()
     with page.expect_response(lambda r:'/api/cinematic/matte' in r.url) as matte_response:
-        page.get_by_role('button',name='Open Studio',exact=True).first.click()
+        page.reload()
     assert matte_response.value.status==200,matte_response.value.text()
     head=page.get_by_role('slider',name='Timeline playhead');head.focus();head.press('Shift+ArrowRight');head.press('Shift+ArrowRight')
     expect(head).to_have_attribute('aria-valuenow','2')

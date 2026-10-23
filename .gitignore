@@ -1,6 +1,10 @@
 # Dependencies
 node_modules/
 backend/venv/
+backend/.venv/
+backend/storage/private/
+backend/storage/workspaces/
+backend/storage/*.sqlite*
 __pycache__/
 *.py[cod]
 *$py.class
@@ -22,6 +26,8 @@ dist-ssr/
 .env.*
 !.env.example
 backend/storage/cache/
+deploy/backend.env
+deploy/compose.env
 backend/models/
 .DS_Store
 Thumbs.db

@@ -1,6 +1,13 @@
 # RayFlow AI — Voice-Controlled Cinematic Reel Studio
 
-RayFlow AI is a production-quality creative workstation that transforms photographs, audio soundtracks, and natural-language voice directions into beat-synchronized vertical cinematic reels (1080×1920 MP4).
+RayFlow AI is a local-first creative workstation that transforms photographs, audio soundtracks, and natural-language voice directions into beat-synchronized vertical cinematic reels (1080×1920 MP4).
+
+Current setup and deployment instructions: [deployment guide](docs/deployment.md).
+For the integrated AI Editor at `#/editor`, see the [current implementation and verification report](docs/ai-editor-integration.md),
+[feature inventory](docs/ai-editor-inventory.md), and [Vercel / Render / Supabase setup](docs/hosted-editor-deployment.md).
+Hosted deployment and live provider verification are still pending; Studio remains available at `#/studio`.
+See [measured analytics](docs/analytics.md), [Ollama diagnostics](docs/ollama.md), and
+[phase 5–8 implementation and verification](docs/phases-5-8-report.md).
 
 Inspired by Apple's clean, restrained product design and Notion's organized workspace layout, RayFlow AI pairs an intuitive multi-track editing timeline with an intelligent audio-visual compositor powered by Python, Librosa, and FFmpeg.
 
@@ -59,7 +66,7 @@ Rayflow.ai/
 └── README.md
 ```
 
-### Long-Term Service Communication
+### Unimplemented long-term architecture proposal
 
 ```
 Next.js Frontend  ──>  NestJS Application API (Prisma / PostgreSQL)  ──>  FastAPI Engine (Librosa / FFmpeg)
@@ -73,8 +80,8 @@ Next.js Frontend  ──>  NestJS Application API (Prisma / PostgreSQL)  ──>
 
 ## Design System Guidelines
 
-- **Typography**: Clean, consistent sans-serif typography (`Inter` / `Geist`) across all headings, controls, inputs, and canvas overlays.
-- **Palette**: Restrained monochrome palette: white (`#FFFFFF`) and soft off-white (`#FAFAFA`) surfaces, charcoal typography (`#18181B`), neutral gray borders (`#E4E4E7`), and subtle hover states (`#F4F4F5`).
+- **Typography**: Onest for interface headings, controls, and preview placeholders, with Japanese lettering alongside English landing copy. Exported titles and captions keep their own font settings; see [design.md](design.md).
+- **Palette**: Japanese night colors shared by the landing page and Open Studio: ink (`#05070A`), layered panels (`#0D1417`, `#151F22`), pale sage text (`#DFE7E0`), vermilion actions (`#E0231C`), brass focus (`#C9A66A`), and jade status accents (`#9BB6AC`). Slider rails use sage (`#698476`) for visibility against the panels; selected captions use white text on vermilion. Tokens live in `frontend/src/styles/theme.css`.
 - **No Gradients & No Emojis**: Crisp, solid fills and minimal line icons from `lucide-react`.
 - **Rounded Geometry**: Consistent `rounded-lg` and `rounded-xl` borders for cards, dialogs, buttons, and panels.
 
@@ -101,7 +108,7 @@ Next.js Frontend  ──>  NestJS Application API (Prisma / PostgreSQL)  ──>
 ## Quickstart & Local Development
 
 ### Prerequisites
-- **Node.js**: v18+ (tested on Node v24)
+- **Node.js**: v24 (current Vite toolchain; use `npm ci` with the lockfile)
 - **Python**: 3.10+ (tested on Python 3.10)
 - **FFmpeg**: Automatically provided via `imageio-ffmpeg` static binary bundle.
 
@@ -166,10 +173,37 @@ cd frontend && npm run build
 - `POST /api/media/audio` — Upload audio soundtrack track.
 - `POST /api/audio/analyze` — Run Librosa beat tracking and tempo estimation.
 - `POST /api/commands/interpret` — Translate voice/text directives into structured editing plans.
+- `POST /api/ai/plan` — Generate a validated, review-only OpenRouter editing plan.
+- `POST /api/ai/apply` — Revalidate and apply an approved OpenRouter plan to the active `EditingPlan`.
 - `POST /api/projects/plan` — Construct beat-synchronized timeline clips.
 - `POST /api/render` — Trigger asynchronous FFmpeg MP4 rendering job.
 - `GET /api/render/{job_id}` — Query render progress and status.
 - `GET /api/render/{job_id}/download` — Download final 1080×1920 MP4 file.
+
+### OpenRouter AI Director
+
+The backend uses OpenRouter's OpenAI-compatible chat-completions endpoint. The API key
+is read only by FastAPI and is never sent to the browser. Copy `.env.example` to the
+backend environment configuration and set:
+
+```env
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=openrouter/free
+```
+
+`OPENROUTER_MODEL` can be replaced with any model enabled for the account. The model
+must return the structured RayFlow action schema; the backend validates that schema,
+clip IDs, timestamps, subtitle intervals, volume, and transition endpoints before
+returning a proposed plan. The studio displays the actions and only calls
+`/api/ai/apply` after the user approves them. The existing deterministic command
+interpreter remains the fallback when OpenRouter is not configured.
+
+Connected AI actions are aspect-ratio changes, subtitles with optional word timings
+and highlighting, title text/position, head/tail or adjacent-clip transitions, clip
+volume, explicit split, and explicit trim. Undo and redo are delegated to the
+existing client history stack. AI plans never execute JavaScript, shell commands, or
+FFmpeg arguments, and ordinary AI edits do not change clip duration; split/trim are
+the only duration-changing actions and both require validated parameters.
 
 ---
 

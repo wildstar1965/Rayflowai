@@ -1,16 +1,18 @@
 import os
 import shutil
+import time
+from collections import defaultdict, deque
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Query, Body, Request
 from starlette.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from PIL import Image, ImageOps
 from app.services.media import uploaded_path, probe_media, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from app.schemas.editing_plan import TransitionConfig
 
-from app.core.config import UPLOAD_DIR, EXPORT_DIR
+from app.core.config import UPLOAD_DIR, EXPORT_DIR, MAX_UPLOAD_MB
 from app.schemas.editing_plan import (
     EditingPlan,
     AudioAnalysisResult,
@@ -26,14 +28,29 @@ from app.services.audio_analysis import analyze_audio
 from app.services.timeline_builder import build_timeline
 from app.services.command_interpreter import interpret_command
 from app.services.video_renderer import start_render_job, get_job_status
+from app.schemas.ai_editing import AIApplyRequest, AIPlanRequest, AIPlanResponse
+from app.services.ai_editing import AIEditingError, apply_actions, request_plan
 
 router = APIRouter(prefix="/api")
+_ai_requests: dict[str, deque[float]] = defaultdict(deque)
+
+
+def _check_ai_rate_limit(request: Request) -> None:
+    """Small per-process guard; deployments should also rate-limit at the edge."""
+    now = time.monotonic()
+    key = request.client.host if request.client else "unknown"
+    recent = _ai_requests[key]
+    while recent and now - recent[0] > 60:
+        recent.popleft()
+    if len(recent) >= 10:
+        raise HTTPException(status_code=429, detail="AI request limit reached. Please wait a moment.")
+    recent.append(now)
 
 ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
 ALLOWED_AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
 
 def copy_upload(source, destination):
-    limit = max(1, int(os.getenv('MAX_UPLOAD_MB', '500'))) * 1024**2
+    limit = MAX_UPLOAD_MB * 1024**2
     size = 0
     try:
         with destination.open('wb') as output:
@@ -94,6 +111,13 @@ def upload_images(files: List[UploadFile] = File(...)):
         for path in destinations:
             path.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=f"Media upload failed: {exc}") from exc
+    from app.editor.context import workspace_id
+    if workspace_id.get():
+        from app.editor.store import store
+        for item in saved_images:
+            store.put_blob(workspace_id.get(), 'uploads/' + item['filename'], (UPLOAD_DIR / item['filename']).read_bytes())
+            store.put('assets', item['filename'], workspace_id.get(), {**item, 'name': item['original_name'],
+                       'path': 'uploads/' + item['filename'], 'type': item['media_type']})
     return {"images": saved_images, "count": len(saved_images)}
 
 @router.post("/media/audio")
@@ -121,6 +145,13 @@ def upload_audio(file: UploadFile = File(...)):
         destination.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail="The uploaded file has no decodable audio.")
 
+    from app.editor.context import workspace_id
+    if workspace_id.get():
+        from app.editor.store import store
+        store.put_blob(workspace_id.get(), 'uploads/' + clean_filename, destination.read_bytes())
+        store.put('assets', clean_filename, workspace_id.get(), {'name': file.filename, 'path': 'uploads/' + clean_filename,
+                  'type': 'audio', 'size': destination.stat().st_size, 'duration': metadata['duration'],
+                  'url': '/api/uploads/' + clean_filename})
     return {
         "filename": clean_filename,
         "original_name": file.filename,
@@ -226,7 +257,39 @@ def interpret_command_endpoint(request: CommandRequest):
     if not request.command or not request.command.strip():
         raise HTTPException(status_code=400, detail="Command cannot be empty.")
 
-    return interpret_command(request)
+    from app.services.provider_settings import setting
+    return interpret_command(request, allow_llm=setting('AI_PROVIDER', 'auto') in ('auto', 'ollama'))
+
+
+@router.post("/ai/plan", response_model=AIPlanResponse)
+def create_ai_editing_plan(request: AIPlanRequest, http_request: Request):
+    """Create and validate a proposed OpenRouter edit without mutating editor state."""
+    _check_ai_rate_limit(http_request)
+    try:
+        ai_plan = request_plan(request.command.strip(), request.current_plan)
+        proposed, changes = apply_actions(request.current_plan, ai_plan)
+    except (AIEditingError, ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    return AIPlanResponse(
+        **ai_plan.model_dump(),
+        proposed_plan=proposed,
+        applied_changes=changes,
+    )
+
+
+@router.post("/ai/apply", response_model=AIPlanResponse)
+def apply_ai_editing_plan(request: AIApplyRequest, http_request: Request):
+    """Validate and apply an approved plan to the submitted active project."""
+    _check_ai_rate_limit(http_request)
+    try:
+        proposed, changes = apply_actions(request.current_plan, request.ai_plan)
+    except (AIEditingError, ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return AIPlanResponse(
+        **request.ai_plan.model_dump(),
+        proposed_plan=proposed,
+        applied_changes=changes,
+    )
 
 @router.post("/projects/plan", response_model=EditingPlan)
 def create_or_update_plan(
@@ -282,11 +345,14 @@ async def render_video(request: RenderJobRequest):
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    job_id = start_render_job(
-        plan=request.plan,
-        image_filenames=request.image_filenames,
-        audio_filename=request.audio_filename
-    )
+    try:
+        job_id = start_render_job(
+            plan=request.plan,
+            image_filenames=request.image_filenames,
+            audio_filename=request.audio_filename
+        )
+    except ValueError as exc:
+        raise HTTPException(429, str(exc)) from None
 
     return {
         "job_id": job_id,
@@ -311,6 +377,14 @@ async def download_rendered_video(job_id: str):
     """
     output_filename = f"rayflow_{job_id}.mp4"
     file_path = EXPORT_DIR / output_filename
+
+    from app.editor.context import workspace_id
+    if workspace_id.get() and not file_path.exists():
+        from app.editor.store import store
+        try:
+            file_path = store.get_blob(workspace_id.get(), 'exports/' + output_filename)
+        except FileNotFoundError:
+            raise HTTPException(404, 'Rendered video not found.') from None
 
     status = get_job_status(job_id)
     if not status or status.status != "completed" or not file_path.exists():
@@ -347,18 +421,23 @@ async def start_transcription(request: TranscribeRequest):
     """
     Initiates asynchronous speech-to-text transcription using local faster-whisper.
     """
-    from app.services.speech_transcription import start_transcription_job
+    from app.services.speech_transcription import start_transcription_job, transcription_source, validate_transcription_options
+    from app.services.speech_models import default_model
+    model_size = request.model_size or default_model()
+    language = request.language.strip().lower() if request.language else None
+    try:
+        media_path = transcription_source(request.media_filename)
+        validate_transcription_options(model_size, language)
+    except FileNotFoundError:
+        raise HTTPException(404, 'Source media is no longer available in uploads.') from None
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
 
-    media_path = UPLOAD_DIR / Path(request.media_filename).name
-    if not media_path.exists():
-        raise HTTPException(status_code=404, detail=f"Media file '{request.media_filename}' not found in uploads.")
-
-    import os
     try:
         job_id = start_transcription_job(
             media_filename=media_path.name,
-            model_size=request.model_size or os.getenv('WHISPER_MODEL', 'base'),
-            language=request.language,
+            model_size=model_size,
+            language=language,
         )
     except ValueError as exc:
         raise HTTPException(429, str(exc)) from None
@@ -396,18 +475,34 @@ def get_ollama_status_endpoint(host: Optional[str] = Query(default=None)):
     return check_ollama_status(host=host)
 
 class OllamaInterpretRequest(BaseModel):
-    command: str
+    command: str = Field(min_length=1, max_length=16000)
     plan: EditingPlan
-    model: Optional[str] = None
-    host: Optional[str] = None
+    model: Optional[str] = Field(default=None, max_length=200)
+    host: Optional[str] = Field(default=None, max_length=2048)
+
+
+class OllamaTestRequest(BaseModel):
+    model: Optional[str] = Field(default=None, max_length=200)
+
+
+@router.post('/ollama/test')
+def test_ollama_endpoint(req: OllamaTestRequest, request: Request):
+    from app.services.ollama_client import generate_ollama, OllamaError
+    _check_ai_rate_limit(request)
+    try:
+        response = generate_ollama('Reply with only the word Ready. /no_think', model=req.model, json_output=False)
+        return {'response': response}
+    except OllamaError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 @router.post("/ollama/interpret", response_model=CommandResponse)
-def interpret_with_ollama_endpoint(req: OllamaInterpretRequest):
+def interpret_with_ollama_endpoint(req: OllamaInterpretRequest, request: Request):
     """
     Interprets natural language editing command using local Ollama model with deterministic fallback.
     """
-    from app.services.ollama_client import interpret_with_ollama
+    from app.services.ollama_client import interpret_with_ollama, OllamaError
     from app.services.command_interpreter import interpret_command
+    _check_ai_rate_limit(request)
 
     # Common clip operations must use the full editor grammar first. The LLM's
     # restricted update schema cannot perform trims or reordering.
@@ -416,7 +511,10 @@ def interpret_with_ollama_endpoint(req: OllamaInterpretRequest):
     if deterministic.applied_changes or deterministic.handled:
         return deterministic
     # Attempt Ollama structured interpretation
-    res = interpret_with_ollama(command=req.command, current_plan=req.plan, model=req.model, host=req.host)
+    try:
+        res = interpret_with_ollama(command=req.command, current_plan=req.plan, model=req.model, host=req.host, strict=True)
+    except OllamaError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
     if res:
         return res
 

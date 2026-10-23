@@ -1,0 +1,41 @@
+.rayflow-editor{--app-bg:rgb(var(--rayflow-canvas));--app-panel:rgb(var(--rayflow-panel));--app-card:rgb(var(--rayflow-raised));--app-border:rgb(var(--rayflow-border));--app-border-strong:rgb(var(--rayflow-track));--app-text:rgb(var(--rayflow-text));--app-muted:rgb(var(--rayflow-muted));--app-accent:rgb(var(--rayflow-vermilion));--app-accent-strong:rgb(var(--rayflow-vermilion-hover));--app-warm:rgb(var(--rayflow-brass));--app-success:rgb(var(--rayflow-jade));--app-danger:rgb(var(--rayflow-danger));--app-bg-rgb:var(--rayflow-canvas);--app-panel-rgb:var(--rayflow-panel);--app-card-rgb:var(--rayflow-raised);--app-muted-rgb:var(--rayflow-muted);--app-accent-rgb:var(--rayflow-vermilion);--app-warm-rgb:var(--rayflow-brass);--app-glow:transparent;font-family:Onest,system-ui,sans-serif;background:var(--app-bg);color:var(--app-text);isolation:isolate}
+.rayflow-editor{height:100%;min-height:0;min-width:0;position:relative;overflow:hidden}
+.rayflow-editor .app-frame{height:100%;min-height:0;min-width:0;background:var(--app-bg);background-image:none}
+.rayflow-editor .app-frame__body,.rayflow-editor .app-frame__content,.rayflow-editor .app-main-surface{min-height:0}
+.rayflow-editor :where(h1,h2,h3,h4,button,input,select,textarea){font-family:inherit}
+.rayflow-editor :where(button,a,input,select,textarea):focus-visible{outline:2px solid rgb(var(--rayflow-brass));outline-offset:2px}
+.rayflow-editor :is(.bg-gray-950,.bg-slate-950,.bg-gray-900){background-color:var(--app-bg)}
+.rayflow-editor :is(.bg-gray-800,.bg-slate-900){background-color:var(--app-panel)}
+.rayflow-editor :is(.text-cyan-300,.text-cyan-400,.text-blue-400,.text-indigo-400,.text-purple-400){color:var(--app-warm)}
+.rayflow-editor :is(.bg-blue-600,.bg-indigo-600,.bg-purple-600,.bg-cyan-600){background-color:var(--app-accent)}
+.rayflow-editor[data-theme=light]{--app-bg:rgb(var(--rayflow-text));--app-panel:#f2f5f0;--app-card:#e5ece5;--app-text:rgb(var(--rayflow-canvas));--app-muted:rgb(var(--rayflow-border));--app-border:rgb(var(--rayflow-track));--app-bg-rgb:223 231 224;--app-panel-rgb:242 245 240;--app-card-rgb:229 236 229;--app-accent:rgb(var(--rayflow-vermilion));--app-accent-rgb:var(--rayflow-vermilion);color-scheme:light}
+.rayflow-editor[data-theme=light] .text-white{color:var(--app-text)}
+.rayflow-editor .editor-mobile-workspace,.rayflow-editor .editor-mobile-panels{display:none}
+@media(max-width:760px){
+  .rayflow-editor .app-frame__body{flex-direction:column;overflow:hidden}
+  .rayflow-editor .app-sidebar{display:none}
+  .rayflow-editor .editor-mobile-workspace{display:flex;align-items:center;gap:12px;padding:8px 12px;border-bottom:1px solid var(--app-border);font-size:12px}
+  .rayflow-editor .editor-mobile-workspace select{flex:1;min-width:0;padding:8px;background:var(--app-panel);border:1px solid var(--app-border);border-radius:6px}
+  .rayflow-editor .app-toolbar__row{display:flex;flex-wrap:wrap;padding:6px;gap:6px}
+  .rayflow-editor .app-toolbar__leading{display:none}
+  .rayflow-editor .app-toolbar__center{flex:1;justify-content:flex-start}
+  .rayflow-editor .app-toolbar__trailing{gap:4px}
+  .rayflow-editor .toolbar-activity__label{display:none}
+}
+@media(max-width:80rem){
+  .rayflow-editor .edit-workspace[data-mobile-panel]{flex-direction:column;gap:6px;min-width:0}
+  .rayflow-editor .editor-mobile-panels{display:flex;gap:6px;flex-shrink:0}
+  .rayflow-editor .editor-mobile-panels button{flex:1;padding:8px;border:1px solid var(--app-border);border-radius:6px;font-size:12px}
+  .rayflow-editor .editor-mobile-panels [aria-selected=true]{background:var(--app-card);border-color:var(--app-warm)}
+  .rayflow-editor .edit-workspace[data-mobile-panel]>.edit-side-panel{display:none;flex-basis:auto!important;flex:1;min-height:0;height:auto;width:100%}
+  .rayflow-editor .edit-workspace[data-mobile-panel=browser]>.edit-browser-panel,
+  .rayflow-editor .edit-workspace[data-mobile-panel=inspector]>.edit-inspector-panel{display:flex}
+  .rayflow-editor .edit-workspace[data-mobile-panel=browser]>.edit-center-panel,
+  .rayflow-editor .edit-workspace[data-mobile-panel=inspector]>.edit-center-panel{display:none}
+  .rayflow-editor .edit-workspace[data-mobile-panel]>.edit-center-panel{flex-basis:auto!important;flex:1;min-height:0;min-width:0;height:auto}
+  .rayflow-editor .edit-workspace[data-mobile-panel]>.relative.flex-shrink-0{display:none}
+  .rayflow-editor .edit-panel-toggle{display:none}
+  .rayflow-editor .edit-workspace[data-mobile-panel]>.edit-divider-v{display:none}
+  .rayflow-editor .edit-toolbar{flex-wrap:nowrap;overflow-x:auto;flex-shrink:0}
+  .rayflow-editor .edit-toolbar>*{flex-shrink:0}
+}

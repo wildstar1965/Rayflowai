@@ -1,14 +1,21 @@
 import os
 import json
-import urllib.request
-import urllib.error
-from urllib.parse import urlparse
+import requests
 from typing import List, Dict, Optional, Any
 from pydantic import BaseModel, Field
 
 from app.schemas.editing_plan import EditingPlan, CommandRequest, CommandResponse
+from app.services.provider_settings import setting, validate_host
 
-DEFAULT_OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434"
+
+
+class OllamaError(ValueError):
+    """Safe, user-facing transport or model failure."""
+
+    def __init__(self, message, status_code=503):
+        super().__init__(message)
+        self.status_code = status_code
 
 class OllamaStatusResponse(BaseModel):
     available: bool
@@ -16,6 +23,7 @@ class OllamaStatusResponse(BaseModel):
     models: List[str] = Field(default_factory=list)
     default_model: Optional[str] = None
     error: Optional[str] = None
+    ready: bool = False
 
 class OllamaStructuredPlanUpdate(BaseModel):
     aspect_ratio: Optional[str] = None
@@ -27,14 +35,12 @@ class OllamaStructuredPlanUpdate(BaseModel):
     applied_changes: List[str] = Field(default_factory=list)
 
 def get_ollama_host() -> str:
-    return os.environ.get("OLLAMA_HOST", DEFAULT_OLLAMA_HOST).rstrip("/")
+    return validate_host(setting('OLLAMA_HOST', DEFAULT_OLLAMA_HOST))
 
 def _local_host(host):
-    target = (host or get_ollama_host()).rstrip('/')
-    parsed = urlparse(target)
-    if parsed.scheme != 'http' or parsed.hostname not in ('127.0.0.1','localhost','::1') or parsed.username or parsed.password or parsed.query or parsed.path:
-        raise ValueError('Only local Ollama HTTP endpoints are supported.')
-    return target
+    # Kept as a compatibility wrapper for existing callers. Remote hosts must be
+    # explicitly configured by the backend operator; redirects are never followed.
+    return validate_host(host) if host else get_ollama_host()
 
 def check_ollama_status(host: Optional[str] = None, timeout: float = 2.0) -> OllamaStatusResponse:
     """
@@ -45,79 +51,101 @@ def check_ollama_status(host: Optional[str] = None, timeout: float = 2.0) -> Oll
         target_host = _local_host(host)
     except ValueError as exc:
         return OllamaStatusResponse(available=False,host='local',error=str(exc))
-    url = f"{target_host}/api/tags"
+    # Retry discovery once only for a refused/reset connection. Never retry a
+    # timed-out inference (which may still be consuming resources on the server).
+    for attempt in range(2):
+        try:
+            response = requests.get(f'{target_host}/api/tags', timeout=(timeout, timeout), allow_redirects=False)
+            if response.status_code != 200:
+                raise OllamaError(f'Ollama discovery returned HTTP {response.status_code}. Check the configured base URL and server access.')
+            data = response.json()
+            if not isinstance(data, dict) or not isinstance(data.get('models'), list):
+                raise OllamaError('Ollama returned an invalid model list. Check that this URL serves the Ollama API.')
+            models = list(dict.fromkeys(m['name'] for m in data['models'] if isinstance(m, dict) and isinstance(m.get('name'), str) and m['name']))
+            configured = setting('OLLAMA_MODEL')
+            selected = configured or (models[0] if models else None)
+            error = None
+            if not models:
+                error = 'Ollama is running but has no models. Run ollama pull qwen3:8b on the Ollama host, then reconnect.'
+            elif selected not in models:
+                error = 'The configured model is not installed. Select an installed model in Connections and save.'
+            return OllamaStatusResponse(available=True, host=target_host, models=models, default_model=selected, ready=error is None, error=error)
+        except requests.Timeout:
+            error = 'Ollama discovery timed out. Check the server and network, then reconnect.'
+        except requests.ConnectionError:
+            if attempt == 0:
+                continue
+            error = 'Cannot reach Ollama from the backend. Start ollama serve on the configured host and reconnect. A cloud backend needs a reachable private Ollama server.'
+        except (requests.RequestException, ValueError) as exc:
+            error = str(exc) if isinstance(exc, OllamaError) else 'Ollama returned an invalid response or the connection could not be verified.'
+        break
+    return OllamaStatusResponse(available=False, host=target_host, error=error)
+
+
+def generate_ollama(prompt, model=None, host=None, timeout=None, json_output=True):
+    """Validated non-streaming generation, matching Rayflow's existing protocol."""
+    status = check_ollama_status(host)
+    if not status.available:
+        raise OllamaError(status.error)
+    selected = model or status.default_model
+    if not status.models:
+        raise OllamaError(status.error, 422)
+    if selected not in status.models:
+        raise OllamaError('The selected Ollama model is not installed. Reconnect and select an installed model.', 422)
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "RayFlow-AI/1.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            if resp.status == 200:
-                data = json.loads(resp.read().decode("utf-8"))
-                models = [m.get("name", "") for m in data.get("models", []) if m.get("name")]
-                default_m = models[0] if models else None
-                return OllamaStatusResponse(
-                    available=True,
-                    host=target_host,
-                    models=models,
-                    default_model=default_m
-                )
-    except Exception as e:
-        return OllamaStatusResponse(
-            available=False,
-            host=target_host,
-            models=[],
-            error=str(e)
-        )
-    return OllamaStatusResponse(available=False, host=target_host, models=[], error="Unknown status")
+        deadline = float(timeout if timeout is not None else os.getenv('OLLAMA_GENERATION_TIMEOUT', '180'))
+        if not 1 <= deadline <= 600:
+            raise ValueError()
+    except ValueError:
+        raise OllamaError('OLLAMA_GENERATION_TIMEOUT must be between 1 and 600 seconds.') from None
+    payload = {'model': selected, 'prompt': prompt, 'stream': False,
+               'options': {'temperature': 0.2, 'top_p': 0.9, 'num_predict': 1024}}
+    if selected.startswith('qwen3:'):
+        payload['think'] = False
+    if json_output:
+        payload['format'] = 'json'
+    try:
+        response = requests.post(f'{status.host}/api/generate', json=payload,
+                                 timeout=(3, deadline), allow_redirects=False)
+        if response.status_code == 404:
+            raise OllamaError('Ollama could not load the selected model. Reconnect and verify it is installed.', 422)
+        if response.status_code != 200:
+            raise OllamaError(f'Ollama generation returned HTTP {response.status_code}. Check model resources and server access.')
+        data = response.json()
+        if (not isinstance(data, dict) or data.get('done') is not True or
+                not isinstance(data.get('response'), str) or not data['response'].strip()):
+            raise OllamaError('Ollama did not return a completed response. Try a smaller instruction or another installed model.')
+        return data['response'].strip()
+    except requests.Timeout:
+        raise OllamaError('Ollama generation timed out. Model loading or inference may need more memory or a longer OLLAMA_GENERATION_TIMEOUT. Retry manually.', 504) from None
+    except requests.RequestException:
+        raise OllamaError('Ollama disconnected during generation. Check the server and reconnect.') from None
+    except ValueError as exc:
+        if isinstance(exc, OllamaError):
+            raise
+        raise OllamaError('Ollama returned malformed JSON.') from None
 
 def query_ollama_generate(
     prompt: str,
-    model: str = "llama3.2",
+    model: Optional[str] = None,
     host: Optional[str] = None,
-    timeout: float = 12.0
+    timeout: Optional[float] = None
 ) -> Optional[str]:
     """
     Sends a generation prompt to Ollama with format="json" and stream=false.
     Strictly handles connection errors, timeouts, and missing models gracefully.
     """
     try:
-        target_host = _local_host(host)
-    except ValueError:
-        return None
-
-    url = f"{target_host}/api/generate"
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "format": "json",
-        "stream": False,
-        "options": {
-            "temperature": 0.2,
-            "top_p": 0.9
-        }
-    }
-
-    try:
-        body = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=body,
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "RayFlow-AI/1.0"
-            }
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            if resp.status == 200:
-                data = json.loads(resp.read().decode("utf-8"))
-                return data.get("response", None)
-    except Exception as e:
-        print(f"Ollama generation deferred or unavailable: {e}")
+        return generate_ollama(prompt, model, host, timeout)
+    except OllamaError:
         return None
 
 def interpret_with_ollama(
     command: str,
     current_plan: EditingPlan,
     model: Optional[str] = None,
-    host: Optional[str] = None
+    host: Optional[str] = None,
+    strict: bool = False
 ) -> Optional[CommandResponse]:
     """
     Attempts to understand a complex natural language editing instruction using a local Ollama model.
@@ -148,23 +176,19 @@ Return ONLY a JSON object with this schema:
 }}
 """
 
-    status = check_ollama_status(host=host, timeout=1.5)
-    if not status.available or not status.models:
-        return None
-
-    selected_model = model or status.default_model or "llama3.2"
-    if selected_model not in status.models and status.models:
-        selected_model = status.models[0]
-
-    raw_response = query_ollama_generate(prompt, model=selected_model, host=host)
-    if not raw_response:
+    try:
+        raw_response = generate_ollama(prompt, model=model, host=host)
+    except OllamaError:
+        if strict:
+            raise
         return None
 
     try:
         parsed_dict = json.loads(raw_response)
         validated = OllamaStructuredPlanUpdate(**parsed_dict)
-    except Exception as e:
-        print(f"Ollama output validation error: {e}")
+    except (ValueError, TypeError):
+        if strict:
+            raise OllamaError('The model returned an invalid editing instruction. No changes were applied.') from None
         return None
 
     # Apply strictly validated updates to a copy of the plan
@@ -186,7 +210,7 @@ Return ONLY a JSON object with this schema:
         if not any("style" in c.lower() for c in changes):
             changes.append(f"Applied {validated.style} visual grade")
 
-    if validated.title_text:
+    if validated.title_text and (validated.title_text[:40] != new_plan.title.text or not new_plan.title.enabled):
         new_plan.title.text = validated.title_text[:40]
         new_plan.title.enabled = True
         if not any("title" in c.lower() for c in changes):

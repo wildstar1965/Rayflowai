@@ -24,7 +24,7 @@ if __name__ == '__main__':
     parser.add_argument('--font', action='store_true')
     parser.add_argument('--segmentation', action='store_true')
     parser.add_argument('--video-matting', action='store_true')
-    parser.add_argument('--whisper', metavar='MODEL', help='Explicitly cache a Faster-Whisper model, for example tiny or base')
+    parser.add_argument('--whisper', metavar='MODEL', help='Explicitly cache a Faster-Whisper model, for example medium, small or large-v3')
     args = parser.parse_args()
     if args.whisper:
         from faster_whisper import WhisperModel

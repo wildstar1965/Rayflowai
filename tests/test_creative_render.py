@@ -41,4 +41,5 @@ def test_cinematic_caption_raster_and_exact_frames(ratio):
     output=render(plan,[str(base)])
     frames=np.frombuffer(run('-i',output,'-vf','scale=360:360','-pix_fmt','gray','-f','rawvideo','-'),np.uint8).reshape(-1,360,360)
     assert len(frames)==30
-    assert frames[15,280:340,:].max()>170 and frames[2,280:340,:].max()<70
+    # Caption Engine anchors lower captions at 72% of frame height.
+    assert frames[15,220:280,:].max()>170 and frames[2,220:280,:].max()<70

@@ -3,6 +3,7 @@ import subprocess
 import uuid
 import time
 import threading
+from app.editor.context import scoped_target, workspace_id
 import re
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -11,14 +12,20 @@ from app.services.frame_timing import OUTPUT_FPS, frame_at, clip_frame_counts
 from typing import Dict, List, Optional
 from PIL import Image, ImageDraw, ImageFont
 
-from app.core.config import FFMPEG_PATH, EXPORT_DIR, UPLOAD_DIR
+from app.core.config import FFMPEG_PATH, EXPORT_DIR, UPLOAD_DIR, RENDER_CONCURRENCY, RENDER_QUEUE_LIMIT, RENDER_TIMEOUT_SECONDS
+from app.services import job_history
 from app.schemas.editing_plan import EditingPlan, RenderJobStatus, ClipConfig, TransitionConfig, SubtitleSegment, SubtitleStyle, VisualInsert
 
 # Active jobs registry
 _JOBS: Dict[str, RenderJobStatus] = {}
 _JOB_LOCK = threading.Lock()
+_RENDER_SLOTS = threading.BoundedSemaphore(RENDER_CONCURRENCY)
+_ACTIVE_RENDER_IDS = set()
+_RENDER_DEADLINES = {}
 
 def cancel_render_job(job_id):
+    if workspace_id.get() and not job_history.get(job_id):
+        return False
     with _JOB_LOCK:
         job = _JOBS.get(job_id)
         if not job or job.status not in ('queued', 'processing'):
@@ -28,11 +35,16 @@ def cancel_render_job(job_id):
 
 def _run_render(command, job_id):
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    deadline = _RENDER_DEADLINES.get(job_id, time.monotonic() + RENDER_TIMEOUT_SECONDS)
     while True:
         if _JOBS[job_id].status == 'cancelled':
             process.kill()
             process.communicate()
             raise RuntimeError('Render cancelled.')
+        if time.monotonic() > deadline:
+            process.kill()
+            process.communicate()
+            raise RuntimeError('Render exceeded RENDER_TIMEOUT_SECONDS. Shorten the video or increase the backend time limit.')
         try:
             stdout, stderr = process.communicate(timeout=.25)
             return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
@@ -40,7 +52,19 @@ def _run_render(command, job_id):
             continue
 
 def get_job_status(job_id: str) -> Optional[RenderJobStatus]:
-    return _JOBS.get(job_id)
+    if workspace_id.get() and not job_history.get(job_id):
+        return None
+    if job_id in _JOBS:
+        return _JOBS[job_id]
+    saved = job_history.get(job_id)
+    if not saved or saved['kind'] != 'render':
+        return None
+    complete = saved['status'] == 'completed'
+    return RenderJobStatus(job_id=job_id, status='failed' if saved['status'] == 'interrupted' else saved['status'],
+        progress=100 if complete else 0, created_at=saved['created'],
+        output_url=f'/api/exports/rayflow_{job_id}.mp4' if complete else None,
+        download_url=f'/api/render/{job_id}/download' if complete else None,
+        error='Processing was interrupted by a backend restart. Render again.' if saved['status'] == 'interrupted' else None)
 
 def create_title_overlay(
     text: str,
@@ -198,6 +222,7 @@ def _render_worker(
             if status.status == 'cancelled':
                 return
             status.status = "processing"
+            job_history.started(job_id)
         status.progress = 5.0
 
         # 1. Output dimensions from aspect_ratio
@@ -668,6 +693,7 @@ def _render_worker(
         status.error = str(e)
         status.progress = 0.0
     finally:
+        job_history.finished(job_id, status.status, status.output_url)
         # 8. Safe cleanup of intermediate clip files
         try:
             for f in job_dir.glob("clip_*.mp4"):
@@ -685,6 +711,17 @@ def _render_worker(
         except Exception:
             pass
 
+def _queued_render_worker(job_id, plan, image_filenames, audio_filename, job_dir):
+    try:
+        with _RENDER_SLOTS:
+            _RENDER_DEADLINES[job_id] = time.monotonic() + RENDER_TIMEOUT_SECONDS
+            _render_worker(job_id, plan, image_filenames, audio_filename, job_dir)
+    finally:
+        with _JOB_LOCK:
+            _ACTIVE_RENDER_IDS.discard(job_id)
+            _RENDER_DEADLINES.pop(job_id, None)
+
+
 def start_render_job(
     plan: EditingPlan,
     image_filenames: List[str],
@@ -693,24 +730,40 @@ def start_render_job(
     """
     Initiates an asynchronous video render job.
     """
-    job_id = str(uuid.uuid4())[:8]
+    job_id = uuid.uuid4().hex
     job_dir = EXPORT_DIR / f"job_{job_id}"
-    job_dir.mkdir(parents=True, exist_ok=True)
-
     status = RenderJobStatus(
         job_id=job_id,
         status="queued",
         progress=0.0,
         created_at=time.time()
     )
-    _JOBS[job_id] = status
+    with _JOB_LOCK:
+        if len(_ACTIVE_RENDER_IDS) >= RENDER_QUEUE_LIMIT:
+            raise ValueError('The render queue is full. Wait for an active render to finish.')
+        for key, previous in list(_JOBS.items()):
+            if key not in _ACTIVE_RENDER_IDS and time.time() - previous.created_at > 3600:
+                _JOBS.pop(key, None)
+        job_dir.mkdir(parents=True, exist_ok=True)
+        job_history.created(job_id, 'render')
+        _JOBS[job_id] = status
+        _ACTIVE_RENDER_IDS.add(job_id)
 
     # Start worker in background thread
     t = threading.Thread(
-        target=_render_worker,
+        target=scoped_target(_queued_render_worker),
         args=(job_id, plan, image_filenames, audio_filename, job_dir),
         daemon=True
     )
-    t.start()
+    try:
+        t.start()
+    except RuntimeError:
+        with _JOB_LOCK:
+            _ACTIVE_RENDER_IDS.discard(job_id)
+            status.status = 'failed'
+            status.error = 'The render worker could not start. Retry when resources are available.'
+        job_history.finished(job_id, 'failed')
+        job_dir.rmdir()
+        raise ValueError(status.error) from None
 
     return job_id

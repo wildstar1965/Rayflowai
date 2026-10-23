@@ -1,0 +1,27 @@
+{$PUBLIC_HOST} {
+    # Every route, including uploads and exports, requires authentication.
+    basic_auth {
+        {$RAYFLOW_USERNAME} {$RAYFLOW_PASSWORD_HASH}
+    }
+    encode zstd gzip
+    request_body {
+        max_size 1024MB
+    }
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy same-origin
+        -Server
+    }
+    handle /api/* {
+        reverse_proxy backend:8000 {
+            transport http {
+                response_header_timeout 620s
+            }
+        }
+    }
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}

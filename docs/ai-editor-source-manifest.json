@@ -1,0 +1,4452 @@
+[
+  {
+    "source": "src/agb.tsx",
+    "destination": "frontend/src/features/ai-editor/agb.tsx",
+    "sha256": "e8a96ba4ba750f83ba9626458767bc28aa9005046af78a22014f76d4f1eea112",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/App.tsx",
+    "destination": "frontend/src/features/ai-editor/App.tsx",
+    "sha256": "a10301c2b25c35f1396cad72e91611a8fc3395d908e4cd0d0cecf24ea02ee75b",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/cameras/arri-alexa35.png",
+    "destination": "frontend/src/features/ai-editor/assets/cameras/arri-alexa35.png",
+    "sha256": "233edac967e1ead1a00040ac2a47248d5605bac71c02a9ffd521fb7cb64fe5fd",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/cameras/blackmagic-6k.png",
+    "destination": "frontend/src/features/ai-editor/assets/cameras/blackmagic-6k.png",
+    "sha256": "539e8d3746d0783dd28dd800d5fa41e8251b501ea108ca44bf61dd6608c23803",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/cameras/default-camera.png",
+    "destination": "frontend/src/features/ai-editor/assets/cameras/default-camera.png",
+    "sha256": "2a961a9ddf90f7804de2a301603ab757261ad615be2c146043d774bbf948245b",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/cameras/film-16mm.png",
+    "destination": "frontend/src/features/ai-editor/assets/cameras/film-16mm.png",
+    "sha256": "e08359c0c3f237ec4b90b7424ca776c509b23ef12d22ccaabcd66b98887f8263",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/cameras/film-35mm.png",
+    "destination": "frontend/src/features/ai-editor/assets/cameras/film-35mm.png",
+    "sha256": "7638b7b1d4c713bcbc60802d847de12a841e874f27ef57c0509f06f217c9aa42",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/cameras/imax-70mm.png",
+    "destination": "frontend/src/features/ai-editor/assets/cameras/imax-70mm.png",
+    "sha256": "e4a43690fc2b4a6b80757fbdf0d1b289588e0c6c0eb77b3bdc55a6105d132b9a",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/cameras/iphone-15.png",
+    "destination": "frontend/src/features/ai-editor/assets/cameras/iphone-15.png",
+    "sha256": "c448877656190a88398505aec40036b55856cf5f4eba1b51abef29bf5847d218",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/cameras/red-vraptor.png",
+    "destination": "frontend/src/features/ai-editor/assets/cameras/red-vraptor.png",
+    "sha256": "9c1ee4c4ce13a01d263e52fd8b0392d15aa0c2e857b793eb3fafde714f94079e",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/cameras/sony-venice2.png",
+    "destination": "frontend/src/features/ai-editor/assets/cameras/sony-venice2.png",
+    "sha256": "99911e74aa1f9775eb6b5c177764bb85a1b37663c31591fe5be3bee41358adc2",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/lenses/135mm.png",
+    "destination": "frontend/src/features/ai-editor/assets/lenses/135mm.png",
+    "sha256": "1c457da69bb4dd468e990fcbb0161d7c711b655c6589fead37e159a31f34286b",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/lenses/14mm.png",
+    "destination": "frontend/src/features/ai-editor/assets/lenses/14mm.png",
+    "sha256": "fe2282df06aa01b3d9f2d425ba32b26cdf4efb6aa4af1a1a39fc11240c450f2e",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/lenses/24mm.png",
+    "destination": "frontend/src/features/ai-editor/assets/lenses/24mm.png",
+    "sha256": "2bdf52a034b3571a67db8d8ddaa168f0d8ba36a14560341a71892c2b3bb9ced7",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/lenses/35mm.png",
+    "destination": "frontend/src/features/ai-editor/assets/lenses/35mm.png",
+    "sha256": "f6a7924c8d4c95e6f79ca7ad0ca6de711dc23e78d763fe7170d1c4f9e173633f",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/lenses/50mm.png",
+    "destination": "frontend/src/features/ai-editor/assets/lenses/50mm.png",
+    "sha256": "14a819aab25d3525f8392f6c545664dddbb6d0a89b1e332942874109d0767c8c",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/lenses/85mm.png",
+    "destination": "frontend/src/features/ai-editor/assets/lenses/85mm.png",
+    "sha256": "550de597d76e612912c0dabea56664b4f79389e51c7a8252f69dbdcc36c1372d",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/lenses/anamorphic-40.png",
+    "destination": "frontend/src/features/ai-editor/assets/lenses/anamorphic-40.png",
+    "sha256": "3ad762f292098b886d41777b7c22ffd3fe6f5c83424dd2d42b6e22e347675f2a",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/lenses/default-lens.png",
+    "destination": "frontend/src/features/ai-editor/assets/lenses/default-lens.png",
+    "sha256": "63b97c7117a5ccc44928668c8c1f1c5912d031ddc6d27db1a9ba708252bf474a",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/lenses/probe-24.png",
+    "destination": "frontend/src/features/ai-editor/assets/lenses/probe-24.png",
+    "sha256": "e56d1d871c485c27bedb0ae31958ac8afdc46c7957ac3ffc9dd62dbf6e82fc74",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/lenses/tilt-shift-45.png",
+    "destination": "frontend/src/features/ai-editor/assets/lenses/tilt-shift-45.png",
+    "sha256": "02b38b613d3757f9068f21b9e2a7aeaf325a5670687fcc63caba9fc331b6d445",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/lenses/vintage-58.png",
+    "destination": "frontend/src/features/ai-editor/assets/lenses/vintage-58.png",
+    "sha256": "0443b8080fac09a6918b98e232062046245e19af140b12e29b5335f4bce87470",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/logos/logo_bytedance_1772276133419.png",
+    "destination": "frontend/src/features/ai-editor/assets/logos/logo_bytedance_1772276133419.png",
+    "sha256": "d391d650b7640aa8592723307a05d244a379afece952902a951dcdc25d1002ee",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/logos/logo_gemini_1772276093848.png",
+    "destination": "frontend/src/features/ai-editor/assets/logos/logo_gemini_1772276093848.png",
+    "sha256": "3e756a081f70389b07d5bf00308b838b720d20538b0d8691f1dbbcac507375b2",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/logos/logo_grok_1772276108537.png",
+    "destination": "frontend/src/features/ai-editor/assets/logos/logo_grok_1772276108537.png",
+    "sha256": "a7eda84da1f666072954af2a72646dd447e627d928741903af248bad98a48914",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/logos/logo_nanabanana_1772276159682.png",
+    "destination": "frontend/src/features/ai-editor/assets/logos/logo_nanabanana_1772276159682.png",
+    "sha256": "5ba2b9185c08d3b4be212c15abc2f15462bd82735ad24dc930deed2bacabd0a4",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/logos/logo_openai_1772276078244.png",
+    "destination": "frontend/src/features/ai-editor/assets/logos/logo_openai_1772276078244.png",
+    "sha256": "36f523c6e4de71d619003e075b3a4492b6ad60ea9d29464fdfea4c9ea8294b16",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/logos/logo_qwen_1772276147335.png",
+    "destination": "frontend/src/features/ai-editor/assets/logos/logo_qwen_1772276147335.png",
+    "sha256": "88ecb2ad7963a124f3ca9c939c0ec0e4b6e598d726afa990cd3d60006a6a6a7d",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/logos/logo_seedream_1772276120681.png",
+    "destination": "frontend/src/features/ai-editor/assets/logos/logo_seedream_1772276120681.png",
+    "sha256": "0145f9857b210ab07ca02b554117d06f8c0d31e57d924b87bbf38e1aa6d86bf2",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/relight/relight_golden_1772276362775.png",
+    "destination": "frontend/src/features/ai-editor/assets/relight/relight_golden_1772276362775.png",
+    "sha256": "9fdaa3152ff3a88ed1e990371fe1f72dc9cff8e567c7ad9ccdf3e7fd7a9367bc",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/relight/relight_neon_1772276392291.png",
+    "destination": "frontend/src/features/ai-editor/assets/relight/relight_neon_1772276392291.png",
+    "sha256": "1def5c7c62d71a441883a8ba46dd530a9bd1c5f53026421cbe0687a5aa9c648a",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/relight/relight_neutral_1772276348761.png",
+    "destination": "frontend/src/features/ai-editor/assets/relight/relight_neutral_1772276348761.png",
+    "sha256": "51d0cb989891a60f962b99eda95a4aba1a4caf9ecb13a147f9bbf60255a1765a",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/relight/relight_noir_1772276377733.png",
+    "destination": "frontend/src/features/ai-editor/assets/relight/relight_noir_1772276377733.png",
+    "sha256": "72553159048c4d5d81ec8a610d1202fe4b3e5ba46d77510950baa40092fba047",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/relight/relight_studio_1772276404664.png",
+    "destination": "frontend/src/features/ai-editor/assets/relight/relight_studio_1772276404664.png",
+    "sha256": "c53b7feeae4ee6fe2b67ddd552bf1deb14f5d1c7ef36acf0f83f422fa80e1e43",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/classic-suspense.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/classic-suspense.png",
+    "sha256": "8546b939238ddf5d1a53d1abb256245bb0d4a9bc1ec3b44be8ca0dff1381619b",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/cyberpunk.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/cyberpunk.jpg",
+    "sha256": "4c3b8e0d5260edc5cda50d6443a25fdab3b548cc191eedd54679102488d364bd",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/daylight-horror.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/daylight-horror.jpg",
+    "sha256": "5ca2e1d30bd7ea457766c51b71e8c65ae2a419ce02a5f35bbe493c7b9365514e",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/default-style.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/default-style.png",
+    "sha256": "63b97c7117a5ccc44928668c8c1f1c5912d031ddc6d27db1a9ba708252bf474a",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/desert-epic.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/desert-epic.jpg",
+    "sha256": "8efb1aa2e26ea612e13173ac1a6a22d0f431c1863e69234e0754e6165525c106",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/graphic-noir.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/graphic-noir.jpg",
+    "sha256": "8511bab5dc31707d7b721ad5617458833bf617b11f61c799a4ea48476caad4a5",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/green-cyber-noir.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/green-cyber-noir.jpg",
+    "sha256": "8bb6e76898ce5ff5cef4c5d2bf0ea99a1f6afed63a0dfca076f86a0e5f5a87a4",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/hand-painted-animation.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/hand-painted-animation.jpg",
+    "sha256": "5d3a60e19cc87ba2034d11794c8aa04415f98cf831fe3a99bd366053e8451320",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/historical-drama.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/historical-drama.jpg",
+    "sha256": "5a21444ff4a8660e3266192275edd28bb3d3019be1bb63ee763b32a7f41dc664",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/neon-brutalist.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/neon-brutalist.jpg",
+    "sha256": "efa06cbb0392186ffdbe9277be505436a170e207120dff4654a96f11b194596b",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/neon-grid-world.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/neon-grid-world.jpg",
+    "sha256": "ab1605f7df41163dd01819f5000fbfbf2f0b34cb407671b6d6f9163e664ac642",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/noir-bw.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/noir-bw.jpg",
+    "sha256": "abda30e14e9824444a4327b2c49100fb31a396adef7412788b5c5df087021b1e",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/painterly.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/painterly.png",
+    "sha256": "53aaeec0d931263a7bb3a07c9aaee0d178e9a1e7b7f651f17636449a019a2ac4",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/psychological-horror.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/psychological-horror.jpg",
+    "sha256": "771dc6ed415dbdaeef3c38eacb7f462681b21be9396d88dd7005a9c1ac9afcf0",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-3d-animation.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-3d-animation.jpg",
+    "sha256": "60d099b6e46128fb41cfea6ca36ab62e572668e2ccc18ded17b4b6fd5a37820b",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-anime-90s.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-anime-90s.jpg",
+    "sha256": "f3f195509dec8a4c96e0b75ed4159ca849e7ad5553a7d1c9b7a870ff5f482c0a",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-claymation.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-claymation.jpg",
+    "sha256": "162d64be6d6fc852d454e6adf74131328ad4e828b5e92cf125b9cfd3bb40bab8",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-documentary.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-documentary.jpg",
+    "sha256": "5c09482708b974aefaa041a57674e457e3e68a45ba4fa33e0459f661afe27190",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-ethereal.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-ethereal.png",
+    "sha256": "25103e269da2b68f06f996ba973965d4aa8fa014a63e7f6ce8b26976ae2b7765",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-glitch.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-glitch.jpg",
+    "sha256": "ce0b0311663c29c1c93b506d9c2db89fc40bc212b9353454ceb885b50aba16bc",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-gothic.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-gothic.jpg",
+    "sha256": "07421f8dc4237a0f6b5da6d9de3e0ea9606deeb15b1a9a4a7aaf10d29a5619ae",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-grindhouse.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-grindhouse.png",
+    "sha256": "0a2889fae68a8734c00ca363f3520ab9e5fa4112bb15f564f15ea4c97265cbf0",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-infrared.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-infrared.png",
+    "sha256": "4ae2c25f1421f392eb528ba53cca87351b32d5cdb4a7b6f11cb04b58ab29c573",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-minimalist.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-minimalist.jpg",
+    "sha256": "0be986e5a73acd95a0187722b3163ecfd49fb9bfd601e722fe5e08f8a08a4abf",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-papercraft.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-papercraft.png",
+    "sha256": "c6e94a646d41c922515aed9148f9611ff334169dbc0bbcf568c9336adf700d12",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-polaroid.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-polaroid.png",
+    "sha256": "bd6f512c9720f2f37e3ae76b59c1cd8fb1fcc3dbe344ea38456e83d2c01a5a1a",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-pop-art.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-pop-art.jpg",
+    "sha256": "050593d15d16eb18c46855184a92544ff552f24ded1749b11da7918641a04802",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-steampunk.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-steampunk.jpg",
+    "sha256": "38a0cf809cd9ea4c3db2e16adf1a1bdebe8e359fc17f7fc3554aacfcdc913d7e",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-surrealist.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-surrealist.jpg",
+    "sha256": "8cc413abaf978ea3f5fde5edf51032aa8b71817bcf02a278d97f71bb5806feee",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-technicolor.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-technicolor.png",
+    "sha256": "c00d2adc87d66f584de0303ff2a24a4ff2e6f209922c701cdeb7f4d42e224a79",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-vaporwave.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-vaporwave.jpg",
+    "sha256": "e679c0cc96af03c8a51d24964d7982784013554dd82de3ea0110735a3f2e52ce",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-vhs.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-vhs.png",
+    "sha256": "96c0fe6205d86e64ad625f15d6dbcfc066527fb5804794548d2fc28e87dc1fa9",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style-vintage-70s.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style-vintage-70s.jpg",
+    "sha256": "d6029c654ceca0f1869359542aa392fd570224f6841e5af0dfdb965485fef404",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_8bit_1772438848092.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_8bit_1772438848092.png",
+    "sha256": "359126aafaedf4974552a92848b4c1f821faa6e62733a85749d495fc72cb22e6",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_biopunk_1772276321020.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_biopunk_1772276321020.png",
+    "sha256": "66d86a62ec95105e1c17425aafe017c37dcdb501b70cee6df490bdff13e525ab",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_classic_cel_animation.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_classic_cel_animation.png",
+    "sha256": "64514a6e4390177c10fcddb5526b0af25729745af023e33fa47649fba8c97fc6",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_comic_book.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_comic_book.png",
+    "sha256": "f5618b7b2ed81af5933555a06927655d9518e36297b9fbebd74db2edb11e3ea2",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_cybergoth_1772276305380.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_cybergoth_1772276305380.png",
+    "sha256": "ff03ac3b8a04fa0b7a4def429591170bea3b6a6b87fb40c0088fa0828d816088",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_darkacademia_1772276210571.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_darkacademia_1772276210571.png",
+    "sha256": "a518bcb9ecd5e4eeb33308d096bc7bd773b4cc6ea0670d43237d07c68a66010f",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_friendly_3d_animation.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_friendly_3d_animation.png",
+    "sha256": "226f4cff05357963728ed958d4cf61b6927e2d5ffc9a3643da9493c8decfbaff",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_macro_1772438728106.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_macro_1772438728106.png",
+    "sha256": "18b31254b8ff46b4ae3cac155a125008609a8974e35db661d61c586701ca0830",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_neon_noir_1772438670108.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_neon_noir_1772438670108.png",
+    "sha256": "e2c11800be040d316764fc018bc8b7d9799f760ff5ec8f06fdd8defefafb28e1",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_origami_1772438656113.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_origami_1772438656113.png",
+    "sha256": "25de3f12cc5a3beec1d58c7146a1647a719462ba1ea3a35385f6f1084d15e9ae",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_pastel_dream_1772438740292.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_pastel_dream_1772438740292.png",
+    "sha256": "fbb343534348ae3c693e741091c0da5ab92712f2514f3a7817b9ba858076dfeb",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_retrofuturism_1772276196864.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_retrofuturism_1772276196864.png",
+    "sha256": "f5de85464e78575388bd6410769a901330d93965129ab602af4b6bdeab0f2a94",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_sketch_1772438683920.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_sketch_1772438683920.png",
+    "sha256": "ac6d7f4d2e54bb2c10270611a61330b0fbca16f853e7398030c23eb33e383366",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_stop_motion.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_stop_motion.png",
+    "sha256": "d31e3957496efac7ab4d9cd46961aa093fe5f8ffa47979d33dd3f297813768a6",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/style_synthwave_1772276335306.png",
+    "destination": "frontend/src/features/ai-editor/assets/styles/style_synthwave_1772276335306.png",
+    "sha256": "c6aac5159deff3d83ef5fc5fea57ff62d468f6f6781bb88385fbf259eb4660aa",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/symmetric-pastel.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/symmetric-pastel.jpg",
+    "sha256": "9888c5e60377aff06b3544e419b30aa67e070a38b3021a21783baef311233f31",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/urban-loneliness.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/urban-loneliness.jpg",
+    "sha256": "024723b1563c6449ffec930c301d26ea529d976a2c4d9ebc9971e97251ed01aa",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/styles/watercolor.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/styles/watercolor.jpg",
+    "sha256": "91f8a018aeecb19fad9eea2953bf083fc2cd6ef668d179ab97d938baf2e086af",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-bioluminescent.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-bioluminescent.jpg",
+    "sha256": "1a3473c33b9f4d1d4b99982f0cd206a7a48a2be2c28d0c643d93ef19f18ac206",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-blue-hour.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-blue-hour.png",
+    "sha256": "5ce864eee9cbf14b6fb8de1c7bd605401caafec7cc34da5fa6297f83c4d41545",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-butterfly.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-butterfly.png",
+    "sha256": "a616a2e79ae9c41aeadbabb1e301406c0fead7636d9964006a2b81301a10e55f",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-candlelight.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-candlelight.jpg",
+    "sha256": "64ee957d0325d36521e955648e8873f20d4aa027268cc51703d3f9a1dbaf2271",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-candlelight.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-candlelight.png",
+    "sha256": "a616a2e79ae9c41aeadbabb1e301406c0fead7636d9964006a2b81301a10e55f",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-chiaroscuro.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-chiaroscuro.png",
+    "sha256": "ba60a3fa137803d829de82e29c2f7c32cb544c57892897050940d4307b0154ed",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-dramatic.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-dramatic.png",
+    "sha256": "ea7460c4bfbdb4279ff9cfc9d3ffe8ff0d06e9ec33bf9b3fed2d42c1e4cf229c",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-electroluminescent.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-electroluminescent.png",
+    "sha256": "84406132f16490b62643182897de407270c6fbdc1e9074cccf632702420423f5",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-golden.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-golden.png",
+    "sha256": "ea7460c4bfbdb4279ff9cfc9d3ffe8ff0d06e9ec33bf9b3fed2d42c1e4cf229c",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-hard.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-hard.png",
+    "sha256": "279b67d024ec647981853354dca8c0c19d9441078848bcdc216cc8bfc3e85427",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-jellyfish.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-jellyfish.jpg",
+    "sha256": "64ee957d0325d36521e955648e8873f20d4aa027268cc51703d3f9a1dbaf2271",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-natural.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-natural.png",
+    "sha256": "ea7460c4bfbdb4279ff9cfc9d3ffe8ff0d06e9ec33bf9b3fed2d42c1e4cf229c",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-neon.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-neon.png",
+    "sha256": "ea7460c4bfbdb4279ff9cfc9d3ffe8ff0d06e9ec33bf9b3fed2d42c1e4cf229c",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-practical.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-practical.png",
+    "sha256": "ed5654868263183cbf64553f5e8702364937dae051752ff246ea860ee15e5d48",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-rembrandt.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-rembrandt.jpg",
+    "sha256": "ed2f1733276df7501f7c63dd3ef162145bce6b747d3a750894218f76053127b4",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-rim.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-rim.png",
+    "sha256": "8828aaf8658e237002e70332fc42a0a87ef056500e998202e603b55bd263d8b6",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-silhouette.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-silhouette.png",
+    "sha256": "2e430fdf3d499b7f37113907b5974a7389e020187573918a6c2bdbea498ab39e",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-split.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-split.png",
+    "sha256": "567fbb6416ad254bb2b7bee5d9249aca812dd11a1850908b8ef76635e9279bf8",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-studio.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-studio.png",
+    "sha256": "ea7460c4bfbdb4279ff9cfc9d3ffe8ff0d06e9ec33bf9b3fed2d42c1e4cf229c",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/light-volumetric.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/light-volumetric.png",
+    "sha256": "e164e1dfdbf6bcfdd8d02b8e2aeec4187c1b754c9f1ac7f49f8fa77f15ac8c87",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/lighting-cinematic-warm.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/lighting-cinematic-warm.png",
+    "sha256": "bf77d0b4073a245673609928d1a2f15cc035c9bca8689f125dcd34d81565af6c",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/lighting-fantasy-gold.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/lighting-fantasy-gold.png",
+    "sha256": "bf77d0b4073a245673609928d1a2f15cc035c9bca8689f125dcd34d81565af6c",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/lighting-golden-hour.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/lighting-golden-hour.png",
+    "sha256": "9d9e2f8e8e9bbbf87d00dd691795e04ecbebfdacdd90e8e85aa71e811bfe8192",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/lighting-low-key-bw.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/lighting-low-key-bw.png",
+    "sha256": "4c8bd1d9899cdca189815d46bfd88a798434124a217fadeb86340d03fba8295c",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/lighting-natural-window.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/lighting-natural-window.jpg",
+    "sha256": "b92f717d913e5260f92ab3abadb369f5771dab341a716975d146db4613093201",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/lighting-neon-cyan-red.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/lighting-neon-cyan-red.png",
+    "sha256": "01d213876d032ecc21c5851bfc1cb45db113d9a26582b06e96d72811fa5d4727",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/lighting-studio-softbox.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/lighting-studio-softbox.jpg",
+    "sha256": "4a3fd23feb579cc2f0c29a5a6e319d4907f093ddf283c447a29b1196fc4a5235",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-b-roll.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-b-roll.jpg",
+    "sha256": "99f62d994c41708e2ba50790b85327e51fb45b59e0d9136fdf8274a3fb633f58",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-closeup.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-closeup.png",
+    "sha256": "cced22c072d4d3de5f245c1ba0e7ce1df78a573d4a28b9453ce6cb36d1faae56",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-cowboy.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-cowboy.png",
+    "sha256": "60738176480b29f519a23f658da190a4e5c27c3f7a930b5c89e0f33fdefefaa4",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-dolly-zoom.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-dolly-zoom.png",
+    "sha256": "90a6f10a57e684f325f598293eb6554c0d6d0e343ac0b931fecc2dee0d6681f6",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-dutch-angle.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-dutch-angle.jpg",
+    "sha256": "71d424f6a73ebae212ad45acb3b00a0c0fcbea6657c3649c885c414b655c68e1",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-dutch-angle.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-dutch-angle.png",
+    "sha256": "09ea44a4140a7682e1b457b6cfd3d8e479fe4b96b4aeea2be490e85b9e9be131",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-establishing.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-establishing.png",
+    "sha256": "d90c6b445c6512f337f0c1356119954e7d8a6d081f9e942cfb85e857c0e5442b",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-extreme-wide.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-extreme-wide.jpg",
+    "sha256": "37d7c87cf8f871c1a4eb823e8d615ae7d4ffc702ca03ef1d761fc57b8197e18e",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-full-body-hiker.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-full-body-hiker.jpg",
+    "sha256": "4db007deb2845dafd6c1b8e77ece321ad52bb544a4d0d43c69948876a1a791f6",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-high-angle.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-high-angle.jpg",
+    "sha256": "1333344151f9e162dd5bc817b983e8eeb05525f3c680a2d92e7c6a26f0d0c458",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-low-angle-climber.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-low-angle-climber.jpg",
+    "sha256": "89d90d83d4b8094ee90dc58aaf461da63f457ce9d020c408cd64f150fda27b7c",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-low-angle.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-low-angle.png",
+    "sha256": "cced22c072d4d3de5f245c1ba0e7ce1df78a573d4a28b9453ce6cb36d1faae56",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-macro-eye.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-macro-eye.jpg",
+    "sha256": "23d6f88dc8f86a86544054559e2efe89209e4151079946e86671cbcd14749528",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-medium-back.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-medium-back.jpg",
+    "sha256": "4556b4bf239dd48a7664473b1f5f303d1fb5d6249fb7ffd3399f965fb95d9b43",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-medium-street.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-medium-street.jpg",
+    "sha256": "ebaf274122ca45f885e06c272963aafd79982744ed24018da658cefd117ec93d",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-overhead-street.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-overhead-street.jpg",
+    "sha256": "25430364669b81781f2bbbd0ed5081f2c3fa43b9fb3b5459df7a396d40a3e35a",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-overhead.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-overhead.png",
+    "sha256": "cced22c072d4d3de5f245c1ba0e7ce1df78a573d4a28b9453ce6cb36d1faae56",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-panning.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-panning.png",
+    "sha256": "facc8f53f604fb1b84c2465602a64392086290465fb1eb0411a9e3223347e743",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-portrait-scarf.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-portrait-scarf.jpg",
+    "sha256": "e500663dd9316397cc61b94c968cb0ca4db6b2a19fd16bfb16141c6954d956fe",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-pov.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-pov.png",
+    "sha256": "e29f5b5c22ef0a715ff8251ded2387e5a3ae6bacabcbc50a0bf7919dcd4d4c8f",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-rack-focus.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-rack-focus.png",
+    "sha256": "8b5a4afa7a7bccba04439c6a498c174955c1e36b5078c36b94986e6d6ab6625e",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-tilt.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-tilt.jpg",
+    "sha256": "71cb762fc34422897632b5bdc6d1164d767f77dc39aecc7cd81a1596f1cb52ab",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-tracking.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-tracking.png",
+    "sha256": "a47fe8a3f7efd667692a87142fdce7f5451235cedc72cdafd24dc12565fbf8c7",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-wide-hiker.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-wide-hiker.jpg",
+    "sha256": "173d4e1f66b13c64122bc6b9d10ecf0e6cfe3661e6b6afd13041e782f9381510",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-wide.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-wide.png",
+    "sha256": "fd23a17bebb84cc48781b9271ddc100c422db6945bcb4508de487b29f9461ff3",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-worms-eye.jpg",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-worms-eye.jpg",
+    "sha256": "71d424f6a73ebae212ad45acb3b00a0c0fcbea6657c3649c885c414b655c68e1",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/assets/visuals/shot-worms-eye.png",
+    "destination": "frontend/src/features/ai-editor/assets/visuals/shot-worms-eye.png",
+    "sha256": "09ea44a4140a7682e1b457b6cfd3d8e479fe4b96b4aeea2be490e85b9e9be131",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/AboutModal.tsx",
+    "destination": "frontend/src/features/ai-editor/components/AboutModal.tsx",
+    "sha256": "86fa4694c3f705a412b5c283cb457690a0aabcc13963e00b4e66e653ed770e66",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/ActivityCenter.tsx",
+    "destination": "frontend/src/features/ai-editor/components/ActivityCenter.tsx",
+    "sha256": "efc4ae0ef03b9d42a9e4b776a81559df12669df241c872f1851cd5acee972180",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/AIAssistant.tsx",
+    "destination": "frontend/src/features/ai-editor/components/AIAssistant.tsx",
+    "sha256": "9e3d584f3a42f4b5cdfdb71f053f860e46059661ac2d2540bb966b804eb7e1a9",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/AnnotationModal.tsx",
+    "destination": "frontend/src/features/ai-editor/components/AnnotationModal.tsx",
+    "sha256": "c8cba945811bfa7530fe2705f99d0064391f7832d601a3d5fc51a073c4eba525",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/ApiKeyModal.tsx",
+    "destination": "frontend/src/features/ai-editor/components/ApiKeyModal.tsx",
+    "sha256": "aa50bbf4fab9ea81b53633f6c760929435e83e6993b55bd5e0933e2380a05f67",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/AppSidebar.tsx",
+    "destination": "frontend/src/features/ai-editor/components/AppSidebar.tsx",
+    "sha256": "b5e94cf44b01bfa2de057c1d66350fd5abc193e55a145f1e4b26743f23de2bff",
+    "exports": [
+      "SidebarProjectStatus"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/ArtRelightPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/ArtRelightPanel.tsx",
+    "sha256": "2de70d9466dc14097f31767ee16a455d3c3b843f189a25889d9b0a9e5dff5e57",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/AudioMasteringPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/AudioMasteringPanel.tsx",
+    "sha256": "f93302caf0c7bd7f19baa1c1a1c25bf411a659c98509ee2d92b43ee78985cfa7",
+    "exports": [
+      "AudioMasteringSourceOption"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/AuthScreen.tsx",
+    "destination": "frontend/src/features/ai-editor/components/AuthScreen.tsx",
+    "sha256": "c079c8b52ef7dce229e3d9753c5d3a5a0a18ba029c198e8bb9954e536ca620d1",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/AutoCutPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/AutoCutPanel.tsx",
+    "sha256": "101c5e443b563ac69fe73b113d74481de6171e8e54764c187bf28064bbe00b47",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/ColorWheel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/ColorWheel.tsx",
+    "sha256": "3e8edea516e6d49746e58a1c15dd922aece2d57408edb9a6f35985e3ea36f57f",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/CompositingNodeStudioView.tsx",
+    "destination": "frontend/src/features/ai-editor/components/CompositingNodeStudioView.tsx",
+    "sha256": "dd5f28abe12121913cd5dab4fa920d970ec5e307fdfbb29b406ef09b9b18ad69",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/DesignSystemSheet.tsx",
+    "destination": "frontend/src/features/ai-editor/components/DesignSystemSheet.tsx",
+    "sha256": "36fff19d00232a1651771f906e61f123d3fab360812f4adaee99707de62580ed",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/DocsSupportChat.tsx",
+    "destination": "frontend/src/features/ai-editor/components/DocsSupportChat.tsx",
+    "sha256": "712b9425fb5fdc8b1fe11df299c0945636fd67f0a32ad4f6c446ca32f8cc05a3",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/EditorAgentPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/EditorAgentPanel.tsx",
+    "sha256": "8a8fc22adda7c10c4b9dc0d1e29d08fd03f9051302b9c43429e3400c74689f8f",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/EditorPageShell.tsx",
+    "destination": "frontend/src/features/ai-editor/components/EditorPageShell.tsx",
+    "sha256": "970c36b2addcd2e7f4780565d09ef910738d6c0022fda6b5a40e9cee4f156b16",
+    "exports": [
+      "TrimMode",
+      "SharedSequenceProps",
+      "EditorPageId",
+      "ClipStrip"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/EditTransportBar.tsx",
+    "destination": "frontend/src/features/ai-editor/components/EditTransportBar.tsx",
+    "sha256": "5f349d9f0f16ca23ca62bcb4219287c20b1cf6872329806342d030c821834003",
+    "exports": [
+      "EditTransportBarProps"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/EffectsPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/EffectsPanel.tsx",
+    "sha256": "8129e355204bcc9e2b70886ac5ba0eab0c04d97876e2ba1a49b580bee0bd5abd",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/ExtraAssetsSection.tsx",
+    "destination": "frontend/src/features/ai-editor/components/ExtraAssetsSection.tsx",
+    "sha256": "6d6846eac8977494403face4a157a7813b96f652ea6320994e43f54c5d489d93",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/FloatingActionButton.tsx",
+    "destination": "frontend/src/features/ai-editor/components/FloatingActionButton.tsx",
+    "sha256": "03494b105776b8131555e36511db947342d770b01257137a7f0df386ec9e011b",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/Header.tsx",
+    "destination": "frontend/src/features/ai-editor/components/Header.tsx",
+    "sha256": "76ba1efc1ff636dee248a5d663889b4a9ed76014662145a8baa9dce19299d632",
+    "exports": [
+      "HeaderActivityTone"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/icons.tsx",
+    "destination": "frontend/src/features/ai-editor/components/icons.tsx",
+    "sha256": "d457e0e01bd2f49203c32c754b7eb6e434f7773830866a6965f25015a8c01a8f",
+    "exports": [
+      "AppLogoIcon",
+      "UploadIcon",
+      "VideoIcon",
+      "ImageIcon",
+      "MagicWandIcon",
+      "PlayIcon",
+      "EditIcon",
+      "TrimIcon",
+      "ColorIcon",
+      "ExportIcon",
+      "FolderIcon",
+      "UndoIcon",
+      "RedoIcon",
+      "ScriptIcon",
+      "AudioIcon",
+      "ScissorsIcon",
+      "PdfIcon",
+      "PaintBucketIcon",
+      "TagIcon",
+      "PropertiesIcon",
+      "EffectsIcon",
+      "TransitionsIcon",
+      "TextIcon",
+      "MagnetIcon",
+      "ChevronLeftIcon",
+      "ChevronRightIcon",
+      "UserCircleIcon",
+      "LandscapeIcon",
+      "AddIcon",
+      "LockIcon",
+      "UnlockIcon",
+      "MuteIcon",
+      "TransformIcon",
+      "KeyingIcon",
+      "SearchIcon",
+      "MapIcon",
+      "BrainCircuitIcon",
+      "MessageIcon",
+      "TrashIcon",
+      "FilmIcon",
+      "CameraIcon",
+      "ListIcon",
+      "GridIcon",
+      "MotionIcon",
+      "WandSparklesIcon",
+      "KeyframeIcon",
+      "BrushIcon",
+      "PaletteIcon",
+      "ClipboardCheckIcon",
+      "SparklesIcon",
+      "BrainIcon",
+      "LayersIcon",
+      "EraserIcon",
+      "ApertureIcon",
+      "MusicNoteIcon",
+      "CreditCardIcon",
+      "ReceiptIcon",
+      "CalendarIcon",
+      "CheckCircleIcon",
+      "BoxIcon",
+      "InfoIcon",
+      "DownloadIcon",
+      "SettingsIcon",
+      "ClapperboardIcon",
+      "XIcon",
+      "PauseIcon",
+      "SkipBackIcon",
+      "SkipForwardIcon",
+      "StepBackIcon",
+      "StepForwardIcon",
+      "MaximizeIcon",
+      "KeyboardIcon",
+      "ZoomInIcon",
+      "ZoomOutIcon",
+      "FitViewIcon",
+      "SoloIcon",
+      "MarkInIcon",
+      "MarkOutIcon"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/ImageEditorModal.tsx",
+    "destination": "frontend/src/features/ai-editor/components/ImageEditorModal.tsx",
+    "sha256": "b3b94339e0f73994c1405b9374368ee5fd8bcf9477550660602a9ad58c3cb8bc",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/InspectorPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/InspectorPanel.tsx",
+    "sha256": "0ccf647fa5d474e0a8ba6d702170c35edd60ebd77d4f5b6142f4a6d1385db971",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/KnowledgeGraphPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/KnowledgeGraphPanel.tsx",
+    "sha256": "507ca73a0225ae6b19aa64953eaedfcda8f262e859a78dcb51fccb582772d7a8",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/LensSelection.tsx",
+    "destination": "frontend/src/features/ai-editor/components/LensSelection.tsx",
+    "sha256": "4fa214b222cddfc8acaf475110d662afaec66de40ec1877847ac207804170a0c",
+    "exports": [
+      "LensSelection"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/LightingSelection.tsx",
+    "destination": "frontend/src/features/ai-editor/components/LightingSelection.tsx",
+    "sha256": "b0f066dd915aa5a341141b2839697b40c515bb56ae37e62aae06a0ce88398589",
+    "exports": [
+      "LightingSelection"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/LiveConversation.tsx",
+    "destination": "frontend/src/features/ai-editor/components/LiveConversation.tsx",
+    "sha256": "06ef972b35fadfcd2484bd3c5686b125102a962fd87e0602a9e1e58b81c570c8",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/LookbookPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/LookbookPanel.tsx",
+    "sha256": "2d4022d415d114877ba10b39f597aca033b372f21272439b2f3c246798caf3d5",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/MediaBin.tsx",
+    "destination": "frontend/src/features/ai-editor/components/MediaBin.tsx",
+    "sha256": "136f49f1f8cbc28d0e8044b2016ce04ff5afae0e8adf2e62ec6a09ee502eca2a",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/MusicAssistantPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/MusicAssistantPanel.tsx",
+    "sha256": "14df7eab3fc9c88a6821c2184435979e2863dffd24edce08a56a7938bae61b3d",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/NatronCompositorPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/NatronCompositorPanel.tsx",
+    "sha256": "7e8fb1825febfe765b3109e5d472a4de720a3a2b5df0b7f1fd67e0f8737e6738",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/NotebookLMPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/NotebookLMPanel.tsx",
+    "sha256": "39b8a73a4dd01db67a3714a1bda91942ea7bf69e6db78ad95ad704806eeaccdb",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/OnboardingModal.tsx",
+    "destination": "frontend/src/features/ai-editor/components/OnboardingModal.tsx",
+    "sha256": "2986924c377b68891494fdc8c31ccff5b3075bdd64d2620786fb7dded6c3121f",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/OptionsModal.tsx",
+    "destination": "frontend/src/features/ai-editor/components/OptionsModal.tsx",
+    "sha256": "76f6d6e5515070688d77459fcd82f0a0a23e68223aeccfbcbe12d5b2e17e731d",
+    "exports": [
+      "EstimateResult",
+      "PricingResult",
+      "OptionsModalConfig"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/PlaceholderWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/components/PlaceholderWorkspace.tsx",
+    "sha256": "ebbc93f844eea1eb41799456b32de08a381363a383c4545acb15bb0b93ebabee",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/PostPageBar.tsx",
+    "destination": "frontend/src/features/ai-editor/components/PostPageBar.tsx",
+    "sha256": "129498f937480961b0e9c9224d8b6f207ccfa0bf262f27b3f05f195c7c3d2459",
+    "exports": [
+      "POST_PAGES",
+      "isPostPage"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/PresenceBar.tsx",
+    "destination": "frontend/src/features/ai-editor/components/PresenceBar.tsx",
+    "sha256": "77a7fe731c25139ac9a4c3da7381f25b39f7d66976f50869609e352c2e4011e1",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/PreviewPlayer.tsx",
+    "destination": "frontend/src/features/ai-editor/components/PreviewPlayer.tsx",
+    "sha256": "8b8be17e0b121d3949fbaff88ee22f98cb9317cb8810858874ba593b52e89ee9",
+    "exports": [
+      "PreviewPlayerHandle"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/PricingScreen.tsx",
+    "destination": "frontend/src/features/ai-editor/components/PricingScreen.tsx",
+    "sha256": "b6bc27f8dacc359757314f30b08a86b6c9a53b199f35992e5972dfcea957e09d",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/components/ProjectResearchPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/ProjectResearchPanel.tsx",
+    "sha256": "39ca15408f90340a3bc972256f68474d18be4c91a9d9fee52dfe207584732950",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/ProjectWorldbuildingPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/ProjectWorldbuildingPanel.tsx",
+    "sha256": "d0f47874c534a54d99f16f3fedee428667aec9df031a378fce2c7b7fbae66ed6",
+    "exports": [
+      "ProjectWorldbuildingPanel"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/PromptPreview.tsx",
+    "destination": "frontend/src/features/ai-editor/components/PromptPreview.tsx",
+    "sha256": "1011feae9bad06fd9714423bb1970fc6d5df9abeb27f36c03a68d6937c06e237",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/RemoteCursorOverlay.tsx",
+    "destination": "frontend/src/features/ai-editor/components/RemoteCursorOverlay.tsx",
+    "sha256": "68e91c346f964a9b30b5420afaa49b5b096873bd960d5f3523153d8d1f669a28",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/SceneMap3DView.tsx",
+    "destination": "frontend/src/features/ai-editor/components/SceneMap3DView.tsx",
+    "sha256": "3d71af4686b224c033b0102c9029c3beeb8833d3afcd1b7f94348c5e3462ee69",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/SelectionModal.tsx",
+    "destination": "frontend/src/features/ai-editor/components/SelectionModal.tsx",
+    "sha256": "2b6f43cf6dfa20b6f3f3045a86ee3c741d443df779b01291be925607378a7e58",
+    "exports": [
+      "SelectionModal"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/ShotTypeSelection.tsx",
+    "destination": "frontend/src/features/ai-editor/components/ShotTypeSelection.tsx",
+    "sha256": "95df3cd986c1f760b8786e05c8a3739e4730127437d559f58eb54ce98315ba14",
+    "exports": [
+      "ShotTypeSelection"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/SketchCanvas.tsx",
+    "destination": "frontend/src/features/ai-editor/components/SketchCanvas.tsx",
+    "sha256": "a779b5de48b5636f5147ffa42fd26b3992e8522535f7464ebb59f292e85ae992",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/StudioAgentStrip.tsx",
+    "destination": "frontend/src/features/ai-editor/components/StudioAgentStrip.tsx",
+    "sha256": "bb3c98055f74a06d0722ef376f1aadcb7a1caf5641e9a7f9a1e4c88f4f9480ae",
+    "exports": [
+      "STUDIO_AGENT_STATUS_STYLES"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/StudioLogin.tsx",
+    "destination": "frontend/src/features/ai-editor/components/StudioLogin.tsx",
+    "sha256": "a99973cec7a0dffd336ac147759e377e0ad9d909f6cc31d28be40b7ea2d2f87d",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/StyleSelection.tsx",
+    "destination": "frontend/src/features/ai-editor/components/StyleSelection.tsx",
+    "sha256": "73e5f204d61c86e91b01f8a7d94adaa7e8730854acfe3e19ea6f059cf2e8c6f2",
+    "exports": [
+      "StyleSelection"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/Timeline.tsx",
+    "destination": "frontend/src/features/ai-editor/components/Timeline.tsx",
+    "sha256": "2511b64e5f33ab0e96e7fddf090f6e289eedcf45e0110cc4c597d8605e8337b8",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/TitlesPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/TitlesPanel.tsx",
+    "sha256": "fd9c8b271d271a9054fa1cd173f10ac52e642ba258340a71d4d834f0f84a89cf",
+    "exports": [
+      "TitlePreset"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/TransitionsPanel.tsx",
+    "destination": "frontend/src/features/ai-editor/components/TransitionsPanel.tsx",
+    "sha256": "917d713302f9db3965cc7f69a03b49d4faa24d531eecceabe2cb84297014f059",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/components/Waveform.tsx",
+    "destination": "frontend/src/features/ai-editor/components/Waveform.tsx",
+    "sha256": "4a58a6d78791a04019ba7a2cd06bd43ad628ddbc5f7d1f83eb777f24b9950628",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/config/env.ts",
+    "destination": "frontend/src/features/ai-editor/config/env.ts",
+    "sha256": "f9c2a1a334a3b01bbb7a78b45fa020a4bcc5f4590ce230bda90600e7a37cff17",
+    "exports": [
+      "env"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/config/siteLinks.ts",
+    "destination": "frontend/src/features/ai-editor/config/siteLinks.ts",
+    "sha256": "1254fe04716666f73d86b9b783f1ec19ce6960da22008894d833ba235681d1e0",
+    "exports": [
+      "ADOBE_PORTFOLIO_URL",
+      "HAS_CUSTOM_ADOBE_PORTFOLIO_URL",
+      "buildAdobePortfolioCaseUrl"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/config/stripe.ts",
+    "destination": "frontend/src/features/ai-editor/config/stripe.ts",
+    "sha256": "a40653362a112c699c14ce44a5f506bdc9cb7e2f5a3f2a9f29b569ea118bff07",
+    "exports": [
+      "StripeCatalogItem",
+      "STRIPE_PLANS",
+      "CREDIT_PACKAGES",
+      "PlanType",
+      "CreditPackageType",
+      "BillingPlanKey",
+      "getCatalogItemById",
+      "getCatalogItemByPriceId",
+      "getPlanByPriceId",
+      "getPriceIdForKey",
+      "isCreditPackId"
+    ],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/config/uiModes.ts",
+    "destination": "frontend/src/features/ai-editor/config/uiModes.ts",
+    "sha256": "1369e334f19e4aaf115b39455341f8f6c7318257351978281697797646d54aba",
+    "exports": [
+      "UIMode",
+      "UI_MODE_STORAGE_KEY",
+      "DEFAULT_UI_MODE",
+      "UI_MODE_META",
+      "normalizeUIMode",
+      "getAllowedWorkspacesForMode",
+      "filterWorkspacesForRole",
+      "getWorkspaceDisplayLabel",
+      "getWorkspaceGroupDisplayLabel"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/config/workspaceNav.ts",
+    "destination": "frontend/src/features/ai-editor/config/workspaceNav.ts",
+    "sha256": "f4f014b869edadc6d4e913e9e0d5c97c94c5ec41d056bcf0bbcd03c66f0cbed7",
+    "exports": [
+      "WorkspaceNavIcon",
+      "WorkspaceNavItem",
+      "WorkspaceNavGroup",
+      "WORKSPACE_NAV_GROUPS",
+      "ResolveWorkspaceNavParams",
+      "ResolvedWorkspaceNav",
+      "resolveWorkspaceNav"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/constants.tsx",
+    "destination": "frontend/src/features/ai-editor/constants.tsx",
+    "sha256": "37231073119c819ac36ca6af59af49e6827ad9c6b789d426b87a1ef32589471b",
+    "exports": [
+      "EFFECTS",
+      "TRANSITIONS",
+      "EFFECT_STACK_PRESETS",
+      "STYLE_PRESETS"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/contact.tsx",
+    "destination": "frontend/src/features/ai-editor/contact.tsx",
+    "sha256": "3ebbd47bdd0001e30509ccf0b9a65b23aaafc8e6bc0791d022057b6c5dd65710",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/contexts/SupabaseContext.tsx",
+    "destination": "frontend/src/features/ai-editor/contexts/SupabaseContext.tsx",
+    "sha256": "d21a8086f4cc3056dcb04801a41c639631448586f062676d158c6e886bc58d65",
+    "exports": [
+      "useSupabase",
+      "SupabaseProvider"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/assetPacks.test.ts",
+    "destination": "frontend/src/features/ai-editor/data/assetPacks.test.ts",
+    "sha256": "d9de82b6d06139bd378453c23412c2878c3fabc369c68e1294e412277d5e6b12",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/assetPacks.ts",
+    "destination": "frontend/src/features/ai-editor/data/assetPacks.ts",
+    "sha256": "0225a2d138c2a34ea1cf4f97aa53437673fdfca49e4894af69789159dd91ad1d",
+    "exports": [
+      "AssetPackItemType",
+      "AssetPackProvider",
+      "AssetPackRenderPreset",
+      "AssetPackStockPreset",
+      "AssetPackItem",
+      "AssetPack",
+      "PackedAssetItem",
+      "AssetPackManifest",
+      "POLYHAVEN_STARTER_HDRI_PACK_ID",
+      "IMPORTED_ASSET_PACKS_STORAGE_KEY",
+      "BUILTIN_ASSET_PACKS",
+      "getAssetPackItemsByType",
+      "getDefaultHdriAssets",
+      "getDownloadableAssetPacks",
+      "getAssetPackTypeCounts",
+      "buildAssetPackManifest",
+      "normalizeAssetPackManifest",
+      "upsertImportedAssetPack",
+      "loadImportedAssetPacks",
+      "saveImportedAssetPacks"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/cameraData.ts",
+    "destination": "frontend/src/features/ai-editor/data/cameraData.ts",
+    "sha256": "f914e343524c31a4d7c4b23ba5dd4ee1ca0247b5ab58f0d1d84e779a4bdcd23c",
+    "exports": [
+      "CameraPreset",
+      "LensPreset",
+      "CAMERA_PRESETS",
+      "LENS_PRESETS"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/extraAssetTypes.ts",
+    "destination": "frontend/src/features/ai-editor/data/extraAssetTypes.ts",
+    "sha256": "660531398fc97064bdabdbbdce39441d69c5961d6f07dfc0d54de3f764283638",
+    "exports": [
+      "ExtraAssetCategoryInfo",
+      "EXTRA_ASSET_CATEGORIES",
+      "AspectRatioPreset",
+      "ASPECT_RATIO_PRESETS",
+      "DEFAULT_EXTRA_ASSETS_STATE",
+      "generateAssetId",
+      "createExtraAsset",
+      "getCategoryInfo",
+      "getAssetsByCategory",
+      "getAssetById",
+      "getAssetsLinkedToShot",
+      "getAssetsLinkedToConcept",
+      "getAspectRatioPreset",
+      "getAspectRatioForCategory",
+      "buildExtraAssetPrompt"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/lightingData.ts",
+    "destination": "frontend/src/features/ai-editor/data/lightingData.ts",
+    "sha256": "8e1d7d9ff8e65070436fffd8fa9d6b852b4915ebffdbb8bd400ec514ed9ddb72",
+    "exports": [
+      "LightingPreset",
+      "LIGHTING_PRESETS"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/localModelCatalog.generated.json",
+    "destination": "frontend/src/features/ai-editor/data/localModelCatalog.generated.json",
+    "sha256": "ff142b5d05a6739c0341b27d965a0207244fafe12317f8e62a0f951a8055671d",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/localModelCatalog.ts",
+    "destination": "frontend/src/features/ai-editor/data/localModelCatalog.ts",
+    "sha256": "029f1bbacd6a18fceb2d839a01039677e14713b65f7246c86163b78ba03baef0",
+    "exports": [
+      "LocalModelFolder",
+      "LocalModelFile",
+      "ComfyNodeInputRef",
+      "LocalWorkflowTemplate",
+      "LocalWorkflowKind",
+      "LocalModelEntry",
+      "LOCAL_MODEL_CATALOG"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/moodboardTypes.ts",
+    "destination": "frontend/src/features/ai-editor/data/moodboardTypes.ts",
+    "sha256": "b290b1609034b6499bcbdbb2774ef34280708952ef6e3bbed69e838f0dbd79c4",
+    "exports": [
+      "MoodboardCategoryId",
+      "MoodboardCategory",
+      "MoodboardConnector",
+      "MoodboardItem",
+      "CategorizedMoodboard",
+      "DEFAULT_MOODBOARD_CATEGORIES",
+      "createDefaultCategorizedMoodboard",
+      "getCategoryById",
+      "getItemsByCategory",
+      "getCategoryItemCount"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/nodeSpaceBlueprints.test.ts",
+    "destination": "frontend/src/features/ai-editor/data/nodeSpaceBlueprints.test.ts",
+    "sha256": "e303a4cbdc9ea5b9562cc7e5a9f968909ed9811aea90acad59af8c84bf222274",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/nodeSpaceBlueprints.ts",
+    "destination": "frontend/src/features/ai-editor/data/nodeSpaceBlueprints.ts",
+    "sha256": "fcf75adbd80b2ddc4ebf30550ed852e23733e65cb75eb7a16adaabd1faf7433c",
+    "exports": [
+      "NodeKind",
+      "PaletteGroupId",
+      "PaletteItem",
+      "QuickTemplateOption",
+      "paletteGroupLabels",
+      "paletteGroupOrder",
+      "paletteItems",
+      "quickTemplateOptions",
+      "getQuickTemplateById",
+      "getPaletteItemsByGroup"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/productionFormats.ts",
+    "destination": "frontend/src/features/ai-editor/data/productionFormats.ts",
+    "sha256": "bb34e94ebbdb2801b7c3838000efabd0e37adc1253f7f70daa9298b46342d0af",
+    "exports": [
+      "ProductionFormatId",
+      "ProductionFormat",
+      "PRODUCTION_FORMATS",
+      "DEFAULT_PRODUCTION_FORMAT_ID",
+      "getProductionFormat",
+      "pickPreferredModel"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/sceneMapTypes.ts",
+    "destination": "frontend/src/features/ai-editor/data/sceneMapTypes.ts",
+    "sha256": "751b257566b636cc16dfe667098c459eb27450e32366bd0ac41ee891380d29b7",
+    "exports": [
+      "DEFAULT_SCENE_MAP_VIEWPORT",
+      "DEFAULT_SCENE_MAP_STATE",
+      "DEFAULT_GRID_SIZE",
+      "ElementTemplate",
+      "ELEMENT_TEMPLATES",
+      "generateElementId",
+      "generateSceneId",
+      "createSceneMapElement",
+      "createDefaultScene",
+      "createDefaultSceneMapState",
+      "getActiveScene",
+      "getSceneById",
+      "getElementById",
+      "getElementsByType",
+      "getLinkedElements",
+      "snapToGrid",
+      "getTemplateByType"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/sceneWallTypes.ts",
+    "destination": "frontend/src/features/ai-editor/data/sceneWallTypes.ts",
+    "sha256": "0ec132ac3feb08570836cb20d426f428cbd1ad99902cf635f473957ee1e1f7c2",
+    "exports": [
+      "DEFAULT_REEL_COUNT",
+      "DEFAULT_SCENES_PER_REEL",
+      "DEFAULT_TOTAL_SCENES",
+      "DEFAULT_VFX_PREFIX",
+      "sanitizeVfxPrefix",
+      "buildSceneCode",
+      "buildVfxShotCode",
+      "createSceneWallReels",
+      "getDefaultSlugline",
+      "createSceneWallSceneCard",
+      "createSceneWallShotCard",
+      "createDefaultSceneWallState",
+      "parseSluglinesFromScript",
+      "SceneWallContextEntry",
+      "buildSceneWallFromProjectContext",
+      "syncSceneWallWithProjectContext",
+      "generateSceneWallVfxCodes",
+      "applySluglinesToSceneWall",
+      "normalizeSceneWallState"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/shotTypeData.ts",
+    "destination": "frontend/src/features/ai-editor/data/shotTypeData.ts",
+    "sha256": "886c6d89a9e571d66ea2cd2d118a1df83c0decd3ffe1a512de90b9b8ae8d888c",
+    "exports": [
+      "ShotTypePreset",
+      "SHOT_TYPE_PRESETS"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/styleData.ts",
+    "destination": "frontend/src/features/ai-editor/data/styleData.ts",
+    "sha256": "886b003bd98ecad0b2f12652cde3760b0de1f6bad46a650f6fc8c5288aa71f4e",
+    "exports": [
+      "StylePreset",
+      "STYLE_PRESETS"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/worldbuildingPresets.ts",
+    "destination": "frontend/src/features/ai-editor/data/worldbuildingPresets.ts",
+    "sha256": "464f7de0a42145c5a142734e26912dbac1a04b6cec3d16ebdab75313dfd021bd",
+    "exports": [
+      "WORLD_GENRE_SUGGESTIONS",
+      "WORLD_TONE_SUGGESTIONS",
+      "WORLD_ERA_SUGGESTIONS",
+      "WORLD_TECH_SUGGESTIONS",
+      "WORLD_MAGIC_SUGGESTIONS",
+      "WorldRegionPreset",
+      "WORLD_REGION_PRESETS",
+      "WorldFactionPreset",
+      "WORLD_FACTION_PRESETS",
+      "WorldEnvironmentPreset",
+      "WORLD_ENVIRONMENT_PRESETS",
+      "WorldGlossaryPack",
+      "WORLD_GLOSSARY_PACKS",
+      "WorldTemplate",
+      "WORLD_TEMPLATES",
+      "buildWorldFromTemplate",
+      "regionFromPreset",
+      "factionFromPreset",
+      "environmentFromPreset",
+      "glossaryFromPack",
+      "isWorldEmpty",
+      "summarizeWorld"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/data/worldbuildingTypes.ts",
+    "destination": "frontend/src/features/ai-editor/data/worldbuildingTypes.ts",
+    "sha256": "32bfccd99fdb398ed555011d4be24bcd3f0fbf2f1f7dc7887e5e20b8ba658412",
+    "exports": [
+      "WORLD_REGION_KIND_OPTIONS",
+      "WORLD_ENVIRONMENT_CONTAINER_OPTIONS",
+      "createWorldbuildingRegion",
+      "createWorldbuildingFaction",
+      "createWorldbuildingEnvironment",
+      "createWorldbuildingGlossaryEntry",
+      "createDefaultWorldbuildingState"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/datenschutz.tsx",
+    "destination": "frontend/src/features/ai-editor/datenschutz.tsx",
+    "sha256": "dbef93d4de2c2b030d97969af77562c5e6e5217375dd1659b3e2fcc4b4db3682",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/docs/docSupportData.ts",
+    "destination": "frontend/src/features/ai-editor/docs/docSupportData.ts",
+    "sha256": "f40031ebefcf4904880b5cc945c4ae3d767fca6beb86807f7feb612e38374c0c",
+    "exports": [
+      "DocsChunk",
+      "DOCS_KNOWLEDGE_BASE",
+      "QUICK_QUESTIONS"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/docs/supportResources.ts",
+    "destination": "frontend/src/features/ai-editor/docs/supportResources.ts",
+    "sha256": "e570484478f98a51e3afccd7a5c36ec03b1757c0d02e0a11850c607fe90ae56b",
+    "exports": [
+      "SupportVideo",
+      "SupportChannel",
+      "YOUTUBE_CHANNEL_URL",
+      "SUPPORT_VIDEO_LIBRARY",
+      "SUPPORT_CHANNELS"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/docs.tsx",
+    "destination": "frontend/src/features/ai-editor/docs.tsx",
+    "sha256": "20cc20402f7db0c012b19b18884857b1f7e28effe7a71b81f5830aae212d9247",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/electron.d.ts",
+    "destination": "frontend/src/features/ai-editor/electron.d.ts",
+    "sha256": "5541f58ce0ca3f35e8a07a7b041d809411200b3cc9c1262302cdd38601b97856",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/embed-host-demo.ts",
+    "destination": "frontend/src/features/ai-editor/embed-host-demo.ts",
+    "sha256": "17fbfcbc3b3b612ddb7ff2857d03c149d9d596e51fe849d123cd764bb90a5bf8",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/faq.tsx",
+    "destination": "frontend/src/features/ai-editor/faq.tsx",
+    "sha256": "3c5318df41aa3cd219aaea8520bd0ce25b45988e1a8f1b8a493cfc474132eb69",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/hooks/useAgentTaskBridge.ts",
+    "destination": "frontend/src/features/ai-editor/hooks/useAgentTaskBridge.ts",
+    "sha256": "a954ea2812f4c9a7d2457336abee92e10a85d50ea748634060a5fbde29b25658",
+    "exports": [
+      "useAgentTaskBridge"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/hooks/useHistoryState.ts",
+    "destination": "frontend/src/features/ai-editor/hooks/useHistoryState.ts",
+    "sha256": "a79f4e42003c44a64ea6855d822b99d4673402288fe637cf55b404fe5f0cafb2",
+    "exports": [
+      "useHistoryState"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/hooks/useLibraryAssets.ts",
+    "destination": "frontend/src/features/ai-editor/hooks/useLibraryAssets.ts",
+    "sha256": "904224a48d28a294bf13adb4e078fa603397f31a68e8ad0f6d8dfab6046741d2",
+    "exports": [
+      "LibraryAssetKind",
+      "LibraryAsset",
+      "useLibraryAssets"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/hooks/useStudioAgentRuntime.ts",
+    "destination": "frontend/src/features/ai-editor/hooks/useStudioAgentRuntime.ts",
+    "sha256": "b8fd66ce3b97c5e3ffed6eca25611ef9716464165ab7c8b8ac08cf585fc0db20",
+    "exports": [
+      "StudioAgentRuntimeState",
+      "useStudioAgentRuntime"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/hooks/useTaskCenter.ts",
+    "destination": "frontend/src/features/ai-editor/hooks/useTaskCenter.ts",
+    "sha256": "8859af2fa89f0777f6449ea1eb69b6ba39b0510a33e1deed5e1c76f19403fad4",
+    "exports": [
+      "useTaskCenter"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/i18n/de.ts",
+    "destination": "frontend/src/features/ai-editor/i18n/de.ts",
+    "sha256": "30f3641ea6785e18fb3fbaae1a658f6a5afd561aaf2c6e5d69c4395d2ec99457",
+    "exports": [
+      "de"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/i18n/en.ts",
+    "destination": "frontend/src/features/ai-editor/i18n/en.ts",
+    "sha256": "b6c358419dca008fad938c3528d11b72150d41161e1cb939182491029ad4a22b",
+    "exports": [
+      "en"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/i18n/fr.ts",
+    "destination": "frontend/src/features/ai-editor/i18n/fr.ts",
+    "sha256": "2e3eaad3553273b3b22ef820a2dd95b16f906381d20b843e9c7e56d2cb955491",
+    "exports": [
+      "fr"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/i18n/index.ts",
+    "destination": "frontend/src/features/ai-editor/i18n/index.ts",
+    "sha256": "3ebdc60adc03dbade269130043acd38ba9f57f8388635951a0f25180d98c576c",
+    "exports": [
+      "Language",
+      "TranslationKey",
+      "translations",
+      "setLanguage",
+      "getLanguage",
+      "useTranslation"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/landing-en.tsx",
+    "destination": "frontend/src/features/ai-editor/landing-en.tsx",
+    "sha256": "53280ae35a8d656413f989da2c88641c63cec275b18fe46b9042cd13f8d18f1d",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/landing-fr.tsx",
+    "destination": "frontend/src/features/ai-editor/landing-fr.tsx",
+    "sha256": "6580f9dcc8f4f957259ce74dea19156beee723ec0ae8a7ce30413e3f53f0a270",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/landing.css",
+    "destination": "frontend/src/features/ai-editor/landing.css",
+    "sha256": "f93b73a202a50d6d00cc22d0e025f3afb42dca1b148f47862d1cd62e1c1d7120",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/lib/supabase.ts",
+    "destination": "frontend/src/features/ai-editor/lib/supabase.ts",
+    "sha256": "bc54627dd5cebb4dd424b82ddd5875d6cf5d17420bbeb09e61f3afd94e46779e",
+    "exports": [
+      "getSupabase"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/portfolio.tsx",
+    "destination": "frontend/src/features/ai-editor/portfolio.tsx",
+    "sha256": "2ce27e9835cf5cd388ea0ea2de1405063ab28cb2102538ebbdc7434cd364b36b",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/pricing.tsx",
+    "destination": "frontend/src/features/ai-editor/pricing.tsx",
+    "sha256": "d4440c6740a7c65b0e9177957e9296c8ba7a650640692be5954232bd667f003a",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/services/audioMastering/audioMasteringService.ts",
+    "destination": "frontend/src/features/ai-editor/services/audioMastering/audioMasteringService.ts",
+    "sha256": "ccae95b8b6d232b18d9ee65339969601aa41eb148b1c25ba100c1ddccc48e63e",
+    "exports": [
+      "getAudioMasteringStatus",
+      "setupAudioMasteringEnvironment",
+      "runAudioMasteringJob"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/audioMastering/providers/localAudioMasteringProvider.ts",
+    "destination": "frontend/src/features/ai-editor/services/audioMastering/providers/localAudioMasteringProvider.ts",
+    "sha256": "38c29b20bc3897798248026de9e4d70d890cddf7d9c86e3b531035f9dfd1633c",
+    "exports": [
+      "localAudioMasteringProvider"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/audioMastering/providers/remoteAudioMasteringProvider.ts",
+    "destination": "frontend/src/features/ai-editor/services/audioMastering/providers/remoteAudioMasteringProvider.ts",
+    "sha256": "42c2cdc6dea616d936b7541f5fbd54fa6a2ef0bd3490f932e7109c383078b504",
+    "exports": [
+      "remoteAudioMasteringProvider"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/audioMastering/types.ts",
+    "destination": "frontend/src/features/ai-editor/services/audioMastering/types.ts",
+    "sha256": "1ae13b1b836f418e39519371a522add7db684874f3afff298c983e3b0516282b",
+    "exports": [
+      "AudioMasteringProvider",
+      "AudioMasteringMode",
+      "AudioMasteringPayload",
+      "AudioMasteringAdvancedOptions",
+      "AudioMasteringRequest",
+      "AudioMasteringProgressPhase",
+      "AudioMasteringProgress",
+      "AudioMasteringStatus",
+      "AudioMasteringResult"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/audioRemasterService.ts",
+    "destination": "frontend/src/features/ai-editor/services/audioRemasterService.ts",
+    "sha256": "485db4779e8f96198dd58e581ec187b6838f704f0a3d3687f4a12291bcec0584",
+    "exports": [
+      "AudioRemasterPayload",
+      "AudioRemasterStatus",
+      "AudioRemasterResult",
+      "getAudioRemasterStatus",
+      "setupAudioRemasterEnvironment",
+      "runAudioRemaster"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/autoCutService.ts",
+    "destination": "frontend/src/features/ai-editor/services/autoCutService.ts",
+    "sha256": "11979da61ae19af39299ed34cb5a060340e2e15373dec487a970721835a35cc5",
+    "exports": [
+      "VideoSegment",
+      "SegmentAnalysisResult",
+      "ScriptBeat",
+      "ScriptBeatMatch",
+      "AutoCutContext",
+      "KuleshovCheckResult",
+      "ContinuityCheckResult",
+      "ContinuityIssue",
+      "VerificationResult",
+      "AutoCutConfig",
+      "DEFAULT_AUTO_CUT_CONFIG",
+      "buildAutoCutScriptBeats",
+      "analyzeVideoForSegments",
+      "analyzeVideoSourceForSegments",
+      "verifyKuleshovEffect",
+      "verifyContinuity",
+      "calculateCompositeScore",
+      "AutoCutPipelineResult",
+      "selectTopSegments",
+      "verifySegmentTransitions",
+      "runAutoCutPipeline",
+      "runAutoCutSourcePipeline"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/braveSearchService.ts",
+    "destination": "frontend/src/features/ai-editor/services/braveSearchService.ts",
+    "sha256": "72b268fe864354fa44eff8cda64c19f8bffb1df63a18ed02baa956a0399b431c",
+    "exports": [
+      "BraveSearchKind",
+      "getBraveSearchApiKey",
+      "isBraveSearchConfigured",
+      "searchBrave"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/byokProxyClient.ts",
+    "destination": "frontend/src/features/ai-editor/services/byokProxyClient.ts",
+    "sha256": "b7201f03ef84877fa7bfb265570df80475b15d2cb43ffa68b1a621dfc4f10b41",
+    "exports": [
+      "ByokProvider",
+      "hasLocalProviderKey",
+      "shouldUseByokProxy",
+      "byokProxyRequest",
+      "byokProxyJson",
+      "byokProxyText",
+      "byokProxyBinaryUrl"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/cloudAuthService.ts",
+    "destination": "frontend/src/features/ai-editor/services/cloudAuthService.ts",
+    "sha256": "6b0efec2701d4f493634572b98e29e5890b904a734e7712f42166999ad54dbb7",
+    "exports": [
+      "CloudProvider",
+      "getCloudClientId",
+      "setCloudClientId",
+      "getCloudAuth",
+      "setCloudAuth",
+      "clearCloudAuth",
+      "startCloudOAuth",
+      "handleCloudOAuthCallback",
+      "getValidCloudAuth"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/cloudSyncService.ts",
+    "destination": "frontend/src/features/ai-editor/services/cloudSyncService.ts",
+    "sha256": "1b95cb6798cd8b29ebdd46980c8ab892fb3ac2b1b5de63dcc1a5b703d9dd28d8",
+    "exports": [
+      "uploadProjectJsonToCloud",
+      "fetchCloudProjectMeta",
+      "downloadProjectJsonFromCloud",
+      "uploadProjectAssetToCloud",
+      "downloadProjectAssetFromCloud"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/collaborativeProjectService.ts",
+    "destination": "frontend/src/features/ai-editor/services/collaborativeProjectService.ts",
+    "sha256": "a45d00d24085e38f5e485503c1cfb0d5f1c2605879f88c9aa2d293e2d64b0ef4",
+    "exports": [
+      "fromProjectSnapshot",
+      "toProjectSnapshot",
+      "CollaborativeProjectSession",
+      "createCollaborativeProjectSession"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/comfyUiService.ts",
+    "destination": "frontend/src/features/ai-editor/services/comfyUiService.ts",
+    "sha256": "d49e438d8b5b10720f6be14568c6858f9ac0a4f9648fd2597f25cd1a7647e02d",
+    "exports": [
+      "ComfyGenerationOptions",
+      "ComfyLoraStackEntry",
+      "testComfyUiConnection",
+      "getComfyUiHealth",
+      "listComfyUiModels",
+      "uploadComfyImage",
+      "createComfyWorkflow",
+      "generateComfyImage"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/corridorKeyService.ts",
+    "destination": "frontend/src/features/ai-editor/services/corridorKeyService.ts",
+    "sha256": "9d7847845f4b1ca16002f600dfc4d3b1cd89c722e1d96ae9668d2a888a9e4900",
+    "exports": [
+      "CorridorKeyStatus",
+      "CorridorKeyPayload",
+      "CorridorKeyOptions",
+      "CorridorKeyResult",
+      "getCorridorKeyStatus",
+      "setupCorridorKeyEnvironment",
+      "runCorridorKey"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/creativeDnaService.ts",
+    "destination": "frontend/src/features/ai-editor/services/creativeDnaService.ts",
+    "sha256": "6fbde88a83471fbf8ce9d037ba5ed5430671ef19b463b2a1fe6741b60da6e8b1",
+    "exports": [
+      "DEFAULT_CREATIVE_DNA",
+      "CREATIVE_DNA_PRESETS",
+      "mapDirectorPersonaToCreativeMode",
+      "createCreativeDNAPreset",
+      "normalizeCreativeDNAProfile",
+      "resolveCreativeDNAProfile",
+      "summarizeCreativeDNA",
+      "buildCreativeDNAGuidance",
+      "buildCreativeDNAReviewRubric",
+      "findCreativeDNASceneOverride",
+      "getCreativeDNADimensionOptions"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/documentParsingService.ts",
+    "destination": "frontend/src/features/ai-editor/services/documentParsingService.ts",
+    "sha256": "8090dcdc1cfd698c5318576b95dac5d717afcd6e21f5d7edc012963c71d431ed",
+    "exports": [
+      "parseScriptDocument"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/drawThingsService.ts",
+    "destination": "frontend/src/features/ai-editor/services/drawThingsService.ts",
+    "sha256": "46dd6b26ef29075ab53d59d66669c6ab850861cc30d141e8aecd74e9959cdcac",
+    "exports": [
+      "DRAW_THINGS_DEFAULT_URL",
+      "getDrawThingsUrl",
+      "setDrawThingsUrl",
+      "probeDrawThings",
+      "isDrawThingsEditModel",
+      "DrawThingsOptions",
+      "generateImageWithDrawThings"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/editorAgentService.ts",
+    "destination": "frontend/src/features/ai-editor/services/editorAgentService.ts",
+    "sha256": "44e87a2b941bb4b035454d10af1dc3cf872f694b23d1837cb5ff0f8f136d9a8e",
+    "exports": [
+      "buildTimelineDraftShotList",
+      "buildReviewDrivenObjective",
+      "buildHeuristicEditPlan",
+      "generateEditPlan"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/elevenLabsService.ts",
+    "destination": "frontend/src/features/ai-editor/services/elevenLabsService.ts",
+    "sha256": "6b1121868da3c7a10b4bf08a7d8381232be52c2aa5f3ab00f238fc0b8e6f6625",
+    "exports": [
+      "ElevenLabsVoice",
+      "fetchElevenLabsVoices",
+      "generateSpeechWithElevenLabs"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/falAiService.ts",
+    "destination": "frontend/src/features/ai-editor/services/falAiService.ts",
+    "sha256": "033f6d408e5aaf34d405c1fbfad49f2ce05ede56c19f6b8b90275c2429bd21a3",
+    "exports": [
+      "FAL_MODEL_IDS",
+      "editImageWithFalQwenMultiAngle",
+      "editImageWithFalGptImage2",
+      "generateImageWithFalGptImage2",
+      "FalNanoBananaVersion",
+      "generateImageWithFalNanoBanana2",
+      "editImageWithFalNanoBanana2",
+      "generateImageWithFalQwenImageMax",
+      "FalQwenImage21Options",
+      "generateImageWithFalQwenImage21",
+      "editImageWithFalQwenImage21",
+      "generateImageWithFalSeedreamV5Lite",
+      "generateImageWithFalWanV27Pro",
+      "editImageWithFalWanV27Pro",
+      "generateImageWithFalGrokImagine",
+      "editImageWithFalGrokImagine",
+      "FalLumaRay2ReframeAspectRatio",
+      "generateVideoWithFalLumaRay2Reframe",
+      "generateVideoWithFalKlingO3",
+      "generateVideoWithFalKlingV3Image",
+      "generateVideoWithFalKlingV3Text",
+      "generateVideoWithFalCreatifyAurora",
+      "generateVideoWithFalGrokImagineI2V",
+      "generateVideoWithFalSeedanceImage",
+      "generateVideoWithFalSeedanceReference",
+      "generateVideoWithFalPixverseC1Reference",
+      "generateVideoWithFalWanV27Text",
+      "generateVideoWithFalWanV27Image",
+      "generateVideoWithFalHappyHorseText",
+      "generateVideoWithFalHappyHorseImage",
+      "FalSeedance25Resolution",
+      "FalSeedance25AspectRatio",
+      "generateVideoWithFalSeedance25Text",
+      "generateVideoWithFalSeedance25Image",
+      "generateVideoWithFalSeedance25Reference",
+      "generateImageWithFalSeedreamV5Pro",
+      "editImageWithFalSeedreamV5Pro",
+      "FalKrea2Variant",
+      "FalKrea2AspectRatio",
+      "generateImageWithFalKrea2",
+      "FalIdeogramRenderingSpeed",
+      "generateImageWithFalIdeogramV4",
+      "FalKrea3Variant",
+      "generateImageWithFalKrea3",
+      "editImageWithFalKrea3",
+      "FalFlux3AspectRatio",
+      "FalFlux3Resolution",
+      "toFlux3Options",
+      "generateImageWithFalFlux3",
+      "editImageWithFalFlux3",
+      "generateImageWithFalFlux3Klein",
+      "editImageWithFalFlux3Klein",
+      "FalImageTo3dEngine",
+      "FalImageTo3dResult",
+      "generate3dWithFalHunyuan3dV3",
+      "generate3dWithFalTrellis2",
+      "generate3dWithFalRodinV25",
+      "FalGptImage25Variant",
+      "FalGptImage25Quality",
+      "generateImageWithFalGptImage25",
+      "editImageWithFalGptImage25",
+      "FalWan30Resolution",
+      "FalWan30AspectRatio",
+      "generateVideoWithFalWan30Text",
+      "generateVideoWithFalWan30Image",
+      "FalFlux3VideoAspectRatio",
+      "FalFlux3VideoResolution",
+      "FalFlux3VideoOptions",
+      "generateVideoWithFalFlux3Text",
+      "generateVideoWithFalFlux3Image",
+      "generateVideoWithFalCatalog"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/falVideoCatalog.ts",
+    "destination": "frontend/src/features/ai-editor/services/falVideoCatalog.ts",
+    "sha256": "717c1a833856c6d4bb85bf45c806dbcf58e89e945195e4d42ae8c31dfdefe96e",
+    "exports": [
+      "FalVideoCatalogEntry",
+      "FAL_VIDEO_CATALOG",
+      "FAL_VIDEO_CATALOG_IDS",
+      "getFalVideoCatalogEntry",
+      "isFalCatalogVideoModel",
+      "pickCatalogAspect",
+      "pickCatalogDuration"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/geminiEmbeddingService.ts",
+    "destination": "frontend/src/features/ai-editor/services/geminiEmbeddingService.ts",
+    "sha256": "4cd2368c7fede3c46c68a23a071d8121ee37032dafa0ce2232987c070098ea95",
+    "exports": [
+      "GEMINI_EMBEDDING_2_MODEL",
+      "isGeminiEmbedding2Configured",
+      "suggestGeminiContextForShot",
+      "suggestGeminiFilmingContextForShot",
+      "reviewGeminiContinuityForRenderedShots"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/geminiModelFallback.test.ts",
+    "destination": "frontend/src/features/ai-editor/services/geminiModelFallback.test.ts",
+    "sha256": "049c0099f0f7675443b786b1fe94c383f7bbfc4d9b2f031e5491aa4406a3b5c6",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/geminiModelFallback.ts",
+    "destination": "frontend/src/features/ai-editor/services/geminiModelFallback.ts",
+    "sha256": "d345982ef36e263413291a9b729cd69ff23017cc31d65ac4acc01f8c45034eb6",
+    "exports": [
+      "isModelNotFoundError",
+      "pickFallbackModel",
+      "withModelFallback"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/geminiService.ts",
+    "destination": "frontend/src/features/ai-editor/services/geminiService.ts",
+    "sha256": "a3d324e7fe81822b7eb6c673934364f2daad036dba34b1e253973a69db51cc37",
+    "exports": [
+      "GEMINI_NANO_BANANA_21_IMAGE_MODEL",
+      "GeminiReferenceImageModel",
+      "rewritePromptForModeration",
+      "matchConceptReferencesForShots",
+      "SetDesignCopilotAction",
+      "interpretSetDesignCommand",
+      "generateVideoWithVeo",
+      "generateImageWithNano",
+      "generateImageWithGemini3Pro",
+      "generateImageWithImagen",
+      "prepareVideoFileDataForGemini",
+      "analyzeFramesWithNeurocinematics",
+      "analyzeAudioPsychoacoustics",
+      "analyzeVideoWithNeurocinematics",
+      "editImage",
+      "relightImageWithGemini3Pro",
+      "analyzeImage",
+      "matchMoodboardImageToConcept",
+      "transcribeAudio",
+      "transcribeVideo",
+      "transcribeAudioWithWordTimings",
+      "runChat",
+      "analyzeScriptQuality",
+      "applyScriptDoctorImprovements",
+      "analyzeAudioRequirements",
+      "analyzeScriptForReferences",
+      "SceneWallChunkAnalysisResult",
+      "analyzeScriptForSceneWallChunk",
+      "generateScript",
+      "generateScriptWithMode",
+      "generateScriptFromImages",
+      "editScriptSelection",
+      "suggestNextPlotPoints",
+      "suggestVisualStyles",
+      "generateProductionGuidelines",
+      "generateReferenceDetails",
+      "generateCharacterProfile",
+      "generateCharacterOutfitPlan",
+      "generateEnvironmentCoveragePlan",
+      "generateShotImagePrompts",
+      "generateExtraShotPrompt",
+      "shouldUsePreviousShotContext",
+      "refineStoryboardPromptForContinuity",
+      "refineFilmingPromptForContinuity",
+      "analyzeProjectDraft",
+      "reviewCinematography",
+      "generateImageWithReferences",
+      "generateMotionPromptForShot",
+      "getAudioSuggestions",
+      "generateSmartScore",
+      "generateMusicPromptForTimeline",
+      "generateSoundEffect",
+      "generateSpeechWithTTS",
+      "suggestColorGrade",
+      "gradeImageFromPrompt",
+      "matchReferenceGrade",
+      "generateMoviePoster",
+      "analyzeTargetAudience",
+      "generateTextWithGemini3Pro",
+      "DirectorContext",
+      "generateViMaxStoryboardSceneByScene",
+      "generateViMaxStoryboard"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/googleModelProvider.ts",
+    "destination": "frontend/src/features/ai-editor/services/googleModelProvider.ts",
+    "sha256": "2a7cc59ed90331588aa411a85b2b2c312f2a2ba4b0fee1db3a0e26b0c826c04e",
+    "exports": [
+      "GoogleModelProvider",
+      "getGoogleModelProvider",
+      "setGoogleModelProvider",
+      "isReplicateGoogleProvider"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/higgsfieldService.ts",
+    "destination": "frontend/src/features/ai-editor/services/higgsfieldService.ts",
+    "sha256": "ec7608f23d60248809716771b4916d455a1bd08ec25957e2676be32a5bcc9410",
+    "exports": [
+      "HIGGSFIELD_API_KEY_STORAGE_KEY",
+      "HIGGSFIELD_BASE_URL",
+      "VIDEO_PROVIDER_PREFERENCE_KEY",
+      "VideoProviderPreference",
+      "getHiggsfieldApiKey",
+      "hasHiggsfieldApiKey",
+      "getVideoProviderPreference",
+      "setVideoProviderPreference",
+      "uploadToHiggsfield",
+      "runHiggsfieldQueue",
+      "HIGGSFIELD_VIDEO_PATHS",
+      "HIGGSFIELD_IMAGE_MODELS",
+      "isHiggsfieldImageModel",
+      "higgsfieldHostsVideoModel",
+      "generateVideoWithHiggsfield",
+      "DOP_ENTRY",
+      "generateImageWithHiggsfield"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/keyStorage.test.ts",
+    "destination": "frontend/src/features/ai-editor/services/keyStorage.test.ts",
+    "sha256": "5df4e13526a475e88a50775c61795a0e3fa37c1cada9505d0b6b4d6cf2d4fe7b",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/keyStorageService.ts",
+    "destination": "frontend/src/features/ai-editor/services/keyStorageService.ts",
+    "sha256": "0baefbd5ba987ec2ab870315e025a46bba35fcab2fd26dde857959695865a0c8",
+    "exports": [
+      "KeyStorageService"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/localAgentsService.ts",
+    "destination": "frontend/src/features/ai-editor/services/localAgentsService.ts",
+    "sha256": "445b5af143dac7ca76ad05a30e2be0a510ecac8de0aa32fded9f5018fccd2e83",
+    "exports": [
+      "LocalAgentId",
+      "LocalAgentInfo",
+      "AcpToolCallUpdate",
+      "LocalAgentEvent",
+      "isLocalAgentsAvailable",
+      "listLocalAgents",
+      "promptLocalAgent",
+      "cancelLocalAgent",
+      "stopLocalAgent",
+      "answerLocalAgentPermission",
+      "openLocalAgentLogin",
+      "onLocalAgentEvent",
+      "registerStudioTools"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/localLlmService.test.ts",
+    "destination": "frontend/src/features/ai-editor/services/localLlmService.test.ts",
+    "sha256": "548c4d83a89a98eb9b68075d1a01d65f5dcc4fcf5b0ceee58ef278af25a4c367",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/localLlmService.ts",
+    "destination": "frontend/src/features/ai-editor/services/localLlmService.ts",
+    "sha256": "3328636367564e4d828275105202446ba74122583631585b329a641093a6b88f",
+    "exports": [
+      "LocalLlmProvider",
+      "LocalLlmConfig",
+      "LOCAL_LLM_DEFAULT_URLS",
+      "getLocalLlmConfig",
+      "setLocalLlmConfig",
+      "onLocalLlmConfigChange",
+      "isLocalLlmReady",
+      "localAiBridge",
+      "LocalHttpResult",
+      "localHttp",
+      "LocalLlmModel",
+      "LocalServerStatus",
+      "probeLocalServer",
+      "detectLocalServers",
+      "listLocalModels",
+      "PullProgress",
+      "pullOllamaModel",
+      "deleteOllamaModel",
+      "RECOMMENDED_LOCAL_LLMS",
+      "LocalLlmUnsupportedError",
+      "geminiSchemaToJsonSchema",
+      "isLocalServable",
+      "buildChatCompletionRequest",
+      "cleanLocalText",
+      "generateContentWithLocalLlm",
+      "shouldUseLocalLlm",
+      "withLocalLlm"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/localModelService.ts",
+    "destination": "frontend/src/features/ai-editor/services/localModelService.ts",
+    "sha256": "188a1495ce9c7c2afaa61ee8e1a2f016358da9c868988e57232d831210ad8263",
+    "exports": [
+      "LocalModelSettings",
+      "getLocalModelSettings",
+      "setLocalModelSettings",
+      "getComfyBaseUrl",
+      "DownloadProgressEvent",
+      "localModelsBridge",
+      "isLocalModelDownloadAvailable",
+      "getLocalModel",
+      "modelFilePath",
+      "requiredFiles",
+      "modelDownloadSize",
+      "ModelInstallState",
+      "checkModelInstalled",
+      "ModelDownloadProgress",
+      "downloadLocalModel",
+      "cancelLocalModelDownload",
+      "isLocalModelDownloading",
+      "removeLocalModel",
+      "findMissingNodes",
+      "runLocalModel"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/localSetupService.ts",
+    "destination": "frontend/src/features/ai-editor/services/localSetupService.ts",
+    "sha256": "2dc4d9d07f888d6731098018e23298ae912f6811b15bc6ad960a2e8a3f5b375e",
+    "exports": [
+      "LocalServiceId",
+      "LocalServiceStatus",
+      "LOCAL_SERVICE_GUIDE",
+      "detectLocalServices",
+      "getPreferredImageModel",
+      "setPreferredImageModel"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/localWorkflowFill.test.ts",
+    "destination": "frontend/src/features/ai-editor/services/localWorkflowFill.test.ts",
+    "sha256": "9f04500ef8d25fa9240e1982684aba7c01ec20184dda2befa0ace65732c5afc9",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/localWorkflowFill.ts",
+    "destination": "frontend/src/features/ai-editor/services/localWorkflowFill.ts",
+    "sha256": "cb334c38bfed47dfd09f2df5942308980aadb38218e787eb25a389a819f644de",
+    "exports": [
+      "LocalRunOptions",
+      "sizeForAspect",
+      "videoSizeForAspect",
+      "fillWorkflow"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/lookAgentService.ts",
+    "destination": "frontend/src/features/ai-editor/services/lookAgentService.ts",
+    "sha256": "9aa3c13157b6a6f223bce9195fdd7e7e29d54b9921ec56e692f1bee211289d15",
+    "exports": [
+      "LookAgentToolId",
+      "LookAgentProvider",
+      "LookAgentReferenceImage",
+      "LookAgentRunParams",
+      "LookAgentRunResult",
+      "resolveLookAgentSource",
+      "analyzeImageAsset",
+      "runLookAgentTool"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/ltxService.test.ts",
+    "destination": "frontend/src/features/ai-editor/services/ltxService.test.ts",
+    "sha256": "24a9a3b7a3e51df47b6d46fae8c89474ad7fbebafb460d7886f384656f28779e",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/ltxService.ts",
+    "destination": "frontend/src/features/ai-editor/services/ltxService.ts",
+    "sha256": "1b3233081fb9dabfd16a3ee5e48e0a3d682567b79a887f8c6c90e5b7b6afba78",
+    "exports": [
+      "LTX_API_BASE_URL",
+      "LTX_VIDEO_TO_VIDEO_HDR_ENDPOINT",
+      "LTX_VIDEO_TO_VIDEO_HDR_MODEL",
+      "LTX_API_KEY_STORAGE_KEY",
+      "getLtxApiKeyOptional",
+      "hasLtxApiKey",
+      "toLtxVideoUri",
+      "createLtxVideoToVideoHdrClient",
+      "upscaleVideoToAcesHdrWithLtx"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/machgenModels.test.ts",
+    "destination": "frontend/src/features/ai-editor/services/machgenModels.test.ts",
+    "sha256": "b5156dd35806a0bc11cf17e02547388462719151d9e580ec07dc73373bd6e359",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/machgenModels.ts",
+    "destination": "frontend/src/features/ai-editor/services/machgenModels.ts",
+    "sha256": "d1b16cd4896ba52ad89c41eb3bb2bf3c620aaaab23415ca3a7e693aaf01231a6",
+    "exports": [
+      "MachgenVideoModelId",
+      "MachgenImageModelId",
+      "MachgenVideoSpec",
+      "MACHGEN_VIDEO_MODELS",
+      "nearestOption",
+      "MachgenVideoRequestOptions",
+      "buildMachgenVideoInput",
+      "machgenReferenceLimit"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/machgenService.ts",
+    "destination": "frontend/src/features/ai-editor/services/machgenService.ts",
+    "sha256": "28b2efe388502d54f7c1abbd8fa79b58015bc778b6eacf7affa02b3c7c377a52",
+    "exports": [
+      "MACHGEN_API_KEY_STORAGE_KEY",
+      "getMachgenApiKey",
+      "uploadToMachgen",
+      "runMachgenTask",
+      "MachgenVideoOptions",
+      "generateVideoWithMachgen",
+      "generateImageWithMachgen"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/mediaSourceService.ts",
+    "destination": "frontend/src/features/ai-editor/services/mediaSourceService.ts",
+    "sha256": "7b031192a407315416f6cea713d216e62902a8b4a3508fdf3ebae0a18ac42358",
+    "exports": [
+      "registerMediaFile",
+      "getRegisteredMediaFile",
+      "unregisterMediaFile"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/midjourneyAgentService.ts",
+    "destination": "frontend/src/features/ai-editor/services/midjourneyAgentService.ts",
+    "sha256": "77a8f65bfa38b93a9561e38811858679b33489542f863f2322a912572d6bec0d",
+    "exports": [
+      "MidjourneyRefRole",
+      "MidjourneyReference",
+      "MidjourneyStatus",
+      "MIDJOURNEY_CONCURRENCY_KEY",
+      "MIDJOURNEY_CONCURRENCY_DEFAULT",
+      "getMidjourneyConcurrency",
+      "setMidjourneyConcurrency",
+      "MidjourneyJobEvent",
+      "isMidjourneyAgentAvailable",
+      "getMidjourneyStatus",
+      "connectMidjourney",
+      "disconnectMidjourney",
+      "toggleMidjourneyWindow",
+      "cancelMidjourneyJob",
+      "onMidjourneyEvent",
+      "generateImagesWithMidjourney"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/moodboardResearchService.ts",
+    "destination": "frontend/src/features/ai-editor/services/moodboardResearchService.ts",
+    "sha256": "3e787ee47408a4a86ad718058a38963d93b7fe72521540b1fedf11fd765354f1",
+    "exports": [
+      "MoodboardResearchImage",
+      "isLikelyVideoUrl",
+      "searchWikimediaCommonsImages",
+      "resolveImageFromWebUrl",
+      "extractFramesFromVideoUrl"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/notebookLMService.ts",
+    "destination": "frontend/src/features/ai-editor/services/notebookLMService.ts",
+    "sha256": "21ab86eab65155eef81684af0241dac82784dab653646b11e1b2cf58cb18b99e",
+    "exports": [
+      "Notebook",
+      "NotebookLMService",
+      "notebookLMService"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/pdfParsingService.ts",
+    "destination": "frontend/src/features/ai-editor/services/pdfParsingService.ts",
+    "sha256": "932c8ac3d580fa0c12e8a6b21bce15d426fc7615943a89df3e659b01ec15a1e8",
+    "exports": [
+      "parsePdfScript",
+      "PdfImageExtraction",
+      "extractPdfPageImages"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/pluginService.ts",
+    "destination": "frontend/src/features/ai-editor/services/pluginService.ts",
+    "sha256": "119b5cac110ab96fa32df32600e157004edd98b62d5aefbbcaf895dd8a4bd4eb",
+    "exports": [
+      "PluginAssetKind",
+      "PluginAsset",
+      "PluginRecord",
+      "PluginManifest",
+      "INSTALLED_PLUGINS_STORAGE_KEY",
+      "PLUGIN_EVENT",
+      "FEATURED_PLUGINS",
+      "subscribePlugins",
+      "loadInstalledPlugins",
+      "getInstalledPluginLuts",
+      "removePlugin",
+      "setPluginEnabled",
+      "parseGitHubUrl",
+      "PluginPreview",
+      "inspectGitHubPlugin",
+      "installPlugin",
+      "updatePlugin"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/presetService.ts",
+    "destination": "frontend/src/features/ai-editor/services/presetService.ts",
+    "sha256": "7802e27bf6ac7fa0d0fe4cc12748f1cd9ca5bdf1c103fb8af1b1badd5e81b1a8",
+    "exports": [
+      "Preset",
+      "usePresets",
+      "PRESET_KEYS"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/projectAssetService.ts",
+    "destination": "frontend/src/features/ai-editor/services/projectAssetService.ts",
+    "sha256": "8b19fcf315d930d4e2cdb5e7042d8a490e5f76ab993c17da17c6b9d2a72f1c36",
+    "exports": [
+      "collectAssetPathsFromProjectJson"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/projectResearchService.ts",
+    "destination": "frontend/src/features/ai-editor/services/projectResearchService.ts",
+    "sha256": "45c7460af0def1713b47cb130a87c5c136e365eff048582739b741a6f5b3343b",
+    "exports": [
+      "getProjectResearchModeLabel",
+      "buildSuggestedResearchQuery",
+      "runProjectResearch",
+      "buildProjectResearchBriefMarkdown",
+      "buildProjectResearchPitchDeckMarkdown"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/projectService.ts",
+    "destination": "frontend/src/features/ai-editor/services/projectService.ts",
+    "sha256": "8d2d3ff08ac45add31b0af83ccb6481275253e4b6af5bc975738c440bc036565",
+    "exports": [
+      "selectProjectFolder",
+      "selectProjectFile",
+      "statProjectFile",
+      "statProjectAsset",
+      "readProjectBinaryFile",
+      "writeProjectBinaryFile",
+      "collectMediaIntoProject",
+      "readProjectMetaFile",
+      "writeProjectMetaFile",
+      "deleteProjectMetaFile",
+      "probeProjectFolder",
+      "initializeProjectFolder",
+      "saveProjectToFolder",
+      "loadProjectFromFolder",
+      "openProjectFolder"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/promptModeration.test.ts",
+    "destination": "frontend/src/features/ai-editor/services/promptModeration.test.ts",
+    "sha256": "4e109b9ac93f80a20f9c01490a3eabf10b561afd55ed1b15606ff9bc49b8e43c",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/promptModeration.ts",
+    "destination": "frontend/src/features/ai-editor/services/promptModeration.ts",
+    "sha256": "65c3f906f7ea17f812b1fdc5675811bb717d95da3668c362b620c9f8f78e658f",
+    "exports": [
+      "MODERATION_ERROR_PREFIX",
+      "isModerationError",
+      "splitPromptParams",
+      "softenPromptForModeration"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/promptStyle.test.ts",
+    "destination": "frontend/src/features/ai-editor/services/promptStyle.test.ts",
+    "sha256": "8398319d82d3f53f085e16b900b3ed0d673d696d82a158007c07a7194924f7dc",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/promptStyle.ts",
+    "destination": "frontend/src/features/ai-editor/services/promptStyle.ts",
+    "sha256": "b9c3d16c1d9017b5bba0a9c7033650043bbeadd831a4c9998622da054c9587e8",
+    "exports": [
+      "PromptKind",
+      "PromptFamily",
+      "PromptSlot",
+      "AdaptContext",
+      "resolvePromptFamily",
+      "classifyChunk",
+      "splitPrompt",
+      "adaptPromptForModel",
+      "promptStyleGuide"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/realtimeCollaborationService.ts",
+    "destination": "frontend/src/features/ai-editor/services/realtimeCollaborationService.ts",
+    "sha256": "44e1bdf7ca6e9dbcd35b6914086298b4dfc82688eb8fd685666b7a936aa321d6",
+    "exports": [
+      "ProjectRealtimeSessionCallbacks",
+      "ProjectRealtimeStatus",
+      "ProjectRealtimeSession",
+      "createProjectRealtimeSession"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/replicateService.ts",
+    "destination": "frontend/src/features/ai-editor/services/replicateService.ts",
+    "sha256": "e828eafafc6d75a34842eb7542103e5d538a443445d431239bb495e9450f433d",
+    "exports": [
+      "generateTextWithGemini3ProReplicate",
+      "generateTextWithGpt5NanoReplicate",
+      "generateSpeechWithMinimax",
+      "generateMusicWithLyria2",
+      "generateImageWithRunwayGen4Turbo",
+      "generateDepthMapWithDpt",
+      "removeBackgroundWithRembg",
+      "restoreFaceWithGfpgan",
+      "restoreFaceWithRestoreFormer",
+      "interpolateVideoWithRife",
+      "separateAudioWithDemucs",
+      "generateImageWithControlNet",
+      "generateImageWithControlNetScribble",
+      "generateImageWithControlNetNormal",
+      "generateModelWithRodin",
+      "generateImageWithFlux",
+      "generateImageWithFluxKlein",
+      "generateImageWithFlux2Turbo",
+      "generateImageWithZTurbo",
+      "generateImageWithZImage",
+      "generateImageWithZTurboImg2Img",
+      "generateImageWithGptImage15",
+      "generateImageWithGemini3ProReplicate",
+      "generateImageWithNanoBananaPro",
+      "generateImageWithGemini3ProReplicateOnly",
+      "generateImageWithQwenImage",
+      "generateImageWithSeedream",
+      "generateImageWithSeedreamReferences",
+      "generateImageWithWan27ImagePro",
+      "inpaintWithNanoBanana",
+      "inpaintWithFlux2Pro",
+      "inpaintWithZTurboInpaint",
+      "upscaleImage",
+      "upscaleImageWithCrystal",
+      "upscaleImageWithClarity",
+      "upscaleImageWithTopaz",
+      "upscaleVideoWithCrystal",
+      "upscaleVideoWithTopaz",
+      "editImageWithFlux",
+      "editImageWithQwen",
+      "editImageWithFireRed",
+      "relightImageWithReplicate",
+      "editImageWithQwenMultiAngle",
+      "generateVideoWithVeoReplicate",
+      "generateVideoWithWanI2V",
+      "generateVideoWithSeedance",
+      "generateVideoWithWanAnimateReplace",
+      "generateVideoWithOmniHuman",
+      "generateVideoWithKling26",
+      "generateVideoWithKling",
+      "generateVideoWithKlingMotionControl",
+      "generateOpenPose",
+      "generateVideoWithLtx",
+      "generateVideoWithLtx23Fast",
+      "generateVideoWithLtx23Pro",
+      "generateVideoWithLtxAudioToVideo",
+      "generateVideoWithPVideo",
+      "ReplicateLoraTraining",
+      "startFastFluxLoraTraining",
+      "getReplicateTraining"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/runwayService.ts",
+    "destination": "frontend/src/features/ai-editor/services/runwayService.ts",
+    "sha256": "b60141f6812bea53282cf515ff2c46cf8c719f52d3f34f1621ca953fa432c81f",
+    "exports": [
+      "RUNWAY_API_BASE_URL",
+      "RUNWAY_API_VERSION",
+      "RUNWAY_API_KEY_STORAGE_KEY",
+      "RUNWAY_RUBY_MODEL",
+      "RunwayRubyOutputFormat",
+      "RunwayRubyProresProfile",
+      "RUNWAY_RUBY_OUTPUT_FORMATS",
+      "getRunwayApiKeyOptional",
+      "hasRunwayApiKey",
+      "toRunwayVideoUri",
+      "RunwayRubyInput",
+      "submitRunwayRubyJob",
+      "getRunwayTask",
+      "waitForRunwayTask",
+      "convertVideoToHdrWithRunwayRuby"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/setDesignAIMutationService.ts",
+    "destination": "frontend/src/features/ai-editor/services/setDesignAIMutationService.ts",
+    "sha256": "423c65e6e437ca9b75f6a513fdeb973b2cc76b2e48efce24747e8fb470f9fb95",
+    "exports": [
+      "SetDesignMutation",
+      "generateSetMutations"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/sketchfabService.ts",
+    "destination": "frontend/src/features/ai-editor/services/sketchfabService.ts",
+    "sha256": "092fd0618f531a4feb128719efa43ab78cfb6c3eadd71ced2ce9a6c917108181",
+    "exports": [
+      "SketchfabModel",
+      "SketchfabSearchResponse",
+      "searchSketchfabModels",
+      "getSketchfabDownloadUrl"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/sonautoService.ts",
+    "destination": "frontend/src/features/ai-editor/services/sonautoService.ts",
+    "sha256": "dd7b6451820445af0f0f1040ad467801fb78c7dbb55a9e29c94fc0fb82c211db",
+    "exports": [
+      "SonautoGenerateMusicOptions",
+      "hasSonautoApiKey",
+      "generateMusicWithSonauto"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/soniloService.test.ts",
+    "destination": "frontend/src/features/ai-editor/services/soniloService.test.ts",
+    "sha256": "7573746fb7f4d9f8d8b327266cfa36c2524e1ed556e315daaa57e2eff669d265",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/soniloService.ts",
+    "destination": "frontend/src/features/ai-editor/services/soniloService.ts",
+    "sha256": "cdf9c5b2c38da1c31df7bd706cb7aeccbf41c06f7f5fe0a28810368d8254b7ed",
+    "exports": [
+      "SONILO_API_BASE_URL",
+      "SONILO_VIDEO_TO_MUSIC_PATH",
+      "SONILO_VIDEO_TO_MUSIC_MODEL",
+      "SONILO_VIDEO_TO_SFX_PATH",
+      "SONILO_TASKS_PATH",
+      "SONILO_VIDEO_TO_SFX_MODEL",
+      "SONILO_API_KEY_STORAGE_KEY",
+      "SONILO_API_KEYS_URL",
+      "SONILO_MAX_VIDEO_DURATION_SECONDS",
+      "SONILO_SFX_MAX_VIDEO_DURATION_SECONDS",
+      "SONILO_TASK_POLL_INTERVAL_MS",
+      "SONILO_TASK_POLL_TIMEOUT_MS",
+      "SoniloVideoToMusicInput",
+      "SoniloVideoToSfxInput",
+      "getSoniloApiKeyOptional",
+      "hasSoniloApiKey",
+      "createSoniloVideoToMusicClient",
+      "generateMusicFromVideoWithSonilo",
+      "createSoniloVideoToSfxClient",
+      "generateSfxFromVideoWithSonilo"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/studioAgentTaskService.ts",
+    "destination": "frontend/src/features/ai-editor/services/studioAgentTaskService.ts",
+    "sha256": "5606a42ec3ffe34bb0e25ae74567f20ca11b754e38c90a7198fa5342ac3d7269",
+    "exports": [
+      "buildStudioAgentProjectRunTask",
+      "getNextStudioAgentTaskStep",
+      "patchStudioAgentTaskStep",
+      "patchStudioAgentTask",
+      "summarizeStudioAgentTask"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/studioAuth.ts",
+    "destination": "frontend/src/features/ai-editor/services/studioAuth.ts",
+    "sha256": "b81122499e9afb675aa960862b8b2248899ba3851ebb9b1c664ebb107dcd371b",
+    "exports": [
+      "StudioAuthUser",
+      "resolveStudioUser",
+      "loginWithEmail",
+      "loginWithProvider",
+      "logoutStudio",
+      "onStudioAuthChange"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/studioAutomationService.ts",
+    "destination": "frontend/src/features/ai-editor/services/studioAutomationService.ts",
+    "sha256": "46db433b49787eb8cda648d779f7a3a4fc42b398e04525a9d4c325201e156987",
+    "exports": [
+      "STUDIO_AGENT_CAPABILITIES",
+      "getStudioAgentCapability",
+      "buildStudioAgentSystemPrompt",
+      "summarizeStudioAgentSnapshot"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/subscriptionService.ts",
+    "destination": "frontend/src/features/ai-editor/services/subscriptionService.ts",
+    "sha256": "10ac9debae2ed377afc04135b5b58576229c45eaaa8304f8b59c22632167e630",
+    "exports": [
+      "subscriptionService"
+    ],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/services/surfaceMapService.ts",
+    "destination": "frontend/src/features/ai-editor/services/surfaceMapService.ts",
+    "sha256": "610492500a82a91c4c2840ea9f6f92178ef31d40e93b8526972253ac8eb692ed",
+    "exports": [
+      "SurfaceMapStatus",
+      "SurfaceMapPayload",
+      "SurfaceMapOptions",
+      "SurfaceMapResult",
+      "getSurfaceMapStatus",
+      "setupSurfaceMapEnvironment",
+      "runSurfaceMap"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/taskCenter.ts",
+    "destination": "frontend/src/features/ai-editor/services/taskCenter.ts",
+    "sha256": "b0bc8c2894f3d24c355c72371ac577666ce0d09c556a5709b7cd6375cee003b4",
+    "exports": [
+      "TaskKind",
+      "TaskStatus",
+      "TaskRecord",
+      "TaskHandle",
+      "startTask",
+      "trackTask",
+      "subscribeTasks",
+      "getTasks",
+      "dismissTask",
+      "clearFinishedTasks",
+      "estimateProgress",
+      "summarizeTasks"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/unsplashService.test.ts",
+    "destination": "frontend/src/features/ai-editor/services/unsplashService.test.ts",
+    "sha256": "cfdfa86c33110d90e795fbcf06dd0008ac37dba42138ba9651116759dc9554b5",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/unsplashService.ts",
+    "destination": "frontend/src/features/ai-editor/services/unsplashService.ts",
+    "sha256": "c1afc536ac008ccde17ce92a089a5ba90020788b353553485373c2b5b0b53baa",
+    "exports": [
+      "UNSPLASH_ACCESS_KEY_STORAGE_KEY",
+      "UNSPLASH_APP_UTM_SOURCE",
+      "UnsplashOrientation",
+      "UnsplashApiPhoto",
+      "UnsplashStockAsset",
+      "getUnsplashAccessKey",
+      "hasUnsplashAccessKey",
+      "setUnsplashAccessKey",
+      "buildUnsplashUtmUrl",
+      "buildUnsplashSearchUrl",
+      "mapUnsplashPhotoToStockAsset",
+      "searchUnsplashPhotos",
+      "trackUnsplashDownload",
+      "buildUnsplashMediaItem"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/videoCatalogRouter.ts",
+    "destination": "frontend/src/features/ai-editor/services/videoCatalogRouter.ts",
+    "sha256": "84f265107ce60dd102095319b49877ac436b489cb73cb1e38929a5950b0b4407",
+    "exports": [
+      "CatalogVideoOptions",
+      "resolveCatalogProvider",
+      "generateCatalogVideo"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/videoIngestService.ts",
+    "destination": "frontend/src/features/ai-editor/services/videoIngestService.ts",
+    "sha256": "e6a927c7a1d0b99a38537e34f9b3f15a97e309fb6abc06151d31a35a5ca87423",
+    "exports": [
+      "inferImportedMediaType",
+      "shouldCreateDesktopVideoProxy",
+      "prepareDesktopVideoForEditing"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/worldLabsService.ts",
+    "destination": "frontend/src/features/ai-editor/services/worldLabsService.ts",
+    "sha256": "2cbd4597bf59d3131a3264c76cb0ca35cfb7165ad6d871fba3642df4cc08aa35",
+    "exports": [
+      "MARBLE_MODELS",
+      "MarbleModel",
+      "WorldPromptType",
+      "TextPromptInput",
+      "ImageSource",
+      "ImagePromptInput",
+      "MultiImageItem",
+      "MultiImagePromptInput",
+      "VideoPromptInput",
+      "WorldPrompt",
+      "WorldAssets",
+      "GeneratedWorld",
+      "OperationProgress",
+      "WorldOperation",
+      "MediaAsset",
+      "UploadInfo",
+      "PrepareUploadResponse",
+      "setWorldLabsApiKey",
+      "hasWorldLabsApiKey",
+      "generateWorld",
+      "waitForOperation",
+      "getWorld",
+      "prepareUpload",
+      "uploadFile",
+      "generateWorldFromText",
+      "generateWorldFromImageUrl",
+      "generateWorldFromImageFile",
+      "generateWorldFromMultiImage",
+      "generateWorldFromImageViews",
+      "generateWorldFromVideoUrl",
+      "getWorldAssetUrls"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/worldModelProviderRegistry.test.ts",
+    "destination": "frontend/src/features/ai-editor/services/worldModelProviderRegistry.test.ts",
+    "sha256": "9b920e66fa4ed9da346fe6bd3bd395bd995a110839d31d9714bb156056967f71",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/worldModelProviderRegistry.ts",
+    "destination": "frontend/src/features/ai-editor/services/worldModelProviderRegistry.ts",
+    "sha256": "f970ccfbe33eff1c79dc7880f55902f2fc5f3ea8a40a789d66ecc6643b2b823e",
+    "exports": [
+      "WorldModelProviderId",
+      "WorldModelInputType",
+      "WorldModelId",
+      "LegacyWorldModelId",
+      "AnyWorldModelId",
+      "WorldModelProviderOption",
+      "WorldModelOption",
+      "WORLD_MODEL_PROVIDERS",
+      "DEFAULT_WORLD_PROVIDER_ID",
+      "DEFAULT_WORLD_MODEL_ID",
+      "WORLD_MODEL_OPTIONS",
+      "normalizeWorldModelId",
+      "getWorldModelOption",
+      "getWorldModelLabel",
+      "getWorldModelGeneratedBy",
+      "getWorldModelOptionsForProvider",
+      "isWorldModelSupportedInput"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services/xaiService.ts",
+    "destination": "frontend/src/features/ai-editor/services/xaiService.ts",
+    "sha256": "3f9f5c3eff444f7d18749c30957fbb7fe8e0e8eef0d07aadbd1f7fe3708389f9",
+    "exports": [
+      "GROK_IMAGE_MODEL",
+      "GROK_VIDEO_MODEL",
+      "generateImageWithGrok",
+      "generateVideoWithGrok"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/services.tsx",
+    "destination": "frontend/src/features/ai-editor/services.tsx",
+    "sha256": "5b5e52b17e6a673edd22c44c1cd7af69e8a2ace5286234fe067139fa65ee5df8",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/software.tsx",
+    "destination": "frontend/src/features/ai-editor/software.tsx",
+    "sha256": "7463d5a1102d72243a98ce38861ea3ebd451d3b3398d79dfd5f740a12336b5ae",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/types/supabase.ts",
+    "destination": "frontend/src/features/ai-editor/types/supabase.ts",
+    "sha256": "f25556e3190e81d24e7bc1019f3b184ae2cb04ec4c45e1879629b4bfb49ba875",
+    "exports": [
+      "Json",
+      "Database"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/types.ts",
+    "destination": "frontend/src/features/ai-editor/types.ts",
+    "sha256": "7b1c4e4eb22cc8ef8de116206b34d93531dcb43a04fc5330fb2a621b670dc991",
+    "exports": [
+      "Workspace",
+      "NeurocinematicsAnalysisResult",
+      "AudioPsychoacousticsResult",
+      "TimelineTrack",
+      "FilmLutId",
+      "LutId",
+      "CubeLut",
+      "ClipFilters",
+      "MediaItem",
+      "DesignCanvasPreset",
+      "DesignElementKind",
+      "DesignShapeKind",
+      "DesignCanvasElement",
+      "DesignCanvasState",
+      "SetDesignTransform",
+      "SetDesignAsset",
+      "SetDesignLight",
+      "SetDesignGrid",
+      "SetDesignCamera",
+      "SetDesignCameraKeyframe",
+      "SetDesignCameraPath",
+      "SetDesignState",
+      "WorldGenerationProvider",
+      "WorldGenerationModel",
+      "WorldGenerationSource",
+      "WorldGenerationAssets",
+      "WorldGenerationEntry",
+      "WorldGenerationState",
+      "AvatarProfile",
+      "Keyframe",
+      "TitleMotionPreset",
+      "SubtitleWordTiming",
+      "KenBurnsConfig",
+      "TimelineClip",
+      "Effect",
+      "ClipEffectLayer",
+      "EffectStackPreset",
+      "Transition",
+      "EditPlanFindingSeverity",
+      "EditPlanTextPosition",
+      "EditPlanFinding",
+      "EditPlanOperation",
+      "EditPlan",
+      "EditPlanApplyResult",
+      "EditPlanOperationPreviewStatus",
+      "EditPlanClipSnapshot",
+      "EditPlanOperationPreview",
+      "EditPlanPreview",
+      "AgentApplyBatchSummary",
+      "ScriptAnalysisResult",
+      "ScriptLength",
+      "ProjectCollaboratorRole",
+      "ProjectCollaborator",
+      "ProjectChatAttachment",
+      "ProjectChatMessage",
+      "ProjectChatThread",
+      "ProjectMeetingProvider",
+      "ProjectMeetingLink",
+      "ProjectStorageProvider",
+      "ProjectStorageLink",
+      "ProjectCollaboration",
+      "ProjectSyncProvider",
+      "ProjectSyncConfig",
+      "ProjectCollaborationPresenceStatus",
+      "ProjectCollaborationPresence",
+      "ProjectRealtimeEventType",
+      "ProjectRealtimeActor",
+      "ProjectRealtimeEnvelope",
+      "ProjectCollaborativeLockScope",
+      "ProjectCollaborativeLock",
+      "CollaborativeSelectionState",
+      "CollaborativeStoryboardShot",
+      "CollaborativeTimelineClip",
+      "CollaborativeTimelineDoc",
+      "CollaborativeReviewThread",
+      "CollaborativeProjectDoc",
+      "StudioAgentCapabilityRisk",
+      "StudioAgentPolicy",
+      "StudioAgentControlMode",
+      "StudioAgentApprovalMode",
+      "StudioAgentCapabilityScope",
+      "StudioAgentCapabilityInputType",
+      "StudioAgentCapabilityId",
+      "StudioAgentCapabilityInput",
+      "StudioAgentCapability",
+      "StudioAgentApprovalRequest",
+      "StudioAgentApprovalBundle",
+      "StudioNodeCapability",
+      "StudioAgentTaskStep",
+      "ResearchProvider",
+      "ResearchHit",
+      "ProjectResearchMode",
+      "ProjectPitchDeckSlide",
+      "ResearchSourceLink",
+      "ProjectResearchReport",
+      "StudioAgentTask",
+      "StudioAgentSnapshot",
+      "WorldbuildingMapRegionKind",
+      "WorldbuildingMapRegion",
+      "WorldbuildingFaction",
+      "WorldbuildingEnvironment",
+      "WorldbuildingGlossaryEntry",
+      "WorldbuildingState",
+      "StoryBible",
+      "StyleReference",
+      "ReferenceItem",
+      "ChatMessage",
+      "ProductionStep",
+      "WaveformCache",
+      "ShotContextReference",
+      "ShotContinuityIssue",
+      "ShotContinuityReview",
+      "GarmentCategory",
+      "OutfitGarmentPiece",
+      "CharacterAgeVariant",
+      "CharacterOutfit",
+      "AnglePresetSelection",
+      "AngleMetadata",
+      "RelightSettings",
+      "CreativeDNADirectorMode",
+      "CreativeDNAEmotionalVector",
+      "CreativeDNAPacingMode",
+      "CreativeDNACharacterEnergy",
+      "CreativeDNACameraBehavior",
+      "CreativeDNAEditRhythm",
+      "CreativeDNALightingIntent",
+      "CreativeDNAProfile",
+      "CreativeDNASceneOverride",
+      "CreativeDNAShotOverride",
+      "ShotPrompt",
+      "RecentProject",
+      "NodeGraphViewport",
+      "NodeGraphNode",
+      "NodeGraphEdge",
+      "NodeGraphState",
+      "ReviewFeedback",
+      "AgentReviewPassResult",
+      "CinematographyCritique",
+      "AudioScoreRequest",
+      "AudioCue",
+      "ScriptQualityReport",
+      "ScriptRevision",
+      "ScriptDoctorImprovement",
+      "User",
+      "Theme",
+      "ShortcutAction",
+      "ShortcutMap",
+      "UserProfile",
+      "ReviewSetStatus",
+      "ReviewVariantType",
+      "ReviewDecisionStatus",
+      "ReviewTaskStatus",
+      "ReviewSet",
+      "ReviewVariant",
+      "ReviewComment",
+      "ReviewDecision",
+      "ReviewTask",
+      "ReviewData",
+      "NamingTemplate",
+      "DirectorFeedback",
+      "ChangeRequest",
+      "ShotTask",
+      "ShotAnnotation",
+      "UsageProvider",
+      "UsageKind",
+      "UsageUnit",
+      "UsageEntry",
+      "UsageLedger",
+      "CostRate",
+      "CostLineItem",
+      "CostSettings",
+      "SubscriptionPlan",
+      "BillingProfile",
+      "Invoice",
+      "ElectronProjectApi",
+      "DirectorShot",
+      "DirectorTreatment",
+      "DirectorSceneSelectionScope",
+      "DirectorStoryboardSnapshot",
+      "SceneMapElementType",
+      "SceneMapElement",
+      "SceneMapScene",
+      "SceneMapViewport",
+      "SceneMapState",
+      "SceneWallReel",
+      "SceneWallShotCard",
+      "SceneWallSceneCard",
+      "SceneWallState",
+      "ExtraAssetCategory",
+      "ExtraAsset",
+      "ExtraAssetsState"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/appHistoryDomain.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/appHistoryDomain.test.ts",
+    "sha256": "fc7741b5ba928762e0aafcf3c7de9c929ae25d363b354c6dc70dd00381ecd735",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/appHistoryDomain.ts",
+    "destination": "frontend/src/features/ai-editor/utils/appHistoryDomain.ts",
+    "sha256": "eada53168bd8bf3ecf024eb22aaa8931879f1885055fc4eaca00c6ee1ebede7b",
+    "exports": [
+      "AppHistoryDomain",
+      "selectAppHistoryDomain"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/artRelight.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/artRelight.test.ts",
+    "sha256": "9a4c2a73741ee7a77fc7a3e610e7ddf3964c687bddce4c1ba4c59c4a47e41cf6",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/artRelight.ts",
+    "destination": "frontend/src/features/ai-editor/utils/artRelight.ts",
+    "sha256": "6f4b6815138d38f05556473722a134b74fdbffc52c4813f10be3f082bd8fbaf9",
+    "exports": [
+      "ArtRelightBlendMode",
+      "ArtRelightSurfaceMode",
+      "ArtRelightSettings",
+      "ArtRelightPixelBuffer",
+      "ArtRelightTint",
+      "ArtRelightOptions",
+      "DEFAULT_ART_RELIGHT_SETTINGS",
+      "normalizeArtRelightSettings",
+      "normalizeArtRelightSurfaceMode",
+      "getArtRelightTint",
+      "relightPixelBuffer"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/autoCutLocal.ts",
+    "destination": "frontend/src/features/ai-editor/utils/autoCutLocal.ts",
+    "sha256": "63e284ac7a173911f87ddc5fa87afd5125db9d93012418e7d9f783b5fb35e220",
+    "exports": [
+      "SilenceOptions",
+      "SceneOptions",
+      "LocalSegment",
+      "LocalAnalysis",
+      "DEFAULT_FILLER_WORDS",
+      "computeLoudnessEnvelope",
+      "detectSpeechSegments",
+      "detectSceneSegments",
+      "FillerWordOptions",
+      "buildCleanSpeechSegments",
+      "extractAudioAsWav"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/colorGrading.ts",
+    "destination": "frontend/src/features/ai-editor/utils/colorGrading.ts",
+    "sha256": "ff86e518bf5539d24c567cb868d5c6b579d0cc2b17694c05e10ccb9a66c01fdd",
+    "exports": [
+      "FILM_LUTS",
+      "LOOK_PRESETS",
+      "DEFAULT_FILTERS",
+      "normalizeFilters",
+      "buildFilterString",
+      "getGrainStrength",
+      "getHalationStrength",
+      "getBloomStrength",
+      "getVignetteStrength"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/colorWheels.ts",
+    "destination": "frontend/src/features/ai-editor/utils/colorWheels.ts",
+    "sha256": "e5354844b264ed92b4e2e677bfcd4a0466b2f8d580900dee7287653220e0e1ba",
+    "exports": [
+      "ColorWheelValue",
+      "ColorWheelGrade",
+      "DEFAULT_COLOR_WHEEL_GRADE",
+      "isNeutralColorWheelGrade",
+      "wheelToRgb",
+      "gradeColor",
+      "buildCubeLutFromGrade",
+      "serializeGradeAsCube",
+      "ColorWheelPreset",
+      "COLOR_WHEEL_PRESETS",
+      "applyColorWheelPreset",
+      "computeScopes"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/compositingNodeStudio.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/compositingNodeStudio.test.ts",
+    "sha256": "174f805939194a98de8fabf921ce6f362041772d457996f96b1266747ac77535",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/compositingNodeStudio.ts",
+    "destination": "frontend/src/features/ai-editor/utils/compositingNodeStudio.ts",
+    "sha256": "337d1ff330552c1a68504bbfef3064957ddbf68df49de5d66e63f8082788fe78",
+    "exports": [
+      "CompositingWorkspaceView",
+      "CompositingWorkspaceViewOption",
+      "NodeStudioEffect",
+      "NodeStudioEffectGroup",
+      "NodeStudioTimelineTrack",
+      "NodeStudioPaletteViewMode",
+      "NodeStudioPaletteViewModeOption",
+      "NodeStudioResizablePanel",
+      "NodeStudioPreviewPlan",
+      "NodeStudioRenderSummaryInput",
+      "NodeStudioRenderSummary",
+      "NODE_STUDIO_PALETTE_VIEW_MODES",
+      "NODE_STUDIO_PANEL_LIMITS",
+      "NODE_STUDIO_GRAPH_HEIGHT_LIMITS",
+      "clampNodeStudioPanelWidth",
+      "clampNodeStudioGraphHeight",
+      "COMPOSITING_WORKSPACE_VIEWS",
+      "NODE_STUDIO_EFFECT_GROUPS",
+      "NODE_STUDIO_TIMELINE_TRACKS",
+      "getNodeStudioEffectCount",
+      "buildNodeStudioRenderSummary",
+      "deriveNodeStudioPreviewPlan"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/designCanvas.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/designCanvas.test.ts",
+    "sha256": "bad0570f8fb905ea3181e5e9f33dd8171de206e25ab2e6b5a5f530d7d6811d87",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/designCanvas.ts",
+    "destination": "frontend/src/features/ai-editor/utils/designCanvas.ts",
+    "sha256": "97bd3fd5db8db4da630f1766e31ef8afc08782eae0e28e6688a4ec1c6c07e25f",
+    "exports": [
+      "DESIGN_CANVAS_PRESETS",
+      "resolveDesignPreset",
+      "normalizeDesignPreset",
+      "createDefaultDesignState",
+      "addDesignElement",
+      "updateDesignElement",
+      "removeDesignElement",
+      "duplicateDesignElement",
+      "moveDesignElementLayer",
+      "resizeDesignCanvas",
+      "normalizeDesignState"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/directorScenes.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/directorScenes.test.ts",
+    "sha256": "25ae4a3e41fa17cef51152bca6c86287004a44c22ec5be8396751ff484ef29dd",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/directorScenes.ts",
+    "destination": "frontend/src/features/ai-editor/utils/directorScenes.ts",
+    "sha256": "cdff02bfe399d13664c770793264a12ea2c4465adbe7305d81c6affa47dbd50e",
+    "exports": [
+      "ScriptSceneBlock",
+      "DirectorSceneChunk",
+      "isSceneHeading",
+      "splitScriptIntoScenes",
+      "splitScenesForDirector",
+      "targetShotCount",
+      "batchDirectorChunks",
+      "orderDirectorShots",
+      "mergeShotsIntoScenes",
+      "shotsReplacedByMerge"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/effects.ts",
+    "destination": "frontend/src/features/ai-editor/utils/effects.ts",
+    "sha256": "cbf5748a59bbb98c8888008bd146c2806ed50dad8c9480cfd8c7436e3aaf1cd5",
+    "exports": [
+      "LEGACY_EFFECT_LAYER_PREFIX",
+      "getLegacyEffectLayerId",
+      "normalizeEffectLayer",
+      "getClipEffectLayers",
+      "syncClipEffectsLegacyField",
+      "hasOverlayRenderer",
+      "buildStyleFilterForEffect",
+      "mergeFilterChunk"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/environmentWorldModel.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/environmentWorldModel.test.ts",
+    "sha256": "d402c4798af29c42b52567b9dc768f3461a14c3f786140b5def4265fac00e54f",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/environmentWorldModel.ts",
+    "destination": "frontend/src/features/ai-editor/utils/environmentWorldModel.ts",
+    "sha256": "e4be11c04f521ee78fd9de143b03dcbec8d596070321b24e949a3e6bc422fd6d",
+    "exports": [
+      "buildEnvironmentWorldPrompt",
+      "applyGeneratedWorldToEnvironmentReference",
+      "buildSetDesignAssetForEnvironmentWorld",
+      "EnvironmentViewSlot",
+      "MARBLE_VIEW_AZIMUTH",
+      "pickEnvironmentViews",
+      "buildSetDesignAssetForEnvironmentBlockout",
+      "pickReferenceImageForYaw"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/exportSettings.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/exportSettings.test.ts",
+    "sha256": "1a94bc892bf31e036e43ba2139af30fbd3734e968681485ab52bb07f98b7ec52",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/exportSettings.ts",
+    "destination": "frontend/src/features/ai-editor/utils/exportSettings.ts",
+    "sha256": "10bf349ae1d1327f1e7438a1ed1a485764d17bf1c50ba76486e8c64c102153b8",
+    "exports": [
+      "ExportContainer",
+      "ExportVideoCodec",
+      "ExportColorProfile",
+      "ExportPreset",
+      "QuickExportFormat",
+      "ExportSettingsInput",
+      "NormalizedExportSettings",
+      "EXPORT_PRESETS",
+      "sanitizeExportFilename",
+      "replaceFileExtension",
+      "resolveContainerForCodec",
+      "normalizeBitDepthForCodec",
+      "getBitDepthOptions",
+      "getQuickExportFormat",
+      "normalizeExportSettings"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/fcpxmlExport.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/fcpxmlExport.test.ts",
+    "sha256": "d5895ede9bf4fdd8c95f05f805ba5cf4237348fcd6ab34428dc3bb9420e28a1c",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/fcpxmlExport.ts",
+    "destination": "frontend/src/features/ai-editor/utils/fcpxmlExport.ts",
+    "sha256": "38825a46216a7744049dc7de349a16d076d5bec52295a4f9e2df58da9bd7e188",
+    "exports": [
+      "FcpxmlTimelineInput",
+      "FcpxmlShotPromptInput",
+      "buildFcpxmlFromTimeline",
+      "buildFcpxmlFromShotPrompts",
+      "downloadTextFile"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/generationPricing.ts",
+    "destination": "frontend/src/features/ai-editor/utils/generationPricing.ts",
+    "sha256": "51b59b50d2fa3eff4304100ffbe7d9d8874ec1d7732d588d651751580ca67b30",
+    "exports": [
+      "BILLING_MARGIN_MULTIPLIER",
+      "normalizeModelForRateLookup",
+      "resolveCostRate",
+      "GenerationCostEstimate",
+      "estimateGenerationCost",
+      "formatUsd",
+      "formatUnitSummary"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/helpers.ts",
+    "destination": "frontend/src/features/ai-editor/utils/helpers.ts",
+    "sha256": "a8ec81913dd7e7e6178c9e8bf142c99605c2d12fd071f27b07800a02ecc6cdad",
+    "exports": [
+      "fileToBase64",
+      "getVideoDuration",
+      "decode",
+      "decodeAudioData",
+      "encode",
+      "getBase64FromUrl",
+      "generateWaveformData",
+      "extractFrameFromVideo"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/historyState.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/historyState.test.ts",
+    "sha256": "3ff5ce8c7fd38a7d17fc21763ff9432671dc8a5636127b0dfa9713d21966e564",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/historyState.ts",
+    "destination": "frontend/src/features/ai-editor/utils/historyState.ts",
+    "sha256": "1fd51647854543215d188235d9c7b0e3a873b10a6fac7cfb74b03777163f9350",
+    "exports": [
+      "HistoryState",
+      "createHistoryState",
+      "pushHistoryState",
+      "undoHistoryState",
+      "redoHistoryState",
+      "resetHistoryState"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/lut.ts",
+    "destination": "frontend/src/features/ai-editor/utils/lut.ts",
+    "sha256": "b6e0b41605d861714373bd5974173e538cff944e317d461f31b634cbf2ac019f",
+    "exports": [
+      "parseCubeLut",
+      "applyCubeLutToImageData"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/modelAutoSelect.ts",
+    "destination": "frontend/src/features/ai-editor/utils/modelAutoSelect.ts",
+    "sha256": "3118d8e6b76031c5d4ffed83e7aa4c413ab100a83f616d1698cef087eff9ed4e",
+    "exports": [
+      "ShotSubjectCategory",
+      "ShotContext",
+      "AutoPick",
+      "classifyShot",
+      "categoryLabel",
+      "pickImageModel",
+      "pickVideoModel"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/modelPromptGuides.ts",
+    "destination": "frontend/src/features/ai-editor/utils/modelPromptGuides.ts",
+    "sha256": "c9d3d11bb43cc10175b468dacb8f9dbba24b4b53e73355a9fd953082a18e64bc",
+    "exports": [
+      "PromptMediaKind",
+      "PromptGuide",
+      "PromptSectionKey",
+      "PromptBrief",
+      "PROMPT_GUIDES",
+      "getPromptGuide",
+      "splitBrief",
+      "structurePromptForModel"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/naming.ts",
+    "destination": "frontend/src/features/ai-editor/utils/naming.ts",
+    "sha256": "5a83c0d38febee446b5ec4346df5708112dc3f659dbb35543bece101b38db93d",
+    "exports": [
+      "NamingTokens",
+      "renderNamingTemplate"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/natronCompositorGraph.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/natronCompositorGraph.test.ts",
+    "sha256": "237cf3c2c272ad0ba28da42e145625fb3340cba4a5653537d7b3e63c18042f58",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/natronCompositorGraph.ts",
+    "destination": "frontend/src/features/ai-editor/utils/natronCompositorGraph.ts",
+    "sha256": "7022324fecb5cf07d5dd341090bad0bdca04a933e4eee4667861057c347d3ee8",
+    "exports": [
+      "NatronNodeKind",
+      "NatronBlendMode",
+      "NatronViewerChannel",
+      "NatronNodeRole",
+      "NatronCompositorNode",
+      "NatronCompositorEdge",
+      "NatronCompositorGraph",
+      "NatronCompositeTemplateOptions",
+      "NatronCompositeSettings",
+      "createNatronCompositeTemplate",
+      "deriveNatronCompositeSettings",
+      "updateNatronNode",
+      "summarizeNatronGraph",
+      "natronBlendModeOptions",
+      "natronViewerChannelOptions"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/openColorIO.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/openColorIO.test.ts",
+    "sha256": "47154d39a90196e79a6b29b0b8e90f82f213d1f0d2eb27e842a32950b968703e",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/openColorIO.ts",
+    "destination": "frontend/src/features/ai-editor/utils/openColorIO.ts",
+    "sha256": "e2a33d30b7e87af02b00e91aed26fda206125c534d10d594d8aa08c0e800b4c9",
+    "exports": [
+      "OpenColorIOManifestInput",
+      "OpenColorIOConfigId",
+      "OpenColorIOConfigOption",
+      "OpenColorIOProfile",
+      "DEFAULT_OPEN_COLOR_IO_CONFIG_ID",
+      "OPEN_COLOR_IO_CONFIG_OPTIONS",
+      "resolveOpenColorIOProfile",
+      "resolveOpenColorIOConfig",
+      "buildOpenColorIOManifest"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/openTimelineIOExport.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/openTimelineIOExport.test.ts",
+    "sha256": "1f1e7e02bbd2f544c2da2b54aa5b10d5eb2cfc8fe008d09e1cc883e105fd9995",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/openTimelineIOExport.ts",
+    "destination": "frontend/src/features/ai-editor/utils/openTimelineIOExport.ts",
+    "sha256": "8f434cfdbfb9cd4f8ae7c78f045ab2063be8a15dd0b0e6c07cb4e7c127b68cd0",
+    "exports": [
+      "OpenTimelineIOInput",
+      "buildOpenTimelineIOFromTimeline"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/openTimelineIOImport.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/openTimelineIOImport.test.ts",
+    "sha256": "1c342e629a188c300861de6b54c69efe8dfc2fb8d2aa7449a9c22b205f6be292",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/openTimelineIOImport.ts",
+    "destination": "frontend/src/features/ai-editor/utils/openTimelineIOImport.ts",
+    "sha256": "d842996a19d04c635da4092a6e0bb4b4866be3a2878262413bdb411fa4a51fa5",
+    "exports": [
+      "OpenTimelineIOImportResult",
+      "OpenTimelineIOImportMode",
+      "ApplyOpenTimelineIOImportInput",
+      "AppliedOpenTimelineIOImport",
+      "parseOpenTimelineIOToTimeline",
+      "applyOpenTimelineIOImportToProject"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/relight.ts",
+    "destination": "frontend/src/features/ai-editor/utils/relight.ts",
+    "sha256": "1cefc6e27f27507d42088f3c0e43cf9b461176ddf7b34a7b0a87bbb1735917b7",
+    "exports": [
+      "RelightPreset",
+      "RelightDirection",
+      "RELIGHT_PRESETS",
+      "RELIGHT_DIRECTIONS",
+      "buildRelightPrompt"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/setDesignImport.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/setDesignImport.test.ts",
+    "sha256": "7048bc223aceac0a5c1a9c207328f88dc2940dfa5b16cbcc8db399033b018f39",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/setDesignImport.ts",
+    "destination": "frontend/src/features/ai-editor/utils/setDesignImport.ts",
+    "sha256": "02bbb14acd86083109f96bebe030b1735623044fb782b3fae00bfe4ae690615a",
+    "exports": [
+      "SUPPORTED_MODEL_EXTENSIONS",
+      "SupportedModelExtension",
+      "MODEL_IMPORT_ACCEPT",
+      "normalizeModelExtension",
+      "isSupportedModelExtension"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/setDesignRender.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/setDesignRender.test.ts",
+    "sha256": "fc12c9c73ff679eb9379ed5cb4e6cd15683948e3f9b65b7cf16c8603c1c50eb6",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/setDesignRender.ts",
+    "destination": "frontend/src/features/ai-editor/utils/setDesignRender.ts",
+    "sha256": "0b5bffbd12fc719112981dc003e8e159f1081beab687d326f03a23b94b0c277f",
+    "exports": [
+      "SunPosition",
+      "RenderQuality",
+      "RenderQualitySettings",
+      "RenderSize",
+      "RenderPresetSettings",
+      "PartialRenderPresetSettings",
+      "HDRI_IMPORT_ACCEPT",
+      "clampRenderExposure",
+      "normalizeHdrUrl",
+      "isSupportedHdriFile",
+      "resolveRenderSize",
+      "buildSunPosition",
+      "mergeRenderPresetSettings",
+      "getRenderQualitySettings"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/shortcuts.ts",
+    "destination": "frontend/src/features/ai-editor/utils/shortcuts.ts",
+    "sha256": "370090e6b99dc2afeedb1808b369be6b2dff945588ba2d6e1f9da0e3002399a6",
+    "exports": [
+      "SHORTCUT_DEFINITIONS",
+      "DEFAULT_SHORTCUTS",
+      "parseShortcut",
+      "matchesShortcut"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/shotContextComposer.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/shotContextComposer.test.ts",
+    "sha256": "eca24f1bd0fd66d71c5fa339b1c734eab43f8eba48fb8470d46ae9dc0a66bc68",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/shotContextComposer.ts",
+    "destination": "frontend/src/features/ai-editor/utils/shotContextComposer.ts",
+    "sha256": "43df4e8416b144eb76564e0cf2b12c1c24fe1ff58abb30cc1f3b0f3f46d551e1",
+    "exports": [
+      "buildShotContextReferenceFromConcept",
+      "appendConceptReferenceToShotContext"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/smartModelRouter.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/smartModelRouter.test.ts",
+    "sha256": "ff3bcf657a989cfbed4cf111b7501fd9c745366073ad3e5ded8538352bf801f4",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/smartModelRouter.ts",
+    "destination": "frontend/src/features/ai-editor/utils/smartModelRouter.ts",
+    "sha256": "bf583aa04539d00b7ba31e79e85d8195548650b3399040e2d3654f86c2a670c5",
+    "exports": [
+      "SmartModelIntent",
+      "SmartModelCandidate",
+      "SmartModelEta",
+      "SmartModelScoreBreakdown",
+      "SmartModelRoute",
+      "classifySmartModelGoal",
+      "formatSmartModelEta",
+      "routeSmartModel"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/storyboardWorldCamera.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/storyboardWorldCamera.test.ts",
+    "sha256": "c595a02b0ddad0d22cc610ab4504f7198a8ccd5b34a4abfed716fd527642264d",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/storyboardWorldCamera.ts",
+    "destination": "frontend/src/features/ai-editor/utils/storyboardWorldCamera.ts",
+    "sha256": "79f72a5d48517e47cc389164e2055f4dc972df0eb96f1b8ef896f0c783a50659",
+    "exports": [
+      "WorldCameraSnapshotPayload",
+      "buildWorldCameraSnapshotNote",
+      "applyWorldCameraSnapshotToShot"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/timecode.ts",
+    "destination": "frontend/src/features/ai-editor/utils/timecode.ts",
+    "sha256": "0cbbb876431d90986b6c2a3f7776c5940ba8140c6952b1b14e5ce9c66f4b2a7d",
+    "exports": [
+      "DEFAULT_TIMELINE_FPS",
+      "formatTimecode",
+      "formatRulerLabel",
+      "pickRulerStep",
+      "parseTimecode"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/usageTracker.ts",
+    "destination": "frontend/src/features/ai-editor/utils/usageTracker.ts",
+    "sha256": "b3912ff8a6e0bc3005e9152a97b33708ea8005bee902803fac195a7c942035ed",
+    "exports": [
+      "subscribeUsage",
+      "recordUsage"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/vfxHandoffManifest.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/vfxHandoffManifest.test.ts",
+    "sha256": "20d9a5dd16c17020452cdc96a1259c5c5617419909ad10c29af619aa6d007087",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/vfxHandoffManifest.ts",
+    "destination": "frontend/src/features/ai-editor/utils/vfxHandoffManifest.ts",
+    "sha256": "2c90b3488cce8868db1e9141b0b7212e2e2b6006bb7cd6d23f2659b1d8d94d38",
+    "exports": [
+      "VfxHandoffManifestInput",
+      "buildVfxHandoffManifest"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/vfxScriptExport.test.ts",
+    "destination": "frontend/src/features/ai-editor/utils/vfxScriptExport.test.ts",
+    "sha256": "0e5a1fea0f92400fb27e57f761ff0aafbeb6a6992a55b3b7879017a4a503d02d",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/utils/vfxScriptExport.ts",
+    "destination": "frontend/src/features/ai-editor/utils/vfxScriptExport.ts",
+    "sha256": "6911e257f46dc38c893f60d51b42b44cf72c3a800363fcfc8783ee85f32db640",
+    "exports": [
+      "VfxApplicationScript",
+      "buildNukeScriptFromVfxHandoffManifest",
+      "buildNatronPythonScriptFromVfxHandoffManifest",
+      "buildVfxApplicationScripts"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/vite-env.d.ts",
+    "destination": "frontend/src/features/ai-editor/vite-env.d.ts",
+    "sha256": "c7ec5ea44df6da3ee04d4fa9f43550b14ae15657ac310f5133275c808b3b69ec",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/widerruf.tsx",
+    "destination": "frontend/src/features/ai-editor/widerruf.tsx",
+    "sha256": "124afd75f0415c89ac1a306751264e3a8bc3b3619b02ca99056a884b6a76489b",
+    "exports": [],
+    "status": "excluded: standalone website or payment functionality; not an editor workspace"
+  },
+  {
+    "source": "src/workspaces/AnalysisWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/AnalysisWorkspace.tsx",
+    "sha256": "259b16c8103d5c215919ef27dc1f79d3f46dd249ed7a168444ea13f17b96a9e6",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/AssetLibraryWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/AssetLibraryWorkspace.tsx",
+    "sha256": "fe5ca6f982135cbb8bfeaef9e29e573da33e766d930a019c3942d4b835be9bcd",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/AvatarWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/AvatarWorkspace.tsx",
+    "sha256": "7ebfbc9c35f899f3e050fcc001a0072720d7a7701b54ca509be8bfdf80f27b34",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/CompositingWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/CompositingWorkspace.tsx",
+    "sha256": "d2751d2848756d55e97be214b59b2d1f754ed02e94b6f99d00d20a0d5953b94a",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/DesignWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/DesignWorkspace.tsx",
+    "sha256": "943acc9a0d8a1ade1c914af68527ba7e3a7879afbc123310b2a00af9b5d9e344",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/EditWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/EditWorkspace.tsx",
+    "sha256": "5828458bec2039cc7ec653260e4040570d82d47d4a8d780d82b3c6bac4db7ed7",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/ExportWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/ExportWorkspace.tsx",
+    "sha256": "adbc4f8a327a40335ec6a15081825660c6e8fdcb179d42d85d2d9b6679e24f35",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/GradingWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/GradingWorkspace.tsx",
+    "sha256": "2c99b625220fade38b9705dc2e3eea5171294223e66b103bf9948efa34dde3d1",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/ImageGenerationWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/ImageGenerationWorkspace.tsx",
+    "sha256": "dee02a1fee5d4e31a196a84615588f29a9780f73b9d1affdf2c98ab46b177aee",
+    "exports": [
+      "AspectRatioOption"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/ImportWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/ImportWorkspace.tsx",
+    "sha256": "497fe98f2c0c2c080da277b796c57b94ba9c53f2727a44b6445e7d2479205bf0",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/LocalAiWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/LocalAiWorkspace.tsx",
+    "sha256": "0b53df2de68067c29855dd47cd7ec51c1bafe82ae10652347f0882ff6abea45e",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/MicrodramaWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/MicrodramaWorkspace.tsx",
+    "sha256": "ef90a87cca779bd3aa942d732f50516c9edc99e1d56346ac240686776f5a7c6e",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/MoodboardWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/MoodboardWorkspace.tsx",
+    "sha256": "c6237e314c5ddd2b7e81f99088ff0938352fdfec00aa0e79b23a521431cd01e4",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/NodeWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/NodeWorkspace.tsx",
+    "sha256": "b25b4c0e37ef84c825120481cfcdcdaacdc1c42a070dab41d30fe2b508c9a566",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/NotebookLMWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/NotebookLMWorkspace.tsx",
+    "sha256": "8630c3c70dbc584cd6ad7d0579c7d5b88c0a91b856e0b2f1b1578ea127cd0117",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/OutfitWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/OutfitWorkspace.tsx",
+    "sha256": "7ee5e3dc9de0efdfb9062de2c62ce9f451a9712a8dc5e10c9fe965feeb19cb04",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/PhotoWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/PhotoWorkspace.tsx",
+    "sha256": "fd99fc7ad900c8563af70f45601b7bb858770afdc0965f81eab5136bd5496e0c",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/PluginsWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/PluginsWorkspace.tsx",
+    "sha256": "bffad55f8dc1f4d75dca2243c74ae293e9283a355cd8e56f991d6a51db2ae347",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/ProjectHubWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/ProjectHubWorkspace.tsx",
+    "sha256": "1b8c8dc79ec886b748fc99e2909cde3e6c9eedc314658affd0239ce9e2cc6615",
+    "exports": [
+      "ProjectHubStudioAutomationBindings"
+    ],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/RequestsWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/RequestsWorkspace.tsx",
+    "sha256": "477fff9a16952158e2715d3cf65eb10af06267b1c3f1be7f5fd06b16afc197cd",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/ReviewWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/ReviewWorkspace.tsx",
+    "sha256": "f8a182dcf7bc45442fcb00d5c70d9d76fe32c06fcd0993898b27a7bac4e39321",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/SceneMapWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/SceneMapWorkspace.tsx",
+    "sha256": "199bbce8db8b9a1581ec3eeccf58bd319576c5d790f4ea3e4e93f31e8e10cb61",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/SceneWallWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/SceneWallWorkspace.tsx",
+    "sha256": "f2d30ff5f056061d84296a922ef12f068eef4546d72c1adf36681f71bf2d52f3",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/ScriptWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/ScriptWorkspace.tsx",
+    "sha256": "f1c657b411fd9f727a906d3ac67f0fdaa1981f0908b2a4182a07e1928d9357eb",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/SetDesignWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/SetDesignWorkspace.tsx",
+    "sha256": "37f4ed9553bff0a088af2b1d13d1994843f3e8004ebe5f64b658a9a0ff27a730",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/SoundWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/SoundWorkspace.tsx",
+    "sha256": "a53f0a9834dfa96f13a4d16cb7ec76fc91551c08c8b54da3b91a7703df03db14",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/TrimWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/TrimWorkspace.tsx",
+    "sha256": "a3c20745b3f58f50b407450caa0523c81427aef5979cfb7a449a4870c1fed236",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/UpscaleWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/UpscaleWorkspace.tsx",
+    "sha256": "d50eea57624bfa7a8c38f2946dcc482000b3b3599ad160a5d9eed97063adce5b",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/VideoGenerationWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/VideoGenerationWorkspace.tsx",
+    "sha256": "a84bf8c22d76f94c69c4d4d01b8defa84156afb3cc4d250908bc9f6eccff8e95",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/workspaces/WorldGenerationWorkspace.tsx",
+    "destination": "frontend/src/features/ai-editor/workspaces/WorldGenerationWorkspace.tsx",
+    "sha256": "3e48f6867758fb39be438749e5c1118c7ff6ea93e69a13e15db3a46266de5354",
+    "exports": [],
+    "status": "imported; integration verification pending"
+  },
+  {
+    "source": "src/sdk/storyProjectDefaults.ts",
+    "destination": "frontend/src/features/ai-editor/sdk/storyProjectDefaults.ts",
+    "sha256": "744348b06c9f878a82650920b6b073db6f56d92144d911067714b4c75360d909",
+    "status": "imported: shared Project workflow defaults; verification pending"
+  }
+]

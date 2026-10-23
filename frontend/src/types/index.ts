@@ -30,7 +30,27 @@ export interface WordTiming {
   emphasis?: boolean;
   color?: string;
   size_multiplier?: number;
+  confidence?: number | null;
+  speaker_id?: string | null;
+  language?: string | null;
 }
+
+export interface TranscriptionJob {
+  job_id: string;
+  model?: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  progress: number;
+  stage?: string;
+  device?: string;
+  compute_type?: string;
+  notice?: string;
+  language?: string;
+  subtitles: SubtitleSegment[];
+  source_fingerprint?: string;
+  error?: string;
+}
+
+export type CaptionFormat = 'srt' | 'vtt' | 'ass' | 'json';
 
 export type SubtitlePreset = 'bold_pop' | 'fitness_energy' | 'minimalist' | 'subtle_border' | 'cinematic';
 
@@ -49,8 +69,14 @@ export interface SubtitleStyle {
   max_chars?: number;
   max_duration?: number;
   highlight_active?: boolean;
+  active_scale?: number;
   background_opacity?: number;
   safe_area?: boolean;
+  max_words?: number;
+  gap_break?: number;
+  min_duration?: number;
+  background_color?: string;
+  alignment?: 'left' | 'center' | 'right';
 }
 
 export interface SubtitleSegment {
@@ -151,6 +177,7 @@ export interface EditingPlan {
   tail_transition?: GlobalTransitionConfig;
   subtitles?: SubtitleSegment[];
   transcript?: SubtitleSegment[];
+  transcript_model?: string;
   visual_inserts?: VisualInsert[];
   sound_cues?: SoundCue[];
   cinematic_texts?: CinematicText[];
@@ -192,6 +219,23 @@ export interface UploadedAudio {
 export interface CommandResponse {
   plan: EditingPlan;
   explanation: string;
+  applied_changes: string[];
+}
+
+export type AIActionType =
+  | 'add_subtitles' | 'set_aspect_ratio' | 'add_title' | 'add_transition'
+  | 'set_clip_volume' | 'split_clip' | 'trim_clip' | 'undo' | 'redo';
+
+export interface AIAction {
+  type: AIActionType;
+  params: Record<string, unknown>;
+}
+
+export interface AIEditingPlan {
+  explanation: string;
+  actions: AIAction[];
+  clarification?: string | null;
+  proposed_plan: EditingPlan;
   applied_changes: string[];
 }
 

@@ -15,6 +15,7 @@ import requests
 from PIL import Image
 from app.core.config import CACHE_DIR, UPLOAD_DIR
 from app.services.media import probe_media
+from app.services.provider_settings import setting
 
 CACHE = CACHE_DIR / 'pixabay'
 CACHE.mkdir(parents=True, exist_ok=True)
@@ -61,7 +62,7 @@ def _read(path):
 
 def _api(params, kind):
     global _blocked_until
-    key = os.environ.get('PIXABAY_API_KEY', '').strip()
+    key = setting('PIXABAY_API_KEY').strip()
     if not key:
         raise MediaProviderError('Set PIXABAY_API_KEY in backend/.env and restart the backend to enable B-roll search.')
     cache_id = hashlib.sha256(json.dumps([kind, params], sort_keys=True).encode()).hexdigest()

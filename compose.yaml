@@ -1,0 +1,39 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file: deploy/backend.env
+    environment:
+      RAYFLOW_ENV: production
+      RAYFLOW_STORAGE_DIR: /data
+      HF_HOME: /models/huggingface
+    volumes:
+      - rayflow_data:/data
+      - rayflow_models:/models
+    restart: unless-stopped
+    stop_grace_period: 45s
+    # No host port: all user requests pass through authenticated HTTPS.
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST in deploy/compose.env}
+      RAYFLOW_USERNAME: ${RAYFLOW_USERNAME:?Set RAYFLOW_USERNAME}
+      RAYFLOW_PASSWORD_HASH: ${RAYFLOW_PASSWORD_HASH:?Set a Caddy password hash}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  rayflow_data:
+  rayflow_models:
+  caddy_data:
+  caddy_config:

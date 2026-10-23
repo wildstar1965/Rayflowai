@@ -81,6 +81,10 @@ def sound_asset(name: Literal['soft', 'wood', 'tick']):
 
 @router.get('/creative/jobs/{job_id}')
 def creative_status(job_id: str):
+    from app.editor.context import workspace_id
+    from app.services import job_history
+    if workspace_id.get() and not job_history.get(job_id):
+        raise HTTPException(404, 'Processing job not found.')
     from app.services.creative_jobs import JOBS
     if job_id not in JOBS:
         raise HTTPException(404, 'Processing job not found. The backend may have restarted.')
@@ -181,7 +185,10 @@ def cinematic_title(text: str = '', color: str = '#F2E9D8', ratio: Literal['9:16
 def caption_previews(plan: EditingPlan):
     from app.services.caption_frames import caption_events
     width,height={'9:16':(1080,1920),'16:9':(1920,1080),'1:1':(1080,1080)}[plan.aspect_ratio]
-    return [{k:v for k,v in event.items() if k!='path'} for event in caption_events(plan.subtitles,width,height)]
+    try:
+        return [{k:v for k,v in event.items() if k!='path'} for event in caption_events(plan.subtitles,width,height)]
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
 
 @router.post('/cinematic/titles')
 def title_previews(plan: EditingPlan):

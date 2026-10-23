@@ -27,26 +27,36 @@ class WordTiming(BaseModel):
     start: float = Field(ge=0, allow_inf_nan=False)
     end: float = Field(ge=0, allow_inf_nan=False)
     emphasis: bool = False
-    color: Optional[str] = None
+    color: Optional[str] = Field(default=None, pattern=r'^#[0-9a-fA-F]{6}$')
     size_multiplier: float = Field(default=1.0, ge=.5, le=3, allow_inf_nan=False)
+    confidence: Optional[float] = Field(default=None, ge=0, le=1, allow_inf_nan=False)
+    speaker_id: Optional[str] = Field(default=None, max_length=100)
+    language: Optional[str] = Field(default=None, max_length=20)
 
 class SubtitleStyle(BaseModel):
     preset: str = "bold_pop"  # "bold_pop", "fitness_energy", "minimalist", "subtle_border"
-    caption_mode: str = "word_by_word"  # "word_by_word", "phrase"
-    font_size: int = Field(default=42, ge=10, le=300)
-    font_family: str = Field(default='Inter, sans-serif', max_length=100, pattern=r'^[\w ,.-]+$')
+    caption_mode: Literal['word_by_word', 'phrase'] = 'phrase'
+    # Caption Engine reference typography, measured at a 1920px frame height.
+    font_size: int = Field(default=72, ge=10, le=300)
+    font_family: str = Field(default='Noto Sans', max_length=100, pattern=r'^[\w ,.-]+$')
     color: str = Field(default='#FFFFFF',pattern=r'^#[0-9a-fA-F]{6}$')
-    highlight_color: str = Field(default='#FACC15',pattern=r'^#[0-9a-fA-F]{6}$')
+    highlight_color: str = Field(default='#FFD400',pattern=r'^#[0-9a-fA-F]{6}$')
     stroke_color: str = Field(default='#000000',pattern=r'^#[0-9a-fA-F]{6}$')
-    stroke_width: int = Field(default=3,ge=0,le=20)
+    stroke_width: int = Field(default=6,ge=0,le=20)
     position: str = "center_bottom"  # "center_bottom", "middle", "top"
     font_weight: int = Field(default=700, ge=400, le=900)
     tracking: float = Field(default=0, ge=-2, le=15, allow_inf_nan=False)
-    max_chars: int = Field(default=38, ge=10, le=100)
+    max_chars: int = Field(default=22, ge=10, le=100)
     max_duration: float = Field(default=4, ge=.5, le=15, allow_inf_nan=False)
-    highlight_active: bool = False
+    highlight_active: bool = True
+    active_scale: float = Field(default=1.08, ge=1, le=1.3, allow_inf_nan=False)
     background_opacity: float = Field(default=0, ge=0, le=1, allow_inf_nan=False)
-    safe_area: bool = False
+    safe_area: bool = True
+    max_words: int = Field(default=4, ge=1, le=30)
+    gap_break: float = Field(default=.45, ge=.1, le=3, allow_inf_nan=False)
+    min_duration: float = Field(default=.4, ge=0, le=2, allow_inf_nan=False)
+    background_color: str = Field(default='#08080A', pattern=r'^#[0-9a-fA-F]{6}$')
+    alignment: Literal['left', 'center', 'right'] = 'center'
 
 class SubtitleSegment(BaseModel):
     id: str
@@ -151,6 +161,7 @@ class EditingPlan(BaseModel):
     music_volume: float = Field(default=0.25, ge=0, le=1, allow_inf_nan=False)
     source_filename: Optional[str] = None
     source_fingerprint: Optional[str] = None
+    transcript_model: Optional[str] = None
     suppressed_auto_inserts: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
     audio_filename: Optional[str] = None

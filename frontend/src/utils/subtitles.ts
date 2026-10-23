@@ -12,6 +12,7 @@ export function newCaptionInterval(plan: EditingPlan, time: number): {start_time
 
 export function attachTranscript(segments: SubtitleSegment[], plan: EditingPlan, filename: string): SubtitleSegment[] {
   const clips = plan.clips.filter(c => c.media_type === 'video' && c.image_url.split('/').pop() === filename);
+  if (!clips.length && /\.(mp4|mov|webm|avi|mkv)$/i.test(filename)) return [];
   return (clips.length ? clips : [null]).flatMap(clip => {
     const sourceStart = clip?.source_start || 0;
     const duration = clip?.duration ?? plan.duration_seconds;
@@ -26,6 +27,29 @@ export function attachTranscript(segments: SubtitleSegment[], plan: EditingPlan,
         words,source_clip_id:clip?.id,source_filename:filename,origin:'auto' as const}];
     });
   }).sort((a,b)=>a.start_time-b.start_time);
+}
+
+/** Regenerate one source while preserving manual edits and other caption sources. */
+export function mergeSourceCaptions(plan: EditingPlan, generated: SubtitleSegment[], filename: string): SubtitleSegment[] {
+  const preserved = (plan.subtitles || []).filter(s => s.origin !== 'auto' || s.source_filename !== filename);
+  const fresh = generated.flatMap(segment => {
+    let windows = [[segment.start_time, segment.end_time]];
+    for (const existing of preserved) {
+      windows = windows.flatMap(([start, end]) => {
+        if (existing.end_time <= start || existing.start_time >= end) return [[start, end]];
+        return [[start, Math.min(end, existing.start_time)], [Math.max(start, existing.end_time), end]].filter(([a,b]) => b > a);
+      });
+    }
+    return windows.flatMap(([start, end], index) => {
+      if (start === segment.start_time && end === segment.end_time) return [segment];
+      const words = (segment.words || []).filter(w => w.end > start && w.start < end)
+        .map(w => ({...w, start: Math.max(start, w.start), end: Math.min(end, w.end)}));
+      if (!words.length) return [];
+      return [{...segment, id: `${segment.id}-part-${index}`, start_time: start, end_time: end,
+        text: words.map(w => w.word).join(' '), words}];
+    });
+  });
+  return [...preserved, ...fresh].sort((a,b) => a.start_time - b.start_time);
 }
 
 export function editCaptionTiming(plan: EditingPlan, id: string, field: 'start_time' | 'end_time', value: number): EditingPlan {

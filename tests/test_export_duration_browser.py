@@ -14,8 +14,7 @@ def test_full_video_duration_through_studio(local_servers, sources):
         page = browser.new_page(viewport={'width': 1440, 'height': 900})
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
-        page.goto(local_servers)
-        page.get_by_role('button', name='Open Studio', exact=True).first.click()
+        page.goto(local_servers + '/#/studio')
         upload = page.locator('input[type=file][multiple]')
         upload.set_input_files(str(sources['ntsc']))
         wait_plan(page, 'p.clips.length === 1')
@@ -47,7 +46,6 @@ def test_full_video_duration_through_studio(local_servers, sources):
         wait_plan(page, 'p.clips[0].duration === 2.4')
         saved = plan(page)
         page.reload()
-        page.get_by_role('button', name='Open Studio', exact=True).first.click()
         wait_plan(page, 'p.clips.length === 3')
         assert plan(page) == saved
         page.get_by_role('button', name='Auto Reel', exact=True).click()
@@ -62,13 +60,12 @@ def test_uploaded_videos_export_download_and_play(local_servers, sources):
     with sync_playwright() as pw:
         browser = pw.chromium.launch(channel='msedge', headless=True)
         page = browser.new_page(viewport={'width': 1440, 'height': 900})
-        page.goto(local_servers)
-        page.get_by_role('button', name='Open Studio', exact=True).first.click()
+        page.goto(local_servers + '/#/studio')
         page.locator('input[type=file][multiple]').set_input_files([str(sources['25fps']), str(sources['vfr'])])
         wait_plan(page, 'p.clips.length === 2')
         expected = frame_at(plan(page)['duration_seconds'])
         page.get_by_role('button', name='Export MP4', exact=True).click()
-        expect(page.get_by_text('Reel Export Complete', exact=True)).to_be_visible(timeout=120000)
+        expect(page.get_by_role('heading', name='Your Rayflow reel is ready')).to_be_visible(timeout=120000)
         with page.expect_download() as download:
             page.get_by_role('link', name='Download MP4').click()
         output = ARTIFACTS / 'browser-video-export.mp4'

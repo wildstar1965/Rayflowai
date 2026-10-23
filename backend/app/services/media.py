@@ -1,5 +1,6 @@
 """Shared upload resolution and precise media metadata from FFprobe."""
 import json
+import hashlib
 import math
 import subprocess
 from fractions import Fraction
@@ -14,8 +15,24 @@ AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
 
 
 def uploaded_path(reference: str) -> Path:
+    # Shared editor files remain permission checked before a private Studio copy is made.
+    # Checking the full reference first also prevents basename collisions across projects.
+    parsed = urlparse(reference)
+    if parsed.scheme or parsed.netloc:
+        raise ValueError('Import media before using it in Studio.')
+    if parsed.path.startswith(('/api/editor/projects/', '/api/editor/assets/file/')):
+        from app.editor.runtime import media_path
+        from app.editor.context import owner
+        from app.editor.store import store
+        source = media_path(reference)
+        digest = hashlib.sha256(reference.encode()).hexdigest()[:32]
+        return store.put_blob(owner(), 'uploads/shared_' + digest + source.suffix, source.read_bytes())
     name = Path(unquote(urlparse(reference).path)).name
     path = UPLOAD_DIR / name
+    from app.editor.context import workspace_id
+    if name and not path.is_file() and workspace_id.get():
+        from app.editor.store import store
+        path = store.get_blob(workspace_id.get(), 'uploads/' + name)
     if not name or not path.is_file():
         raise FileNotFoundError(f"Uploaded media is missing: {name or reference}")
     return path

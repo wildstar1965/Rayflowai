@@ -1,0 +1,5 @@
+# Preserve the exact registered ThreeUI source and asset hashes on every OS.
+/frontend/vendor/threeui/src/** -text
+/frontend/vendor/threeui/upstream/** -text
+/frontend/vendor/threeui/index.tsx text eol=lf
+/frontend/public/landing-pages/** -text

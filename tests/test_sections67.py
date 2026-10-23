@@ -19,6 +19,8 @@ from app.main import app
 
 
 def segment(text='Hello world.', start=0, end=2, words=None, **style):
+    style.setdefault('highlight_active', False)
+    style.setdefault('max_chars', 38)
     return SubtitleSegment(id='s', text=text, start_time=start, end_time=end,
                            words=words or [], style=SubtitleStyle(preset='cinematic', caption_mode='phrase', **style))
 
@@ -71,7 +73,9 @@ def test_phrase_punctuation_gaps_and_honest_fallback(raster_cache):
            WordTiming(word='Next!',start=1.2,end=1.5)]
     sub=segment('Hello world. Next!',end=2,words=words)
     units=caption_frames.caption_units(sub,2)
-    assert [(u[0],u[1]) for u in units]==[(0,1.2),(1.2,2)]
+    # Caption Engine windows follow speech and extend flashes only to the minimum
+    # readable duration; they no longer fill all the silence between sentences.
+    assert [(u[0],u[1]) for u in units]==[(.1,.9),(1.2,1.6)]
     assert [w['word'] for w in units[0][2]]==['Hello','world.']
     sub.text='A manually corrected sentence with more words.'
     units=caption_frames.caption_units(sub,2)
@@ -236,10 +240,25 @@ def test_auto_reel_changed_source_refreshes_transcript_without_rebuilding_timeli
     monkeypatch.setattr(auto_edit,'transcribe_audio_file',transcribe)
     monkeypatch.setattr(auto_edit,'_enhance_plan',lambda plan,_:plan)
     clip=ClipConfig(id='stable',image_url=source.name,media_type='video',start_time=0,duration=3)
-    current=EditingPlan(duration_seconds=3,source_filename=source.name,source_fingerprint=speech.source_fingerprint(source),clips=[clip],
+    current=EditingPlan(duration_seconds=3,source_filename=source.name,source_fingerprint=speech.source_fingerprint(source),transcript_model='medium',clips=[clip],
                         transcript=[segment('Old speech.')],subtitles=[segment('Manual correction.',start=2,end=3)])
     reused=auto_edit.generate_auto_edit_reel(source.name,current_plan=current,auto_broll=False,list_sounds=False)
     assert transcribe.call_count==0 and reused.subtitles[0].text=='Manual correction.'
+    different_model=auto_edit.generate_auto_edit_reel(source.name,current_plan=current,whisper_model='small',auto_broll=False,list_sounds=False)
+    assert transcribe.call_count==1 and different_model.transcript_model=='small'
+    assert different_model.clips[0].id=='stable' and any(s.text=='Manual correction.' for s in different_model.subtitles)
+    transcribe.side_effect = speech.TranscriptionError('Selected model could not load.')
+    failed=auto_edit.generate_auto_edit_reel(source.name,current_plan=current,whisper_model='large-v3',auto_broll=False,list_sounds=False)
+    assert failed.transcript==current.transcript and failed.subtitles==current.subtitles
+    assert failed.transcript_model=='medium' and failed.source_fingerprint==current.source_fingerprint
+    assert any('could not load' in warning for warning in failed.warnings)
+    transcribe.side_effect = None
+    transcribe.return_value = []
+    silent=auto_edit.generate_auto_edit_reel(source.name,current_plan=current,whisper_model='small',auto_broll=False,list_sounds=False)
+    assert silent.transcript==current.transcript and silent.subtitles==current.subtitles
+    assert silent.transcript_model=='medium' and any('No speech' in warning for warning in silent.warnings)
+    transcribe.return_value = [segment('Fresh speech.',start=0,end=1)]
+    transcribe.reset_mock()
     source.write_bytes(b'changed audio')
     changed=auto_edit.generate_auto_edit_reel(source.name,current_plan=current,auto_broll=False,list_sounds=False)
     assert transcribe.call_count==1 and changed.clips[0].id=='stable' and changed.duration_seconds==3

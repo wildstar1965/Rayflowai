@@ -82,6 +82,6 @@ export function NumericInput({ value, onCommit, min, max, step = 1, onBlur, onKe
           if (next !== null) { setDraft(String(next)); setFeedback(''); }
         }
       }} />
-    {feedback && <span id={feedbackId} role="status" className="block text-xs text-amber-700">{feedback}</span>}
+    {feedback && <span id={feedbackId} role="status" className="block text-xs text-brass">{feedback}</span>}
   </>;
 }

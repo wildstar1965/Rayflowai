@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: rayflow-ai-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/ready
+    envVars:
+      - key: RAYFLOW_ENV
+        value: production
+      - key: RAYFLOW_STORAGE_DIR
+        value: /tmp/rayflow
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: RAYFLOW_VAULT_SECRET
+        generateValue: true
+      - key: RAYFLOW_PUBLIC_ORIGINS
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: RAYFLOW_FRONTEND_URL
+        sync: false
+      - key: EDITOR_JOB_CONCURRENCY
+        value: '2'
+      - key: EDITOR_QUEUE_LIMIT
+        value: '4'
+      - key: RENDER_CONCURRENCY
+        value: '1'

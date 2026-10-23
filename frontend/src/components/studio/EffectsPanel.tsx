@@ -149,73 +149,73 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
   return (
     <div className="space-y-6">
       {/* Header Info */}
-      <div className="flex items-center justify-between pb-1 border-b border-zinc-200">
+      <div className="flex items-center justify-between pb-1 border-b border-studio-border">
         <div>
-          <h4 className="text-xs font-semibold text-zinc-900 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-zinc-800" />
-            <span>Visual Transitions</span>
+          <h4 className="text-xs font-semibold text-studio-text flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-studio-text" />
+            <span>Shape the cut</span>
           </h4>
-          <p className="text-[11px] text-zinc-500 mt-0.5">
-            Transitions apply to boundaries between adjacent clips and the reel endpoints.
+          <p className="text-[11px] text-studio-muted mt-0.5">
+            Guide each cut in Rayflow, from the opening frame to the final fade.
           </p>
         </div>
       </div>
 
       {/* Quick Batch Actions */}
-      <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-200 space-y-2">
-        <span className="text-[11px] font-semibold text-zinc-700 block uppercase tracking-wider font-mono">
-          Quick Actions
+      <div className="p-3 bg-studio-raised rounded-xl border border-studio-border space-y-2">
+        <span className="text-[11px] font-semibold text-studio-text block uppercase tracking-wider font-mono">
+          Edit the rhythm
         </span>
         <div className="flex items-center gap-2">
           <button
             onClick={() => handleApplyAllCrossfade(0.5)}
-            className="flex-1 py-1.5 px-2.5 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800 transition-colors shadow-2xs text-center"
+            className="flex-1 py-1.5 px-2.5 rounded-lg bg-accent text-white text-xs font-medium hover:bg-accent-hover transition-colors shadow-2xs text-center"
           >
-            Crossfade All (0.5s)
+            Crossfade all (0.5s)
           </button>
           <button
             onClick={handleClearAllTransitions}
-            className="py-1.5 px-2.5 rounded-lg bg-white text-zinc-700 hover:text-red-600 border border-zinc-200 hover:border-zinc-300 text-xs font-medium transition-colors shadow-2xs"
+            className="py-1.5 px-2.5 rounded-lg bg-studio-panel text-studio-text hover:text-danger border border-studio-border hover:border-studio-border text-xs font-medium transition-colors shadow-2xs"
             title="Reset all transitions to direct cuts"
           >
-            Direct Cuts
+            Use direct cuts
           </button>
         </div>
       </div>
 
       {/* GLOBAL HEAD / TAIL SECTION */}
       <div className="space-y-3">
-        <span className="text-[11px] font-semibold text-zinc-700 block uppercase tracking-wider font-mono">
-          Reel Boundaries
+        <span className="text-[11px] font-semibold text-studio-text block uppercase tracking-wider font-mono">
+          Opening and closing
         </span>
 
         {/* Start of Reel (Head) */}
-        <div className="p-3 rounded-xl bg-white border border-zinc-200 shadow-2xs space-y-2.5">
+        <div className="p-3 rounded-xl bg-studio-panel border border-studio-border shadow-2xs space-y-2.5">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-zinc-900 block">
-                Start of Reel (Fade In)
+              <span className="text-xs font-semibold text-studio-text block">
+                Opening fade
               </span>
-              <span className="text-[10px] text-zinc-500">
-                Gradually reveal video from solid color at beginning
+              <span className="text-[10px] text-studio-muted">
+                Fade your reel in from a solid color
               </span>
             </div>
             <input
               type="checkbox"
               checked={Boolean(plan.head_transition?.enabled)}
               onChange={e => handleUpdateHeadTransition({ enabled: e.target.checked })}
-              className="w-4 h-4 accent-zinc-900 rounded cursor-pointer"
+              className="w-4 h-4 accent-accent rounded cursor-pointer"
             />
           </div>
 
           {plan.head_transition?.enabled && (
-            <div className="pt-2 border-t border-zinc-100 space-y-2">
+            <div className="pt-2 border-t border-studio-line space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-zinc-600">Type</span>
+                <span className="text-studio-muted">Type</span>
                 <select
                   value={plan.head_transition.type || 'fade_in'}
                   onChange={e => handleUpdateHeadTransition({ type: e.target.value as any })}
-                  className="text-xs bg-zinc-50 border border-zinc-200 rounded px-2 py-1 font-medium text-zinc-900 outline-none"
+                  className="text-xs bg-studio-raised border border-studio-border rounded px-2 py-1 font-medium text-studio-text outline-none"
                 >
                   <option value="fade_in">Fade in from Black</option>
                   <option value="dip_black">Dip to Black</option>
@@ -225,8 +225,8 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-zinc-600">Duration</span>
-                  <span className="font-mono font-semibold text-zinc-900">
+                  <span className="text-studio-muted">Duration</span>
+                  <span className="font-mono font-semibold text-studio-text">
                     {(plan.head_transition.duration || 0.5).toFixed(1)}s
                   </span>
                 </div>
@@ -237,7 +237,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                   step="0.1"
                   value={plan.head_transition.duration || 0.5}
                   onChange={e => handleUpdateHeadTransition({ duration: parseFloat(e.target.value) })}
-                  className="w-full accent-zinc-900 h-1.5 bg-zinc-200 rounded-lg cursor-pointer"
+                  className="w-full accent-accent h-1.5 bg-studio-line rounded-lg cursor-pointer"
                 />
               </div>
             </div>
@@ -245,32 +245,32 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
         </div>
 
         {/* End of Reel (Tail) */}
-        <div className="p-3 rounded-xl bg-white border border-zinc-200 shadow-2xs space-y-2.5">
+        <div className="p-3 rounded-xl bg-studio-panel border border-studio-border shadow-2xs space-y-2.5">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-zinc-900 block">
-                End of Reel (Fade Out)
+              <span className="text-xs font-semibold text-studio-text block">
+                Closing fade
               </span>
-              <span className="text-[10px] text-zinc-500">
-                Gradually disappear video into solid color at end
+              <span className="text-[10px] text-studio-muted">
+                Fade your reel out to a solid color
               </span>
             </div>
             <input
               type="checkbox"
               checked={Boolean(plan.tail_transition?.enabled)}
               onChange={e => handleUpdateTailTransition({ enabled: e.target.checked })}
-              className="w-4 h-4 accent-zinc-900 rounded cursor-pointer"
+              className="w-4 h-4 accent-accent rounded cursor-pointer"
             />
           </div>
 
           {plan.tail_transition?.enabled && (
-            <div className="pt-2 border-t border-zinc-100 space-y-2">
+            <div className="pt-2 border-t border-studio-line space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-zinc-600">Type</span>
+                <span className="text-studio-muted">Type</span>
                 <select
                   value={plan.tail_transition.type || 'fade_out'}
                   onChange={e => handleUpdateTailTransition({ type: e.target.value as any })}
-                  className="text-xs bg-zinc-50 border border-zinc-200 rounded px-2 py-1 font-medium text-zinc-900 outline-none"
+                  className="text-xs bg-studio-raised border border-studio-border rounded px-2 py-1 font-medium text-studio-text outline-none"
                 >
                   <option value="fade_out">Fade out to Black</option>
                   <option value="dip_black">Dip to Black</option>
@@ -280,8 +280,8 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-zinc-600">Duration</span>
-                  <span className="font-mono font-semibold text-zinc-900">
+                  <span className="text-studio-muted">Duration</span>
+                  <span className="font-mono font-semibold text-studio-text">
                     {(plan.tail_transition.duration || 0.5).toFixed(1)}s
                   </span>
                 </div>
@@ -292,7 +292,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                   step="0.1"
                   value={plan.tail_transition.duration || 0.5}
                   onChange={e => handleUpdateTailTransition({ duration: parseFloat(e.target.value) })}
-                  className="w-full accent-zinc-900 h-1.5 bg-zinc-200 rounded-lg cursor-pointer"
+                  className="w-full accent-accent h-1.5 bg-studio-line rounded-lg cursor-pointer"
                 />
               </div>
             </div>
@@ -303,17 +303,17 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
       {/* CLIP BOUNDARIES LIST */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-zinc-700 uppercase tracking-wider font-mono">
-            Clip Boundaries ({Math.max(0, clipCount - 1)})
+          <span className="text-[11px] font-semibold text-studio-text uppercase tracking-wider font-mono">
+            Between clips ({Math.max(0, clipCount - 1)})
           </span>
-          <span className="text-[10px] text-zinc-500">
-            {clipCount < 2 ? 'Add 2+ photos to configure' : 'Configured per adjacent pair'}
+          <span className="text-[10px] text-studio-muted">
+            {clipCount < 2 ? 'Add two clips to begin' : 'Set each cut between clips'}
           </span>
         </div>
 
         {clipCount < 2 ? (
-          <div className="text-center py-6 px-4 text-xs text-zinc-500 border border-zinc-200 rounded-xl bg-white">
-            Upload at least two photographs to configure transitions between clips.
+          <div className="text-center py-6 px-4 text-xs text-studio-muted border border-studio-border rounded-xl bg-studio-panel">
+            Add at least two photos or videos to shape the transitions in your Rayflow reel.
           </div>
         ) : (
           <div className="space-y-2.5">
@@ -327,24 +327,24 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                 <div
                   key={trans.id}
                   onClick={() => onSelectTransition(trans.id)}
-                  className={`p-3 rounded-xl bg-white border transition-all shadow-2xs space-y-2.5 ${
-                    isSelected ? 'border-zinc-900 ring-2 ring-zinc-900' : 'border-zinc-200 hover:border-zinc-300'
+                  className={`p-3 rounded-xl bg-studio-panel border transition-all shadow-2xs space-y-2.5 ${
+                    isSelected ? 'border-accent ring-2 ring-accent' : 'border-studio-border hover:border-studio-border'
                   }`}
                 >
                   {/* Boundary Header */}
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-900">
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-100 font-mono text-[11px]">
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-studio-text">
+                      <span className="px-1.5 py-0.5 rounded bg-studio-hover font-mono text-[11px]">
                         #{i + 1}
                       </span>
-                      <ArrowRight className="w-3 h-3 text-zinc-400" />
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-100 font-mono text-[11px]">
+                      <ArrowRight className="w-3 h-3 text-studio-quiet" />
+                      <span className="px-1.5 py-0.5 rounded bg-studio-hover font-mono text-[11px]">
                         #{i + 2}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <label className="text-[11px] text-zinc-500 flex items-center gap-1 cursor-pointer">
+                      <label className="text-[11px] text-studio-muted flex items-center gap-1 cursor-pointer">
                         <span>Active</span>
                         <input
                           type="checkbox"
@@ -355,16 +355,16 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                               type: e.target.checked ? (trans.type === 'none' ? 'crossfade' : trans.type) : 'none'
                             });
                           }}
-                          className="w-3.5 h-3.5 accent-zinc-900 rounded cursor-pointer"
+                          className="w-3.5 h-3.5 accent-accent rounded cursor-pointer"
                         />
                       </label>
                     </div>
                   </div>
 
                   {/* Controls */}
-                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-100">
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-studio-line">
                     <div>
-                      <label className="text-[10px] text-zinc-500 block mb-0.5">Transition Type</label>
+                      <label className="text-[10px] text-studio-muted block mb-0.5">Transition style</label>
                       <select
                         value={trans.enabled ? trans.type : 'none'}
                         onChange={e => {
@@ -374,7 +374,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                             enabled: val !== 'none'
                           });
                         }}
-                        className="w-full text-xs bg-zinc-50 border border-zinc-200 rounded px-2 py-1 text-zinc-900 font-medium outline-none"
+                        className="w-full text-xs bg-studio-raised border border-studio-border rounded px-2 py-1 text-studio-text font-medium outline-none"
                       >
                         <option value="none">None (Direct Cut)</option>
                         <option value="crossfade">Crossfade (Dissolve)</option>
@@ -387,8 +387,8 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
 
                     <div>
                       <div className="flex justify-between items-center mb-0.5">
-                        <label className="text-[10px] text-zinc-500">Duration</label>
-                        <span className="text-[10px] font-mono font-semibold text-zinc-800">
+                        <label className="text-[10px] text-studio-muted">Duration</label>
+                        <span className="text-[10px] font-mono font-semibold text-studio-text">
                           {trans.duration.toFixed(1)}s
                         </span>
                       </div>
@@ -404,7 +404,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                             duration: parseFloat(e.target.value)
                           });
                         }}
-                        className="w-full accent-zinc-900 h-1.5 bg-zinc-200 rounded-lg cursor-pointer disabled:opacity-40"
+                        className="w-full accent-accent h-1.5 bg-studio-line rounded-lg cursor-pointer disabled:opacity-40"
                       />
                     </div>
                   </div>

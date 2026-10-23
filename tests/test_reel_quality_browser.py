@@ -2,6 +2,8 @@
 import base64
 import io
 import json
+import os
+from pathlib import Path
 import subprocess
 import sys
 import numpy as np
@@ -14,13 +16,16 @@ def test_generated_reel_preview_matches_export(studio):
     artifact=ROOT/'test_artifacts/reel-quality'
     if not (artifact/'after.mp4').exists():pytest.skip('Run verify_reel_quality.py with actual source footage first.')
     generated=json.loads((artifact/'after-plan.json').read_text())
+    storage = Path(os.getenv('RAYFLOW_STORAGE_DIR') or ROOT / 'backend/storage')
+    if not (storage / 'uploads' / Path(generated['source_filename']).name).is_file():
+        pytest.skip('The opt-in quality source is not present in this test storage.')
     page,errors=studio
     page.evaluate("""({key,plan})=>{
       const state=JSON.parse(localStorage.getItem(key));state.plan=plan;
       state.images=[{filename:plan.source_filename,original_name:'Quality source.mp4',url:plan.clips[0].image_url,media_type:'video',size:1}];
       localStorage.setItem(key,JSON.stringify(state));
     }""",{'key':KEY,'plan':generated})
-    page.reload();page.get_by_role('button',name='Open Studio',exact=True).first.click()
+    page.reload()
     wait_plan(page,'p.source_filename === "quality_speaker.mp4"')
     sys.path.insert(0,str(ROOT/'backend'))
     from app.core.config import FFMPEG_PATH

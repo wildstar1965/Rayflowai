@@ -23,10 +23,10 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   const variantStyles = {
-    primary: 'bg-zinc-900 text-white hover:bg-zinc-800 active:scale-[0.98]',
-    secondary: 'bg-white text-zinc-900 border border-zinc-200 hover:bg-zinc-50 active:bg-zinc-100 shadow-sm',
-    ghost: 'bg-transparent text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 active:bg-zinc-200',
-    danger: 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 active:bg-red-200',
+    primary: 'bg-accent text-white hover:bg-accent-hover active:scale-[0.98]',
+    secondary: 'bg-studio-panel text-studio-text border border-studio-border hover:bg-studio-raised active:bg-studio-hover shadow-sm',
+    ghost: 'bg-transparent text-studio-muted hover:text-studio-text hover:bg-studio-hover active:bg-studio-line',
+    danger: 'bg-danger-soft text-danger border border-danger-border hover:bg-danger-soft active:bg-danger-soft',
   };
 
   return (

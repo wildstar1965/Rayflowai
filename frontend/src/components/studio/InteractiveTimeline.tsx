@@ -235,7 +235,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
 
     if (waveformPeaks && waveformPeaks.length > 0) {
       const barWidth = w / waveformPeaks.length;
-      ctx.fillStyle = '#A1A1AA'; // Zinc-400
+      ctx.fillStyle = '#91a498'; // Rayflow sage waveform
 
       for (let i = 0; i < waveformPeaks.length; i++) {
         const peak = waveformPeaks[i];
@@ -410,40 +410,40 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
   }
 
   return (
-    <footer className="h-52 max-h-[34dvh] min-h-[140px] border-t border-zinc-200 bg-white flex flex-col shrink-0 z-20 select-none">
+    <footer className="h-52 max-h-[34dvh] min-h-[140px] border-t border-studio-border bg-studio-panel flex flex-col shrink-0 z-20 select-none">
       {/* 1. TIMELINE TOP BAR / INSPECTOR / ZOOM CONTROLS */}
-      <div className="h-10 shrink-0 overflow-x-auto gap-4 border-b border-zinc-200 px-4 flex items-center justify-between text-xs bg-zinc-50/80">
+      <div className="h-10 shrink-0 overflow-x-auto gap-4 border-b border-studio-border px-4 flex items-center justify-between text-xs bg-studio-raised/80">
         {/* Left: Clips Counter & Active Inspector */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 font-mono text-zinc-800">
-            <span className="font-semibold tracking-wider">TIMELINE</span>
-            <span className="text-zinc-400">•</span>
-            <span className="text-zinc-600">{clipCount} CLIPS</span>
-            <span className="text-zinc-400">•</span>
-            <span className="text-zinc-600">{totalDuration.toFixed(1)}s</span>
+          <div className="flex items-center gap-1.5 font-mono text-studio-text">
+            <span className="font-semibold tracking-wider">YOUR EDIT</span>
+            <span className="text-studio-quiet">•</span>
+            <span className="text-studio-muted">{clipCount} CLIPS</span>
+            <span className="text-studio-quiet">•</span>
+            <span className="text-studio-muted">{totalDuration.toFixed(1)}s</span>
           </div>
 
           {activeSelectedClip && (
-            <div className="flex items-center gap-2 pl-3 border-l border-zinc-300">
-              <span className="text-xs font-semibold text-zinc-900">
+            <div className="flex items-center gap-2 pl-3 border-l border-studio-border">
+              <span className="text-xs font-semibold text-studio-text">
                 {activeSelectedClip.id}
               </span>
 
               {/* Quick +/- Duration */}
-              <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded px-1 py-0.5 shadow-2xs">
+              <div className="flex items-center gap-1 bg-studio-panel border border-studio-border rounded px-1 py-0.5 shadow-2xs">
                 <button
                   onClick={() => handleAdjustDuration(-0.5)}
-                  className="p-0.5 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded"
+                  className="p-0.5 text-studio-muted hover:text-studio-text hover:bg-studio-hover rounded"
                   title="Shorten clip by 0.5s"
                 >
                   <Minus className="w-3 h-3" />
                 </button>
-                <span className="font-mono font-semibold text-[11px] px-1 text-zinc-900">
+                <span className="font-mono font-semibold text-[11px] px-1 text-studio-text">
                   {activeSelectedClip.duration.toFixed(1)}s
                 </span>
                 <button
                   onClick={() => handleAdjustDuration(0.5)}
-                  className="p-0.5 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded"
+                  className="p-0.5 text-studio-muted hover:text-studio-text hover:bg-studio-hover rounded"
                   title="Lengthen clip by 0.5s"
                 >
                   <Plus className="w-3 h-3" />
@@ -454,7 +454,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
               <select
                 value={activeSelectedClip.motion}
                 onChange={e => handleUpdateMotion(e.target.value)}
-                className="text-xs bg-white border border-zinc-200 rounded px-2 py-0.5 text-zinc-800 font-medium outline-none shadow-2xs"
+                className="text-xs bg-studio-panel border border-studio-border rounded px-2 py-0.5 text-studio-text font-medium outline-none shadow-2xs"
               >
                 <option value="zoom_in">Zoom In</option>
                 <option value="zoom_out">Zoom Out</option>
@@ -466,7 +466,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
               {/* Delete Clip */}
               <button
                 onClick={handleDeleteSelected}
-                className="p-1 text-zinc-400 hover:text-red-600 transition-colors ml-1"
+                className="p-1 text-studio-quiet hover:text-danger transition-colors ml-1"
                 title="Remove clip from timeline"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -476,11 +476,11 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
         </div>
 
         {/* Right: Zoom Controls */}
-        <div className="flex items-center gap-2 text-xs text-zinc-600">
+        <div className="flex items-center gap-2 text-xs text-studio-muted">
           <button
             onClick={() => setZoomLevel(prev => Math.max(0.75, Math.round((prev - 0.25) * 100) / 100))}
             disabled={zoomLevel <= 0.75}
-            className="p-1 rounded border border-zinc-200 bg-white hover:bg-zinc-100 disabled:opacity-30 disabled:pointer-events-none text-zinc-700 shadow-2xs"
+            className="p-1 rounded border border-studio-border bg-studio-panel hover:bg-studio-hover disabled:opacity-30 disabled:pointer-events-none text-studio-text shadow-2xs"
             title="Zoom Out Timeline"
           >
             <ZoomOut className="w-3.5 h-3.5" />
@@ -493,14 +493,14 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
             step="0.25"
             value={zoomLevel}
             onChange={e => setZoomLevel(parseFloat(e.target.value))}
-            className="w-18 accent-zinc-900 h-1 bg-zinc-200 rounded cursor-pointer"
+            className="w-18 accent-accent h-1 bg-studio-line rounded cursor-pointer"
             title="Timeline Zoom Level"
           />
 
           <button
             onClick={() => setZoomLevel(prev => Math.min(3.0, Math.round((prev + 0.25) * 100) / 100))}
             disabled={zoomLevel >= 3.0}
-            className="p-1 rounded border border-zinc-200 bg-white hover:bg-zinc-100 disabled:opacity-30 disabled:pointer-events-none text-zinc-700 shadow-2xs"
+            className="p-1 rounded border border-studio-border bg-studio-panel hover:bg-studio-hover disabled:opacity-30 disabled:pointer-events-none text-studio-text shadow-2xs"
             title="Zoom In Timeline"
           >
             <ZoomIn className="w-3.5 h-3.5" />
@@ -508,7 +508,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
 
           <button
             onClick={() => setZoomLevel(1.0)}
-            className="px-2 py-0.5 rounded border border-zinc-200 bg-white hover:bg-zinc-100 font-mono text-[10px] text-zinc-700 shadow-2xs"
+            className="px-2 py-0.5 rounded border border-studio-border bg-studio-panel hover:bg-studio-hover font-mono text-[10px] text-studio-text shadow-2xs"
             title="Reset Zoom to 100%"
           >
             {(zoomLevel * 100).toFixed(0)}%
@@ -519,7 +519,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
       {/* 2. TIMELINE TRACKS SCROLL CONTAINER */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-auto relative bg-zinc-50/50"
+        className="flex-1 overflow-auto relative bg-studio-raised/50"
       >
         <div
           style={{ width: `${timelineContentWidth + 42}px` }}
@@ -545,15 +545,15 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
             className={`absolute top-0 bottom-0 w-5 touch-none z-40 flex flex-col items-center outline-offset-2 focus-visible:outline ${isScrubbing ? 'cursor-grabbing' : 'cursor-ew-resize'}`}
           >
             {/* Playhead badge */}
-            <div className="w-3 h-3 bg-zinc-900 rotate-45 rounded-2xs shadow-xs" />
-            <div className="w-0.5 flex-1 bg-zinc-900" />
+            <div className="w-3 h-3 bg-accent rotate-45 rounded-2xs shadow-xs" />
+            <div className="w-0.5 flex-1 bg-accent" />
           </div>
 
           {/* TIME RULER */}
           <div
             onPointerDown={e => startScrub(e)} onPointerMove={moveScrub}
             onPointerUp={endScrub} onPointerCancel={endScrub} onLostPointerCapture={endScrub}
-            className="h-5 shrink-0 touch-none flex items-center relative cursor-pointer border-b border-zinc-200 pl-6"
+            className="h-5 shrink-0 touch-none flex items-center relative cursor-pointer border-b border-studio-border pl-6"
             title="Click or drag on ruler to seek"
           >
             {rulerTicks.map(t => {
@@ -567,11 +567,11 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                 >
                   <div
                     className={`w-px ${
-                      isSecond ? 'h-2.5 bg-zinc-400' : 'h-1.5 bg-zinc-300'
+                      isSecond ? 'h-2.5 bg-studio-quiet' : 'h-1.5 bg-studio-border'
                     }`}
                   />
                   {isSecond && (
-                    <span className="text-[9px] font-mono text-zinc-500 pl-0.5 -mt-0.5">
+                    <span className="text-[9px] font-mono text-studio-muted pl-0.5 -mt-0.5">
                       {Math.floor(t / 60)}:{(t % 60).toString().padStart(2, '0')}
                     </span>
                   )}
@@ -582,14 +582,14 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
 
           {/* VIDEO / IMAGES TRACK */}
           <div className="h-16 flex items-center relative">
-            <span className="text-[9px] font-mono font-semibold text-zinc-400 uppercase w-6 shrink-0 text-center">
+            <span className="text-[9px] font-mono font-semibold text-studio-quiet uppercase w-6 shrink-0 text-center">
               V1
             </span>
 
-            <div className="flex-1 h-full relative rounded-lg border border-zinc-200 bg-white overflow-visible shadow-2xs">
+            <div className="flex-1 h-full relative rounded-lg border border-studio-border bg-studio-panel overflow-visible shadow-2xs">
               {clipCount === 0 ? (
-                <div className="h-full flex items-center px-4 text-xs text-zinc-400 italic">
-                  No photographs on timeline. Upload photos from the sidebar to assemble reel.
+                <div className="h-full flex items-center px-4 text-xs text-studio-quiet italic">
+                  Your Rayflow timeline is ready. Add footage to start shaping your story.
                 </div>
               ) : (
                 clips.map((clip, i) => {
@@ -613,7 +613,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                           style={{
                             left: `${dragTarget.position === 'before' ? leftPx : leftPx + widthPx}px`
                           }}
-                          className="absolute top-0 bottom-0 w-1 bg-zinc-900 z-30 pointer-events-none rounded shadow-xs"
+                          className="absolute top-0 bottom-0 w-1 bg-accent z-30 pointer-events-none rounded shadow-xs"
                         />
                       )}
 
@@ -636,8 +636,8 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                         }}
                         className={`absolute top-1 bottom-1 rounded-md overflow-hidden cursor-grab active:cursor-grabbing border transition-shadow ${
                           isSelected
-                            ? 'border-zinc-900 ring-2 ring-zinc-900 shadow-md z-10'
-                            : 'border-zinc-300 hover:border-zinc-500 shadow-2xs'
+                            ? 'border-accent ring-2 ring-accent shadow-md z-10'
+                            : 'border-studio-border hover:border-studio-border shadow-2xs'
                         }`}
                       >
                         {/* LEFT TRIM HANDLE */}
@@ -648,10 +648,10 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                           onPointerCancel={handleTrimPointerUp}
                           onClick={e => e.stopPropagation()}
                           style={{ touchAction: 'none' }}
-                          className="absolute left-0 top-0 bottom-0 w-2.5 cursor-ew-resize hover:bg-zinc-900/40 z-20 flex items-center justify-center group/handle"
+                          className="absolute left-0 top-0 bottom-0 w-2.5 cursor-ew-resize hover:bg-studio-canvas/40 z-20 flex items-center justify-center group/handle"
                           title="Drag left edge to trim start"
                         >
-                          <div className="w-1 h-3 rounded-full bg-white/70 group-hover/handle:bg-white" />
+                          <div className="w-1 h-3 rounded-full bg-studio-text/70 group-hover/handle:bg-studio-text" />
                         </div>
 
                         {/* RIGHT TRIM HANDLE */}
@@ -662,10 +662,10 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                           onPointerCancel={handleTrimPointerUp}
                           onClick={e => e.stopPropagation()}
                           style={{ touchAction: 'none' }}
-                          className="absolute right-0 top-0 bottom-0 w-2.5 cursor-ew-resize hover:bg-zinc-900/40 z-20 flex items-center justify-center group/handle"
+                          className="absolute right-0 top-0 bottom-0 w-2.5 cursor-ew-resize hover:bg-studio-canvas/40 z-20 flex items-center justify-center group/handle"
                           title="Drag right edge to trim duration"
                         >
-                          <div className="w-1 h-3 rounded-full bg-white/70 group-hover/handle:bg-white" />
+                          <div className="w-1 h-3 rounded-full bg-studio-text/70 group-hover/handle:bg-studio-text" />
                         </div>
 
                         {/* Thumbnail background */}
@@ -676,13 +676,13 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                         )}
 
                         {/* Bottom clip duration badge */}
-                        <div className="absolute inset-x-0 bottom-0 bg-zinc-950/70 flex items-end justify-between p-1 text-[9px] font-mono text-white pointer-events-none">
+                        <div className="absolute inset-x-0 bottom-0 bg-studio-canvas/70 flex items-end justify-between p-1 text-[9px] font-mono text-white pointer-events-none">
                           <span className="font-semibold">
                             {trimmingState?.clipId === clip.id
                               ? `${trimmingState.currentDuration.toFixed(1)}s`
                               : `${clip.duration.toFixed(1)}s`}
                           </span>
-                          <span className="text-[8px] bg-zinc-900/80 px-1 py-0.2 rounded uppercase">
+                          <span className="text-[8px] bg-studio-canvas/80 px-1 py-0.2 rounded uppercase">
                             {clip.motion}
                           </span>
                         </div>
@@ -702,8 +702,8 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                           }}
                           className={`absolute top-4 w-4 h-4 rounded-full flex items-center justify-center z-25 text-[8px] font-bold shadow-xs border transition-transform hover:scale-110 ${
                             hasActiveTrans
-                              ? 'bg-zinc-900 text-white border-white'
-                              : 'bg-zinc-100 text-zinc-500 border-zinc-300 hover:bg-zinc-200'
+                              ? 'bg-accent text-white border-white'
+                              : 'bg-studio-hover text-studio-muted border-studio-border hover:bg-studio-line'
                           }`}
                           title={`Transition: ${
                             hasActiveTrans ? boundaryTrans?.type.replace('_', ' ') : 'None (Cut)'
@@ -722,10 +722,10 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
           {/* VISUAL INSERTS TRACK (V2) */}
           {plan.visual_inserts && plan.visual_inserts.length > 0 && (
             <div className="h-8 flex items-center relative">
-              <span className="text-[9px] font-mono font-semibold text-blue-500 uppercase w-6 shrink-0 text-center">
+              <span className="text-[9px] font-mono font-semibold text-jade uppercase w-6 shrink-0 text-center">
                 V2
               </span>
-              <div className="flex-1 h-full relative rounded-lg border border-blue-200/80 bg-blue-50/40 overflow-hidden shadow-2xs">
+              <div className="flex-1 h-full relative rounded-lg border border-jade-border/80 bg-jade-soft/40 overflow-hidden shadow-2xs">
                 {plan.visual_inserts.map(ins => {
                   const leftPx = ins.start_time * pxPerSec;
                   const widthPx = Math.max(16, ins.duration * pxPerSec);
@@ -748,8 +748,8 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                       }}
                       className={`absolute top-0.5 bottom-0.5 rounded px-1.5 flex items-center justify-between text-[10px] font-medium border cursor-pointer transition-all truncate ${
                         isCurrent
-                          ? 'bg-blue-500 text-white border-blue-600 shadow-xs ring-1 ring-blue-400'
-                          : 'bg-blue-100 text-blue-900 border-blue-300 hover:bg-blue-200'
+                          ? 'bg-jade text-ink border-jade-border shadow-xs ring-1 ring-jade-border'
+                          : 'bg-jade-soft text-jade border-jade-border hover:bg-jade-soft'
                       }`}
                       title={`Insert: ${ins.mode.toUpperCase()} (${ins.start_time.toFixed(1)}s - ${(ins.start_time + ins.duration).toFixed(1)}s). Click to seek.`}
                     >
@@ -766,10 +766,10 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
           {/* SUBTITLES / CAPTIONS TRACK (CC) */}
           {plan.subtitles && plan.subtitles.length > 0 && (
             <div className="h-8 flex items-center relative">
-              <span className="text-[9px] font-mono font-semibold text-amber-500 uppercase w-6 shrink-0 text-center">
+              <span className="text-[9px] font-mono font-semibold text-brass uppercase w-6 shrink-0 text-center">
                 CC
               </span>
-              <div className="flex-1 h-full relative rounded-lg border border-amber-200/80 bg-amber-50/40 overflow-hidden shadow-2xs">
+              <div className="flex-1 h-full relative rounded-lg border border-brass-border/80 bg-brass-soft/40 overflow-hidden shadow-2xs">
                 {plan.subtitles.map(sub => {
                   const leftPx = sub.start_time * pxPerSec;
                   const widthPx = Math.max(16, (sub.end_time - sub.start_time) * pxPerSec);
@@ -792,8 +792,8 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                       }}
                       className={`absolute top-0.5 bottom-0.5 rounded px-1 flex items-center justify-between text-[10px] font-medium border cursor-pointer transition-all truncate ${
                         isCurrent
-                          ? 'bg-amber-400 text-zinc-950 border-amber-500 shadow-xs ring-1 ring-amber-400'
-                          : 'bg-amber-100/90 text-amber-900 border-amber-300 hover:bg-amber-200'
+                          ? 'bg-brass text-ink border-brass-border shadow-xs ring-1 ring-brass-border'
+                          : 'bg-brass-soft/90 text-brass border-brass-border hover:bg-brass-soft'
                       }`}
                       title={`"${sub.text}" (${sub.start_time.toFixed(1)}s - ${sub.end_time.toFixed(1)}s). Click to seek.`}
                     >
@@ -808,21 +808,21 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
           )}
 
           {!!plan.sound_cues?.length && <div className="h-8 flex items-center relative">
-            <span className="text-[9px] font-mono w-6 shrink-0 text-center text-zinc-500">A2</span>
-            <div className="flex-1 h-full relative rounded-lg border border-zinc-300 bg-zinc-100 overflow-hidden">
+            <span className="text-[9px] font-mono w-6 shrink-0 text-center text-studio-muted">A2</span>
+            <div className="flex-1 h-full relative rounded-lg border border-studio-border bg-studio-hover overflow-hidden">
               {plan.sound_cues.map(cue=><div key={cue.id} data-cue-id={cue.id} title={`${cue.label} · ${cue.start_time.toFixed(2)}s`}
                 onPointerDown={e=>startOverlayDrag(e,'sound_cues',cue.id)} onPointerMove={moveOverlayDrag} onPointerUp={endOverlayDrag} onPointerCancel={endOverlayDrag}
                 style={{left:cue.start_time*pxPerSec,width:Math.max(14,.1*pxPerSec),touchAction:'none'}}
-                className={`absolute top-1 bottom-1 rounded cursor-ew-resize ${cue.muted||plan.list_sounds===false?'bg-zinc-300':'bg-zinc-700'}`} />)}
+                className={`absolute top-1 bottom-1 rounded cursor-ew-resize ${cue.muted||plan.list_sounds===false?'bg-studio-border':'bg-jade'}`} />)}
             </div>
           </div>}
           {/* AUDIO TRACK (AUD) */}
           <div className="h-12 flex items-center relative">
-            <span className="text-[9px] font-mono font-semibold text-zinc-400 uppercase w-6 shrink-0 text-center">
+            <span className="text-[9px] font-mono font-semibold text-studio-quiet uppercase w-6 shrink-0 text-center">
               A1
             </span>
 
-            <div className="flex-1 h-full relative rounded-lg border border-zinc-200 bg-white overflow-hidden shadow-2xs flex items-center">
+            <div className="flex-1 h-full relative rounded-lg border border-studio-border bg-studio-panel overflow-hidden shadow-2xs flex items-center">
               {/* Waveform HTML5 Canvas */}
               <canvas
                 ref={waveformCanvasRef}
@@ -844,7 +844,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                           key={idx}
                           style={{ left: `${xPos}px` }}
                           className={`absolute top-0 bottom-0 ${
-                            isStrong ? 'w-0.5 bg-zinc-900/80' : 'w-px bg-zinc-400/60'
+                            isStrong ? 'w-0.5 bg-studio-canvas/80' : 'w-px bg-studio-quiet/60'
                           }`}
                           title={`Beat at ${beatTime}s`}
                         />
@@ -854,11 +854,11 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
               )}
 
               {/* Audio Track Info Bar */}
-              <div className="relative z-10 px-3 flex items-center justify-between w-full text-[11px] font-mono text-zinc-700 pointer-events-none">
+              <div className="relative z-10 px-3 flex items-center justify-between w-full text-[11px] font-mono text-studio-text pointer-events-none">
                 <span className="font-semibold truncate max-w-[260px]">
-                  {audio ? audio.original_name : 'No soundtrack loaded'}
+                  {audio ? audio.original_name : 'Add music to find your rhythm'}
                 </span>
-                <span className="text-[10px] font-semibold text-zinc-500 bg-white/80 px-1.5 py-0.5 rounded border border-zinc-200">
+                <span className="text-[10px] font-semibold text-studio-muted bg-studio-panel/80 px-1.5 py-0.5 rounded border border-studio-border">
                   {audioAnalysis?.tempo ? `${audioAnalysis.tempo} BPM` : 'No beat data'}
                 </span>
               </div>

@@ -10,7 +10,7 @@ def numeric(local_servers):
     with sync_playwright() as pw:
         browser = pw.chromium.launch(channel='msedge', headless=True)
         page = browser.new_page()
-        page.goto(local_servers)
+        page.goto(local_servers + '/#/studio')
         page.evaluate("""async () => {
           const {default:React} = await import('/node_modules/.vite/deps/react.js');
           const {default:{createRoot}} = await import('/node_modules/.vite/deps/react-dom_client.js');
@@ -129,7 +129,7 @@ def type_draft(field, text):
 def test_caption_size_keeps_each_typed_digit(studio):
     page, errors = studio
     page.get_by_role('button', name='Captions', exact=False).click()
-    page.get_by_role('button', name='+ Add Segment', exact=True).click()
+    page.get_by_role('button', name='+ Add caption', exact=True).click()
     field = page.get_by_label('Caption font size', exact=True)
     field.fill('10')
     field.press('Tab')
@@ -168,8 +168,9 @@ def test_caption_size_keeps_each_typed_digit(studio):
 def test_caption_settings_preserve_draft_during_real_parent_updates(studio):
     page,errors=studio
     page.get_by_role('button',name='Captions',exact=False).click()
-    page.get_by_role('button',name='+ Add Segment',exact=True).click()
+    page.get_by_role('button',name='+ Add caption',exact=True).click()
     field=page.get_by_label('Caption font size',exact=True)
+    initial_size = int(field.input_value())
     field.fill('150');field.press('Home');field.press('ArrowRight');field.press('Delete')
     field.press_sequentially('2')
     expect(field).to_have_value('120')
@@ -188,7 +189,7 @@ def test_caption_settings_preserve_draft_during_real_parent_updates(studio):
     field.press('Enter')
     wait_plan(page,'p.subtitles[0].style.font_size===120 && p.subtitles[0].style.font_weight===400')
     page.get_by_title('Undo (Ctrl+Z)').click()
-    wait_plan(page,'p.subtitles[0].style.font_size===42 && p.subtitles[0].style.font_weight===400')
+    wait_plan(page,f'p.subtitles[0].style.font_size==={initial_size} && p.subtitles[0].style.font_weight===400')
     page.get_by_title('Redo',exact=True).click()
     wait_plan(page,'p.subtitles[0].style.font_size===120')
     field.fill('135')
@@ -227,7 +228,7 @@ def test_creative_and_caption_timing_commit_boundaries(studio):
         assert plan(page)==previous
         field.press('Tab');wait_plan(page,expression)
     page.get_by_role('button',name='Captions',exact=False).click()
-    page.get_by_role('button',name='+ Add Segment',exact=True).click()
+    page.get_by_role('button',name='+ Add caption',exact=True).click()
     start=page.get_by_label('Caption start',exact=True)
     start.fill('');expect(start).to_have_value('')
     start.press_sequentially('0.25');start.press('Enter')
@@ -251,7 +252,7 @@ def test_broll_and_sound_numeric_fields_share_commit_behavior(studio):
       state.plan.sound_cues=[{id:'numeric-cue',label:'camera',start_time:1,sound:'soft',volume:.3,muted:false}];
       localStorage.setItem(key,JSON.stringify(state));
     }""",KEY)
-    page.reload();page.get_by_role('button',name='Open Studio',exact=True).first.click()
+    page.reload()
     page.get_by_role('button',name='Inserts',exact=False).click()
     for label,value,expression in [('Insert 1 start','1.5','p.visual_inserts[0].start_time===1.5'),
                                    ('Insert 1 duration','2.5','p.visual_inserts[0].duration===2.5'),

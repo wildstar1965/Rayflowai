@@ -1,4 +1,6 @@
 import { NumericInput } from '../components/ui/NumericInput';
+import { useSharedReel } from '../services/useSharedReel';
+import { editorRequest } from '../services/editorClient';
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Button } from '../components/ui/Button';
 import {
@@ -29,13 +31,19 @@ import {
 } from '../services/api';
 import { recalculateTimeline, uploadedClip } from '../utils/timeline';
 import { interpretWithOllama } from '../services/api';
+import { getSettings } from '../services/settings';
 import { InteractiveTimeline } from '../components/studio/InteractiveTimeline';
 import { CreativePanel } from '../components/studio/CreativePanel';
 import { useCreativePreview } from '../components/studio/useCreativePreview';
 import { CaptionSettings } from '../components/studio/CaptionSettings';
-import { attachTranscript, editCaptionTiming, newCaptionInterval } from '../utils/subtitles';
-import { creativeRequest } from '../services/api';
+import { CaptionTools } from '../components/studio/CaptionTools';
+import { SpeechModelSelect } from '../components/studio/SpeechModelSelect';
+import { useSpeechModels } from '../components/studio/useSpeechModels';
+import { attachTranscript, editCaptionTiming, newCaptionInterval, mergeSourceCaptions } from '../utils/subtitles';
+import { applyOpenRouterPlan, createOpenRouterPlan, creativeRequest } from '../services/api';
+import type { AIEditingPlan } from '../types';
 import { EffectsPanel } from '../components/studio/EffectsPanel';
+import { downloadTimeline, exportTimeline } from '../utils/timelineExport';
 import {
   Mic,
   MicOff,
@@ -70,17 +78,17 @@ import {
   Subtitles,
   Layers,
   Wand2,
+  X,
 } from 'lucide-react';
 
 interface StudioPageProps {
   onBackToHome: () => void;
+  feature?: string;
 }
 
-const STORAGE_KEY = 'rayflow_project_state_v3';
-
-export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
+export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature }) => {
   // Project State
-  const [projectName, setProjectName] = useState('Untitled Reel');
+  const [projectName, setProjectName] = useState('My Rayflow Reel');
   const [hasHydrated, setHasHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<'photos' | 'music' | 'effects' | 'style' | 'title' | 'captions' | 'inserts'>('photos');
 
@@ -100,10 +108,11 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   const [transcriptionProgress, setTranscriptionProgress] = useState(0);
   const [transcriptionSource, setTranscriptionSource] = useState('');
   const [transcriptionLanguage, setTranscriptionLanguage] = useState('');
+  const [transcriptionStage, setTranscriptionStage] = useState('');
   const transcriptionJobRef = useRef<string | null>(null);
 
   // Ollama Client State
-  const [ollamaStatus, setOllamaStatus] = useState<{ available: boolean; host: string; models: string[]; default_model?: string }>({
+  const [ollamaStatus, setOllamaStatus] = useState<{ available: boolean; ready?: boolean; host: string; models: string[]; default_model?: string; error?: string }>({
     available: false,
     host: 'http://127.0.0.1:11434',
     models: []
@@ -117,9 +126,17 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   const [isAutoEditing, setIsAutoEditing] = useState(false);
   const [includeCaptions, setIncludeCaptions] = useState(true);
   const [autoStage, setAutoStage] = useState('');
-  const [whisperModel, setWhisperModel] = useState('tiny');
+  const [modelChoice, setWhisperModel] = useState('');
+  const speechModels = useSpeechModels();
+  const whisperModel = speechModels.catalog?.models.some(model => model.id === modelChoice && model.status === 'ready')
+    ? modelChoice : speechModels.catalog?.default_model || '';
   const [seekVersion, setSeekVersion] = useState(0);
   const [mobilePanel, setMobilePanel] = useState<'media' | 'director' | null>(null);
+  useEffect(() => {
+    if (feature === 'captions') { setActiveTab('captions'); setMobilePanel('media'); }
+    if (feature === 'auto-reel') setIsAutoEditModalOpen(true);
+    if (feature === 'audio') { setActiveTab('music'); setMobilePanel('media'); }
+  }, [feature]);
 
   // Editing Plan State
   const [plan, setPlan] = useState<EditingPlan>({
@@ -159,10 +176,11 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   const [commandInput, setCommandInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isInterpreting, setIsInterpreting] = useState(false);
+  const [pendingAIPlan, setPendingAIPlan] = useState<AIEditingPlan | null>(null);
   const [conversation, setConversation] = useState<Array<{ sender: 'user' | 'assistant'; text: string; time: string }>>([
     {
       sender: 'assistant',
-      text: 'Welcome to RayFlow Studio. Upload your photos and soundtrack, switch aspect ratios, drag clips to trim or reorder, or issue natural-language editing commands.',
+      text: 'Welcome to Rayflow AI. Bring in your footage and music, then tell me how the edit should feel. You can shape every cut, caption, and transition on the timeline.',
       time: 'Just now'
     }
   ]);
@@ -196,45 +214,27 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
   const renderCreative = useCreativePreview(plan, isPlaying, seekVersion, currentTimeRef, drawFrameRef, setErrorMessage);
 
-  // Load state from localStorage on initial render
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.projectName) setProjectName(parsed.projectName);
-        if (parsed.images) setImages(parsed.images);
-        if (parsed.audio) setAudio(parsed.audio);
-        if (parsed.audioAnalysis) setAudioAnalysis(parsed.audioAnalysis);
-        if (parsed.plan) {
-          const loadedPlan = parsed.plan;
-          if (!loadedPlan.fit_mode) loadedPlan.fit_mode = 'fill';
-          if (!loadedPlan.transitions) loadedPlan.transitions = [];
-          setPlan(loadedPlan);
-        }
-      }
-    } catch {
-      // Ignore parse errors
-    }
-    setHasHydrated(true);
-  }, []);
+  const readOnly = useSharedReel({ projectName, images, audio, audioAnalysis, plan }, parsed => {
+    setProjectName(parsed.projectName || 'My Rayflow Reel');
+    setImages(parsed.images || []);
+    setAudio(parsed.audio || null);
+    setAudioAnalysis(parsed.audioAnalysis || null);
+    if (parsed.plan) setPlan({ ...parsed.plan, fit_mode: parsed.plan.fit_mode || 'fill', transitions: parsed.plan.transitions || [] });
+    setHistory([]); setRedoStack([]);
+  }, setErrorMessage, hasHydrated, setHasHydrated);
 
-  // Save state to localStorage on modification
   useEffect(() => {
-    if (!hasHydrated) return;
-    try {
-      const stateToSave = {
-        projectName,
-        images,
-        audio,
-        audioAnalysis,
-        plan
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
-    } catch {
-      // Ignore quota errors
-    }
-  }, [projectName, images, audio, audioAnalysis, plan, hasHydrated]);
+    const insert = (event: Event) => {
+      if (!window.location.hash.startsWith('#/studio')) return;
+      const asset = (event as CustomEvent).detail;
+      void editorRequest(`/editor/assets/${encodeURIComponent(asset.id)}/studio`, { method: 'POST' }).then(media => {
+        if (media.media_type === 'audio') { setAudio(media); setAudioAnalysis(null); }
+        else setImages(previous => previous.some(item => item.filename === media.filename) ? previous : [...previous, media]);
+      }).catch(error => setErrorMessage(error.message));
+    };
+    window.addEventListener('rayflow:insert-asset', insert);
+    return () => window.removeEventListener('rayflow:insert-asset', insert);
+  }, []);
 
   // Push new plan to history
   const updatePlanWithHistory = (newPlan: EditingPlan, recordHistory = true) => {
@@ -411,12 +411,12 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
         ...prev,
         {
           sender: 'assistant',
-          text: `Added ${uploaded.length} photo${uploaded.length > 1 ? 's' : ''} to the media library. Timeline updated.`,
+          text: `Added ${uploaded.length} media file${uploaded.length > 1 ? 's' : ''} to your Rayflow library. Timeline updated.`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to upload photographs.');
+      setErrorMessage(err.message || 'Could not upload your photos or video. Try adding the files again.');
     } finally {
       setIsUploading(false);
     }
@@ -458,7 +458,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
         ...prev,
         {
           sender: 'assistant',
-          text: 'Loaded 4 sample photos and soundtrack. Ready for editing, trimming, transitions, and export.',
+          text: 'Your Rayflow sample reel is ready: four photos and a soundtrack. Try trimming a clip, syncing the cuts, or adding a title.',
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
@@ -593,6 +593,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     }
     setIsTranscribing(true);
     setTranscriptionProgress(0);
+    setTranscriptionStage('Queued');
     setErrorMessage(null);
     try {
       const before = planRef.current;
@@ -600,24 +601,30 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       transcriptionJobRef.current = jobId;
       setTranscriptionProgress(0);
 
+      let checking = false;
+      const stopPolling = () => { clearInterval(pollTimer); pollTimersRef.current.delete(pollTimer); };
       const pollTimer = setInterval(async () => {
+        if (checking) return;
+        checking = true;
         try {
           const job = await getTranscriptionStatus(jobId);
-          if(transcriptionJobRef.current!==jobId){clearInterval(pollTimer);return;}
+          if(transcriptionJobRef.current!==jobId){stopPolling();return;}
+          setTranscriptionStage(`${job.stage || job.status}${job.language ? ` · ${job.language}` : ''}${job.device ? ` · ${job.device}/${job.compute_type}` : ''}${job.notice ? ` · ${job.notice}` : ''}`);
           if (job.status === 'processing') {
             setTranscriptionProgress(Math.round(job.progress || 50));
           } else if (job.status === 'completed') {
-            clearInterval(pollTimer);
+            stopPolling();
             setIsTranscribing(false);
             setTranscriptionProgress(100);
             transcriptionJobRef.current = null;
             if(planRef.current!==before){setErrorMessage('The project changed during transcription. Your edits were preserved; generate captions again to use the cached transcript.');return;}
             if (job.subtitles && job.subtitles.length > 0) {
               const subtitles = attachTranscript(job.subtitles,planRef.current,speechSource);
+              if (!subtitles.length) { setErrorMessage('No speech falls inside this source’s current timeline range. Existing captions were retained.'); return; }
               const updatedPlan: EditingPlan = {
                 ...planRef.current,
-                subtitles, transcript: subtitles,
-                source_filename:speechSource,source_fingerprint:job.source_fingerprint,
+                subtitles: mergeSourceCaptions(planRef.current, subtitles, speechSource), transcript: subtitles,
+                source_filename:speechSource,source_fingerprint:job.source_fingerprint,transcript_model:job.model,
               };
               updatePlanWithHistory(updatedPlan);
               setActiveTab('captions');
@@ -631,15 +638,18 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               ]);
             } else setErrorMessage('No speech was detected in the selected source. Existing captions were retained.');
           } else if (job.status === 'failed' || job.status === 'cancelled') {
-            clearInterval(pollTimer);
+            stopPolling();
             setIsTranscribing(false);
             transcriptionJobRef.current = null;
             if(job.status==='failed')setErrorMessage(`Transcription failed: ${job.error || 'Unknown error'}`);
           }
         } catch (e: any) {
-          clearInterval(pollTimer);
+          stopPolling();
           setIsTranscribing(false);
+          transcriptionJobRef.current = null;
           setErrorMessage(`Transcription status error: ${e.message}`);
+        } finally {
+          checking = false;
         }
       }, 1200);
       pollTimersRef.current.add(pollTimer);
@@ -652,7 +662,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
   // Automatic Talking-Head / Photo Reel Generation Workflow
   const handleExecuteAutoEdit = async () => {
     if (images.length === 0) {
-      setErrorMessage('Please upload photographs or an audio/video soundtrack to generate an auto reel.');
+      setErrorMessage('Add photos or video to start your Rayflow reel draft.');
       return;
     }
     setIsAutoEditing(true);
@@ -754,27 +764,55 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     setConversation(prev => [...prev, { sender: 'user', text: cmd, time: timeStr }]);
     setCommandInput('');
 
+    let preferredProvider = 'auto';
     try {
-      const res = ollamaStatus.available && selectedOllamaModel
-        ? await interpretWithOllama(cmd, plan, selectedOllamaModel)
-        : await interpretNaturalCommand(cmd, plan);
-      updatePlanWithHistory(res.plan);
-
-      // Re-calculate clips if images exist and clips were not specifically modified
-      if (images.length > 0 && plan.clips.length === 0 && (!res.plan.clips || res.plan.clips.length === 0)) {
-        await refreshTimeline(res.plan, images, audio);
+      preferredProvider = (await getSettings()).ai_provider;
+      if (preferredProvider === 'local' || preferredProvider === 'ollama') {
+        const result = preferredProvider === 'ollama'
+          ? await interpretWithOllama(cmd, plan)
+          : await interpretNaturalCommand(cmd, plan);
+        updatePlanWithHistory(result.plan);
+        setConversation(prev => [...prev, { sender: 'assistant', text: result.explanation, time: timeStr }]);
+        return;
       }
-
-      setConversation(prev => [
-        ...prev,
-        {
-          sender: 'assistant',
-          text: res.explanation,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }
-      ]);
+      const aiPlan = await createOpenRouterPlan(cmd, plan);
+      if (aiPlan.clarification) {
+        setConversation(prev => [...prev, { sender: 'assistant', text: aiPlan.clarification!, time: timeStr }]);
+      } else {
+        setPendingAIPlan(aiPlan);
+        setConversation(prev => [...prev, { sender: 'assistant', text: `${aiPlan.explanation} Review the proposed changes below before applying them.`, time: timeStr }]);
+      }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to interpret command.');
+      if (preferredProvider !== 'auto') {
+        setErrorMessage(err.message || 'The selected provider could not process this instruction. Check Connections.');
+        return;
+      }
+      // Preserve the existing deterministic/Ollama workflow when OpenRouter is not configured.
+      try {
+        const res = await interpretNaturalCommand(cmd, plan);
+        updatePlanWithHistory(res.plan);
+        setConversation(prev => [...prev, { sender: 'assistant', text: res.explanation, time: timeStr }]);
+      } catch (fallbackError: any) {
+        setErrorMessage(fallbackError.message || err.message || 'Failed to interpret command.');
+      }
+    } finally {
+      setIsInterpreting(false);
+    }
+  };
+
+  const approveAIPlan = async () => {
+    if (!pendingAIPlan) return;
+    setIsInterpreting(true);
+    try {
+      const result = await applyOpenRouterPlan(pendingAIPlan, planRef.current);
+      const historyAction = pendingAIPlan.actions.find(action => action.type === 'undo' || action.type === 'redo');
+      setPendingAIPlan(null);
+      if (historyAction?.type === 'undo') handleUndo();
+      else if (historyAction?.type === 'redo') handleRedo();
+      else updatePlanWithHistory(result.proposed_plan);
+      setConversation(prev => [...prev, { sender: 'assistant', text: result.applied_changes.join(' ') || result.explanation, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'The approved edit could not be applied.');
     } finally {
       setIsInterpreting(false);
     }
@@ -1060,24 +1098,24 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
       } else {
         // Drawing placeholder while image decodes
-        ctx.fillStyle = '#27272A';
+        ctx.fillStyle = '#151f22';
         ctx.fillRect(0, 0, w, h);
         ctx.textAlign = 'center';
-        ctx.font = '500 14px Inter, sans-serif';
-        ctx.fillStyle = '#A1A1AA';
-        ctx.fillText('Loading clip frame...', w / 2, h / 2);
+        ctx.font = `500 ${Math.max(14, Math.round(Math.min(w, h) * .045))}px Onest, sans-serif`;
+        ctx.fillStyle = '#aebdb3';
+        ctx.fillText('Preparing your clip preview…', w / 2, h / 2);
       }
     } else {
       // Clean empty state
-      ctx.fillStyle = '#18181B';
+      ctx.fillStyle = '#0d1417';
       ctx.fillRect(0, 0, w, h);
       ctx.textAlign = 'center';
-      ctx.font = '500 14px Inter, sans-serif';
-      ctx.fillStyle = '#71717A';
-      ctx.fillText('No media added', w / 2, h / 2 - 10);
-      ctx.font = '400 12px Inter, sans-serif';
-      ctx.fillStyle = '#52525B';
-      ctx.fillText('Upload photos to preview edit', w / 2, h / 2 + 14);
+      ctx.font = `500 ${Math.max(14, Math.round(Math.min(w, h) * .045))}px Onest, sans-serif`;
+      ctx.fillStyle = '#dfe7e0';
+      ctx.fillText('Your Rayflow preview', w / 2, h / 2 - Math.min(w, h) * .02);
+      ctx.font = `400 ${Math.max(12, Math.round(Math.min(w, h) * .035))}px Onest, sans-serif`;
+      ctx.fillStyle = '#aebdb3';
+      ctx.fillText('Add photos or video to see your edit', w / 2, h / 2 + Math.min(w, h) * .04);
     }
   };
 
@@ -1239,8 +1277,11 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
     updatePlanWithHistory(recalculateTimeline(clips, updated.transitions, updated));
   };
 
+  if (!hasHydrated) return <main className="workspace-page" role="status" aria-busy="true">Opening your Studio project…</main>;
+
   return (
-    <div className="flex flex-col h-dvh bg-white text-zinc-900 select-none overflow-hidden">
+    <div className="rayflow-studio flex flex-col h-dvh bg-studio-canvas text-studio-text select-none overflow-hidden">
+      {readOnly && <div role="status" className="p-2 text-sm">Viewer access. Changes in this preview are temporary. Download and import a project copy to save your own edits.</div>}
       {/* Hidden audio element for preview sync */}
       {audio && (
         <audio
@@ -1260,26 +1301,33 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       )}
 
       {/* Top Navigation Toolbar */}
-      <header className="h-14 gap-4 overflow-x-auto border-b border-zinc-200 bg-white px-3 flex items-center justify-between z-30 shrink-0">
+      {feature === 'export' && <div className="p-3 text-xs bg-studio-panel border-b border-studio-border" role="status">Timeline export includes cut timing, source trims and media references. Use Export timeline in the toolbar. Captions, grading and transitions are saved as Rayflow metadata; use Render for their final appearance.</div>}
+      <header className="h-14 gap-4 overflow-x-auto border-b border-studio-border bg-studio-panel px-3 flex items-center justify-between z-30 shrink-0">
         {/* Left: Back & Project Name */}
         <div className="flex items-center gap-3">
           <button
             onClick={onBackToHome}
-            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
+            className="p-1.5 rounded-lg text-studio-muted hover:text-studio-text hover:bg-studio-hover transition-colors"
             title="Return to Landing Page"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
 
-          <div className="h-4 w-px bg-zinc-200" />
+          <div className="h-4 w-px bg-studio-line" />
+          <a href="#/connections" className="text-xs text-studio-muted">Connections</a>
+          <a href="#/dashboard" className="text-xs text-studio-muted">Dashboard</a>
+          <button className="text-xs text-studio-muted whitespace-nowrap" onClick={() => {
+            try { downloadTimeline(exportTimeline(plan, projectName, audio, value => new URL(getMediaUrl(value), window.location.origin).href), projectName); }
+            catch (error) { setErrorMessage(error instanceof Error ? error.message : 'Timeline export failed.'); }
+          }}>Export timeline</button>
 
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-zinc-900" />
+            <span className="w-2 h-2 rounded-full bg-accent" />
             <input
               type="text"
               value={projectName}
               onChange={e => setProjectName(e.target.value)}
-              className="w-28 text-sm font-semibold text-zinc-900 bg-transparent border-b border-transparent hover:border-zinc-300 focus:border-zinc-900 focus:outline-none transition-colors px-1"
+              className="w-28 text-sm font-semibold text-studio-text bg-transparent border-b border-transparent hover:border-studio-border focus:border-accent focus:outline-none transition-colors px-1"
               title="Click to rename project"
             />
           </div>
@@ -1288,13 +1336,13 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
         {/* Center: Aspect Ratio & Image Fit Mode Controls */}
         <div className="flex shrink-0 items-center gap-3">
           {/* Aspect Ratio Selector */}
-          <div className="flex items-center p-0.5 bg-zinc-100 rounded-lg border border-zinc-200 shadow-2xs">
+          <div className="flex items-center p-0.5 bg-studio-hover rounded-lg border border-studio-border shadow-2xs">
             <button
               onClick={() => updatePlanWithHistory({ ...plan, aspect_ratio: '9:16' })}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                 plan.aspect_ratio === '9:16'
-                  ? 'bg-white text-zinc-900 font-semibold shadow-xs'
-                  : 'text-zinc-500 hover:text-zinc-900'
+                  ? 'bg-studio-panel text-studio-text font-semibold shadow-xs'
+                  : 'text-studio-muted hover:text-studio-text'
               }`}
               title="9:16 Portrait (1080×1920) for Reels, TikTok, Shorts"
             >
@@ -1306,8 +1354,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               onClick={() => updatePlanWithHistory({ ...plan, aspect_ratio: '16:9' })}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                 plan.aspect_ratio === '16:9'
-                  ? 'bg-white text-zinc-900 font-semibold shadow-xs'
-                  : 'text-zinc-500 hover:text-zinc-900'
+                  ? 'bg-studio-panel text-studio-text font-semibold shadow-xs'
+                  : 'text-studio-muted hover:text-studio-text'
               }`}
               title="16:9 Landscape (1920×1080) for YouTube, Desktop"
             >
@@ -1319,8 +1367,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               onClick={() => updatePlanWithHistory({ ...plan, aspect_ratio: '1:1' })}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                 plan.aspect_ratio === '1:1'
-                  ? 'bg-white text-zinc-900 font-semibold shadow-xs'
-                  : 'text-zinc-500 hover:text-zinc-900'
+                  ? 'bg-studio-panel text-studio-text font-semibold shadow-xs'
+                  : 'text-studio-muted hover:text-studio-text'
               }`}
               title="1:1 Square (1080×1080) for Instagram Feed"
             >
@@ -1329,16 +1377,16 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             </button>
           </div>
 
-          <div className="h-4 w-px bg-zinc-200" />
+          <div className="h-4 w-px bg-studio-line" />
 
           {/* Fit Mode Toggle */}
-          <div className="flex items-center p-0.5 bg-zinc-100 rounded-lg border border-zinc-200 shadow-2xs">
+          <div className="flex items-center p-0.5 bg-studio-hover rounded-lg border border-studio-border shadow-2xs">
             <button
               onClick={() => updatePlanWithHistory({ ...plan, fit_mode: 'fill' })}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                 (plan.fit_mode || 'fill') === 'fill'
-                  ? 'bg-white text-zinc-900 font-semibold shadow-xs'
-                  : 'text-zinc-500 hover:text-zinc-900'
+                  ? 'bg-studio-panel text-studio-text font-semibold shadow-xs'
+                  : 'text-studio-muted hover:text-studio-text'
               }`}
               title="Fill Frame (crop to fill)"
             >
@@ -1350,10 +1398,10 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               onClick={() => updatePlanWithHistory({ ...plan, fit_mode: 'fit' })}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                 plan.fit_mode === 'fit'
-                  ? 'bg-white text-zinc-900 font-semibold shadow-xs'
-                  : 'text-zinc-500 hover:text-zinc-900'
+                  ? 'bg-studio-panel text-studio-text font-semibold shadow-xs'
+                  : 'text-studio-muted hover:text-studio-text'
               }`}
-              title="Fit to Frame (preserve entire photo)"
+              title="Fit to Frame (preserve the full photo or video)"
             >
               <Minimize2 className="w-3 h-3" />
               <span>Fit</span>
@@ -1371,7 +1419,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             <button
               onClick={handleUndo}
               disabled={history.length === 0}
-              className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              className="p-1.5 rounded-lg text-studio-muted hover:text-studio-text hover:bg-studio-hover disabled:opacity-30 disabled:pointer-events-none transition-colors"
               title="Undo (Ctrl+Z)"
             >
               <Undo2 className="w-4 h-4" />
@@ -1379,7 +1427,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             <button
               onClick={handleRedo}
               disabled={redoStack.length === 0}
-              className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              className="p-1.5 rounded-lg text-studio-muted hover:text-studio-text hover:bg-studio-hover disabled:opacity-30 disabled:pointer-events-none transition-colors"
               title="Redo"
             >
               <Redo2 className="w-4 h-4" />
@@ -1387,7 +1435,6 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             <button
               onClick={() => {
                 if (window.confirm('Reset this project to start fresh?')) {
-                  localStorage.removeItem(STORAGE_KEY);
                   setIsPlaying(false);
                   currentTimeRef.current = 0;
                   setCurrentTime(0);
@@ -1413,23 +1460,23 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                   });
                 }
               }}
-              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 text-xs transition-colors"
+              className="p-1.5 rounded-lg text-studio-muted hover:text-studio-text hover:bg-studio-hover text-xs transition-colors"
               title="New / Clear Project"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          <div className="h-4 w-px bg-zinc-200" />
+          <div className="h-4 w-px bg-studio-line" />
 
           <Button
             variant="secondary"
             size="sm"
             onClick={() => setIsAutoEditModalOpen(true)}
-            className="flex items-center gap-1.5 border-amber-300 hover:border-amber-400 bg-amber-50/50 hover:bg-amber-100/60 text-amber-900"
-            title="Automatically transcribe and generate a dynamic talking-head reel"
+            className="flex items-center gap-1.5 border-brass-border hover:border-brass-border bg-brass-soft/50 hover:bg-brass-soft/60 text-brass"
+            title="Create a Rayflow draft with speech captions and contextual B-roll"
           >
-            <Wand2 className="w-3.5 h-3.5 text-amber-600" />
+            <Wand2 className="w-3.5 h-3.5 text-brass" />
             <span className="font-semibold">Auto Reel</span>
           </Button>
 
@@ -1446,7 +1493,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       </header>
 
       {errorMessage && (
-        <div role="alert" className="shrink-0 max-h-20 overflow-auto border-b border-zinc-200 px-3 py-2 text-xs bg-white flex gap-2">
+        <div role="alert" className="shrink-0 max-h-20 overflow-auto border-b border-studio-border px-3 py-2 text-xs bg-studio-panel flex gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" /><span className="flex-1">{errorMessage}</span>
           <button aria-label="Dismiss message" onClick={() => setErrorMessage(null)}>Dismiss</button>
         </div>
@@ -1454,16 +1501,16 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
       {/* Main Studio Area (3 Columns: Left Media/Settings, Center Preview, Right AI Assistant) */}
       <div className="flex-1 min-h-0 flex relative overflow-hidden">
         {/* LEFT PANEL: Media Library & Settings */}
-        <aside className={`${mobilePanel === 'media' ? 'flex absolute inset-y-0 left-0 z-30 shadow-xl' : 'hidden'} lg:static lg:flex w-72 max-w-[85vw] border-r border-zinc-200 bg-zinc-50 flex-col shrink-0 overflow-hidden`}>
+        <aside className={`${mobilePanel === 'media' ? 'flex absolute inset-y-0 left-0 z-30 shadow-xl' : 'hidden'} lg:static lg:flex w-72 max-w-[85vw] border-r border-studio-border bg-studio-raised flex-col shrink-0 overflow-hidden`}>
           <button className="lg:hidden text-xs p-2 border-b" onClick={() => setMobilePanel(null)}>Close media</button>
           {/* Tabs */}
-          <div className="flex border-b border-zinc-200 bg-white px-2 pt-2 gap-1 text-xs font-medium overflow-x-auto">
+          <div className="flex border-b border-studio-border bg-studio-panel px-2 pt-2 gap-1 text-xs font-medium overflow-x-auto">
             <button
               onClick={() => setActiveTab('photos')}
               className={`px-3 py-2 rounded-t-lg border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'photos'
-                  ? 'border-zinc-900 text-zinc-900 font-semibold bg-zinc-50'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                  ? 'border-accent text-studio-text font-semibold bg-studio-raised'
+                  : 'border-transparent text-studio-muted hover:text-studio-text'
               }`}
             >
               <ImageIcon className="w-3.5 h-3.5" />
@@ -1474,8 +1521,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               onClick={() => setActiveTab('music')}
               className={`px-3 py-2 rounded-t-lg border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'music'
-                  ? 'border-zinc-900 text-zinc-900 font-semibold bg-zinc-50'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                  ? 'border-accent text-studio-text font-semibold bg-studio-raised'
+                  : 'border-transparent text-studio-muted hover:text-studio-text'
               }`}
             >
               <Music className="w-3.5 h-3.5" />
@@ -1486,12 +1533,12 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               onClick={() => setActiveTab('captions')}
               className={`px-3 py-2 rounded-t-lg border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'captions'
-                  ? 'border-zinc-900 text-zinc-900 font-semibold bg-zinc-50'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                  ? 'border-accent text-studio-text font-semibold bg-studio-raised'
+                  : 'border-transparent text-studio-muted hover:text-studio-text'
               }`}
-              title="Dynamic Expressive Captions"
+              title="Style and time your speech captions"
             >
-              <Subtitles className="w-3.5 h-3.5 text-amber-500" />
+              <Subtitles className="w-3.5 h-3.5 text-brass" />
               <span>Captions {plan.subtitles && plan.subtitles.length > 0 ? `(${plan.subtitles.length})` : ''}</span>
             </button>
 
@@ -1499,12 +1546,12 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               onClick={() => setActiveTab('inserts')}
               className={`px-3 py-2 rounded-t-lg border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'inserts'
-                  ? 'border-zinc-900 text-zinc-900 font-semibold bg-zinc-50'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                  ? 'border-accent text-studio-text font-semibold bg-studio-raised'
+                  : 'border-transparent text-studio-muted hover:text-studio-text'
               }`}
-              title="Contextual B-Roll & Visual Inserts"
+              title="Layer B-roll and visual inserts into your edit"
             >
-              <Layers className="w-3.5 h-3.5 text-blue-500" />
+              <Layers className="w-3.5 h-3.5 text-jade" />
               <span>Inserts {plan.visual_inserts && plan.visual_inserts.length > 0 ? `(${plan.visual_inserts.length})` : ''}</span>
             </button>
 
@@ -1512,8 +1559,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               onClick={() => setActiveTab('effects')}
               className={`px-3 py-2 rounded-t-lg border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'effects'
-                  ? 'border-zinc-900 text-zinc-900 font-semibold bg-zinc-50'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                  ? 'border-accent text-studio-text font-semibold bg-studio-raised'
+                  : 'border-transparent text-studio-muted hover:text-studio-text'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
@@ -1524,8 +1571,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               onClick={() => setActiveTab('style')}
               className={`px-3 py-2 rounded-t-lg border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'style'
-                  ? 'border-zinc-900 text-zinc-900 font-semibold bg-zinc-50'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                  ? 'border-accent text-studio-text font-semibold bg-studio-raised'
+                  : 'border-transparent text-studio-muted hover:text-studio-text'
               }`}
             >
               <Sliders className="w-3.5 h-3.5" />
@@ -1536,8 +1583,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               onClick={() => setActiveTab('title')}
               className={`px-3 py-2 rounded-t-lg border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'title'
-                  ? 'border-zinc-900 text-zinc-900 font-semibold bg-zinc-50'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                  ? 'border-accent text-studio-text font-semibold bg-studio-raised'
+                  : 'border-transparent text-studio-muted hover:text-studio-text'
               }`}
             >
               <Type className="w-3.5 h-3.5" />
@@ -1554,13 +1601,13 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 <label
                   onDragOver={e => e.preventDefault()}
                   onDrop={handleDropPhotos}
-                  className="border border-dashed border-zinc-300 hover:border-zinc-400 bg-white rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer transition-colors text-center group shadow-sm"
+                  className="border border-dashed border-studio-border hover:border-studio-border bg-studio-panel rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer transition-colors text-center group shadow-sm"
                 >
-                  <Upload className="w-5 h-5 text-zinc-500 mb-1.5 group-hover:text-zinc-800 transition-colors" />
-                  <span className="text-xs font-semibold text-zinc-800">
-                    Add Photos or Videos
+                  <Upload className="w-5 h-5 text-studio-muted mb-1.5 group-hover:text-studio-text transition-colors" />
+                  <span className="text-xs font-semibold text-studio-text">
+                    Bring your footage
                   </span>
-                  <span className="text-[11px] text-zinc-500 mt-0.5">
+                  <span className="text-[11px] text-studio-muted mt-0.5">
                     Drag and drop JPG, PNG, WebP, MP4, MOV or WebM files
                   </span>
                   <input
@@ -1573,9 +1620,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 </label>
 
                 {isUploading && (
-                  <div className="flex items-center justify-center gap-2 py-2 text-xs text-zinc-700 bg-zinc-100 rounded-lg">
+                  <div className="flex items-center justify-center gap-2 py-2 text-xs text-studio-text bg-studio-hover rounded-lg">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Processing media...</span>
+                    <span>Adding footage to Rayflow…</span>
                   </div>
                 )}
 
@@ -1583,29 +1630,29 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                   type="button"
                   onClick={handleLoadDemoProject}
                   disabled={isUploading}
-                  className="w-full py-2 px-3 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 hover:border-zinc-300 transition-colors text-xs font-medium text-zinc-700 flex items-center justify-center gap-2 shadow-2xs"
-                  title="Instantly populate project with 4 test photos and soundtrack"
+                  className="w-full py-2 px-3 rounded-lg border border-studio-border bg-studio-panel hover:bg-studio-raised hover:border-studio-border transition-colors text-xs font-medium text-studio-text flex items-center justify-center gap-2 shadow-2xs"
+                  title="Explore Rayflow with four sample photos and a soundtrack"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-zinc-600" />
-                  <span>Load Sample Project (4 Photos & Music)</span>
+                  <Sparkles className="w-3.5 h-3.5 text-studio-muted" />
+                  <span>Try a Rayflow sample reel</span>
                 </button>
 
 
                 {images.length === 0 ? (
-                  <div className="text-center py-10 px-4 text-xs text-zinc-500 border border-zinc-200 rounded-xl bg-white space-y-2">
-                    <p className="font-medium text-zinc-700">No media in project library</p>
-                    <p className="text-[11px]">Upload photos or videos to begin assembling your reel.</p>
+                  <div className="text-center py-10 px-4 text-xs text-studio-muted border border-studio-border rounded-xl bg-studio-panel space-y-2">
+                    <p className="font-medium text-studio-text">Your story starts here</p>
+                    <p className="text-[11px]">Add photos or video to begin your Rayflow edit.</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between text-[11px] text-zinc-500 px-1">
-                      <span>{images.length} photos ready</span>
+                    <div className="flex items-center justify-between text-[11px] text-studio-muted px-1">
+                      <span>{images.length} media files ready</span>
                       <button
                         onClick={() => {
                           setImages([]);
                           refreshTimeline(plan, [], audio);
                         }}
-                        className="text-zinc-500 hover:text-red-600 transition-colors"
+                        className="text-studio-muted hover:text-danger transition-colors"
                       >
                         Clear All
                       </button>
@@ -1614,18 +1661,18 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                     {images.map((img, idx) => (
                       <div
                         key={img.filename + idx}
-                        className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 transition-all shadow-sm"
+                        className="flex items-center justify-between p-2.5 rounded-lg bg-studio-panel border border-studio-border hover:border-studio-border transition-all shadow-sm"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           {img.media_type === 'video'
                             ? <video src={getMediaUrl(img.url)} muted preload="metadata" className="w-10 h-10 object-cover rounded shrink-0" />
                             : <img src={getMediaUrl(img.url)} alt="" className="w-10 h-10 object-cover rounded shrink-0" />}
                           <div className="min-w-0">
-                            <p className="text-xs font-medium text-zinc-900 truncate">
+                            <p className="text-xs font-medium text-studio-text truncate">
                               {img.original_name}
                             </p>
-                            <p className="text-[10px] text-zinc-500 font-mono">
-                              {(img.size / 1024).toFixed(0)} KB • Photo #{idx + 1}
+                            <p className="text-[10px] text-studio-muted font-mono">
+                              {(img.size / 1024).toFixed(0)} KB • {img.media_type === 'video' ? 'Video' : 'Photo'} #{idx + 1}
                             </p>
                           </div>
                         </div>
@@ -1634,7 +1681,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                           <button
                             onClick={() => handleMoveImage(idx, 'up')}
                             disabled={idx === 0}
-                            className="p-1 text-zinc-400 hover:text-zinc-800 disabled:opacity-20"
+                            className="p-1 text-studio-quiet hover:text-studio-text disabled:opacity-20"
                             title="Move Up"
                           >
                             <ArrowUp className="w-3.5 h-3.5" />
@@ -1642,15 +1689,15 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                           <button
                             onClick={() => handleMoveImage(idx, 'down')}
                             disabled={idx === images.length - 1}
-                            className="p-1 text-zinc-400 hover:text-zinc-800 disabled:opacity-20"
+                            className="p-1 text-studio-quiet hover:text-studio-text disabled:opacity-20"
                             title="Move Down"
                           >
                             <ArrowDown className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleRemoveImage(idx)}
-                            className="p-1 text-zinc-400 hover:text-red-600 transition-colors"
-                            title="Remove Photo"
+                            className="p-1 text-studio-quiet hover:text-danger transition-colors"
+                            title={img.media_type === 'video' ? 'Remove Video' : 'Remove Photo'}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1665,13 +1712,13 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             {/* MUSIC TAB */}
             {activeTab === 'music' && (
               <div className="space-y-4">
-                <label className="border border-dashed border-zinc-300 hover:border-zinc-400 bg-white rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer transition-colors text-center group shadow-sm">
-                  <Music className="w-5 h-5 text-zinc-500 mb-1.5 group-hover:text-zinc-800 transition-colors" />
-                  <span className="text-xs font-semibold text-zinc-800">
+                <label className="border border-dashed border-studio-border hover:border-studio-border bg-studio-panel rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer transition-colors text-center group shadow-sm">
+                  <Music className="w-5 h-5 text-studio-muted mb-1.5 group-hover:text-studio-text transition-colors" />
+                  <span className="text-xs font-semibold text-studio-text">
                     {audio ? 'Replace Soundtrack' : 'Add Soundtrack'}
                   </span>
-                  <span className="text-[11px] text-zinc-500 mt-0.5">
-                    Audio analysis with Librosa beat detection (MP3, WAV)
+                  <span className="text-[11px] text-studio-muted mt-0.5">
+                    Find the rhythm for your cuts with Librosa (MP3, WAV)
                   </span>
                   <input
                     type="file"
@@ -1682,27 +1729,27 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 </label>
 
                 {isAnalyzingAudio && (
-                  <div className="flex items-center justify-center gap-2 py-2 text-xs text-zinc-700 bg-zinc-100 rounded-lg">
+                  <div className="flex items-center justify-center gap-2 py-2 text-xs text-studio-text bg-studio-hover rounded-lg">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Analyzing rhythm & beats with Librosa...</span>
+                    <span>Finding soundtrack beats with Librosa…</span>
                   </div>
                 )}
 
                 {audio ? (
-                  <div className="p-3.5 rounded-xl bg-white border border-zinc-200 shadow-sm space-y-3">
+                  <div className="p-3.5 rounded-xl bg-studio-panel border border-studio-border shadow-sm space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <button
                           onClick={handleToggleAudioPreview}
-                          className="w-8 h-8 rounded-full bg-zinc-900 text-white flex items-center justify-center hover:bg-zinc-800 transition-colors shrink-0 shadow-2xs"
+                          className="w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center hover:bg-accent-hover transition-colors shrink-0 shadow-2xs"
                         >
                           {isAudioPreviewPlaying ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
                         </button>
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold text-zinc-900 truncate">
+                          <p className="text-xs font-semibold text-studio-text truncate">
                             {audio.original_name}
                           </p>
-                          <p className="text-[10px] text-zinc-500 font-mono">
+                          <p className="text-[10px] text-studio-muted font-mono">
                             {(audio.size / (1024 * 1024)).toFixed(1)} MB
                           </p>
                         </div>
@@ -1710,7 +1757,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
                       <button
                         onClick={handleRemoveAudio}
-                        className="p-1 text-zinc-400 hover:text-red-600 transition-colors"
+                        className="p-1 text-studio-quiet hover:text-danger transition-colors"
                         title="Remove Soundtrack"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1718,16 +1765,16 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                     </div>
 
                     {audioAnalysis && (
-                      <div className="pt-2 border-t border-zinc-100 grid grid-cols-2 gap-2 text-center">
-                        <div className="bg-zinc-50 p-2 rounded-lg border border-zinc-200">
-                          <span className="text-[10px] text-zinc-500 block">Tempo</span>
-                          <span className="text-xs font-semibold font-mono text-zinc-900">
+                      <div className="pt-2 border-t border-studio-line grid grid-cols-2 gap-2 text-center">
+                        <div className="bg-studio-raised p-2 rounded-lg border border-studio-border">
+                          <span className="text-[10px] text-studio-muted block">Tempo</span>
+                          <span className="text-xs font-semibold font-mono text-studio-text">
                             {audioAnalysis.tempo} BPM
                           </span>
                         </div>
-                        <div className="bg-zinc-50 p-2 rounded-lg border border-zinc-200">
-                          <span className="text-[10px] text-zinc-500 block">Beats Detected</span>
-                          <span className="text-xs font-semibold font-mono text-zinc-900">
+                        <div className="bg-studio-raised p-2 rounded-lg border border-studio-border">
+                          <span className="text-[10px] text-studio-muted block">Beats Detected</span>
+                          <span className="text-xs font-semibold font-mono text-studio-text">
                             {audioAnalysis.beat_count} Hits
                           </span>
                         </div>
@@ -1735,9 +1782,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                     )}
                   </div>
                 ) : (
-                  <div className="text-center py-10 px-4 text-xs text-zinc-500 border border-zinc-200 rounded-xl bg-white space-y-2">
-                    <p className="font-medium text-zinc-700">No soundtrack selected</p>
-                    <p className="text-[11px]">Upload music to automatically align cuts to rhythm.</p>
+                  <div className="text-center py-10 px-4 text-xs text-studio-muted border border-studio-border rounded-xl bg-studio-panel space-y-2">
+                    <p className="font-medium text-studio-text">No soundtrack selected</p>
+                    <p className="text-[11px]">Give Rayflow a soundtrack to guide the rhythm of your cuts.</p>
                   </div>
                 )}
               </div>
@@ -1758,13 +1805,13 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             {activeTab === 'style' && (
               <div className="space-y-4">
                 {/* Beat Sync Toggle */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-white border border-zinc-200 shadow-sm">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-studio-panel border border-studio-border shadow-sm">
                   <div>
-                    <span className="text-xs font-semibold text-zinc-900 block">
-                      Beat Sync Cuts
+                    <span className="text-xs font-semibold text-studio-text block">
+                      Sync cuts to music
                     </span>
-                    <span className="text-[11px] text-zinc-500">
-                      Snap image transitions to soundtrack rhythm
+                    <span className="text-[11px] text-studio-muted">
+                    Align your cuts with the soundtrack beats
                     </span>
                   </div>
                   <input
@@ -1775,14 +1822,14 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                       if (updated.beat_sync && !audioAnalysis?.beat_times.length) { setErrorMessage('Analyze a soundtrack with detectable beats first.'); return; }
                       repace(updated, true);
                     }}
-                    className="w-4 h-4 accent-zinc-900 rounded cursor-pointer"
+                    className="w-4 h-4 accent-accent rounded cursor-pointer"
                   />
                 </div>
 
                 {/* Style Presets */}
                 <div>
-                  <label className="text-xs font-medium text-zinc-700 block mb-2">
-                    Color & Style Preset
+                  <label className="text-xs font-medium text-studio-text block mb-2">
+                    Color and mood
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
@@ -1800,14 +1847,14 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                         }}
                         className={`p-2.5 rounded-lg border text-left transition-all ${
                           plan.style === preset.id
-                            ? 'border-zinc-900 bg-white ring-1 ring-zinc-900 shadow-sm'
-                            : 'border-zinc-200 bg-white hover:border-zinc-300'
+                            ? 'border-accent bg-studio-panel ring-1 ring-accent shadow-sm'
+                            : 'border-studio-border bg-studio-panel hover:border-studio-border'
                         }`}
                       >
-                        <span className="text-xs font-semibold text-zinc-900 block">
+                        <span className="text-xs font-semibold text-studio-text block">
                           {preset.label}
                         </span>
-                        <span className="text-[10px] text-zinc-500">
+                        <span className="text-[10px] text-studio-muted">
                           {preset.desc}
                         </span>
                       </button>
@@ -1815,15 +1862,15 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                   </div>
                 </div>
 
-                {plan.style === 'cinematic' && <label className="block text-xs text-zinc-700">Cinematic color strength
+                {plan.style === 'cinematic' && <label className="block text-xs text-studio-text">Cinematic color strength
                   <NumericInput aria-label="Cinematic color strength" className="w-full rounded border p-1 mt-1" min={0} max={100}
                     value={Math.round((plan.color_strength ?? 1)*100)} onCommit={value=>updatePlanWithHistory({...plan,color_strength:value/100})}/>
-                  <span className="text-[10px] text-zinc-500">0 preserves source color. Auto Reel starts at 30 for gentle contrast.</span>
+                  <span className="text-[10px] text-studio-muted">0 preserves source color. Auto Reel starts at 30 for gentle contrast.</span>
                 </label>}
                 {/* Pacing Speed */}
                 <div>
-                  <label className="text-xs font-medium text-zinc-700 block mb-2">
-                    Editing Pacing
+                  <label className="text-xs font-medium text-studio-text block mb-2">
+                    Cut pacing
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {[
@@ -1839,8 +1886,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                         }}
                         className={`py-2 px-1 text-center rounded-lg border text-xs font-medium transition-all ${
                           plan.cut_pacing === p.id
-                            ? 'border-zinc-900 bg-zinc-900 text-white shadow-sm'
-                            : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300'
+                            ? 'border-accent bg-accent text-white shadow-sm'
+                            : 'border-studio-border bg-studio-panel text-studio-text hover:border-studio-border'
                         }`}
                       >
                         {p.label}
@@ -1850,10 +1897,10 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 </div>
 
                 {/* Duration Slider */}
-                <div className="p-3 rounded-lg bg-white border border-zinc-200 shadow-sm space-y-2">
+                <div className="p-3 rounded-lg bg-studio-panel border border-studio-border shadow-sm space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-medium text-zinc-700">Total Reel Duration</span>
-                    <span className="text-xs font-mono font-semibold text-zinc-900">
+                    <span className="text-xs font-medium text-studio-text">Reel duration</span>
+                    <span className="text-xs font-mono font-semibold text-studio-text">
                       {plan.duration_seconds.toFixed(1)}s
                     </span>
                   </div>
@@ -1866,7 +1913,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                     onChange={e => {
                       resizeDuration(parseFloat(e.target.value));
                     }}
-                    className="w-full accent-zinc-900 cursor-pointer"
+                    className="w-full accent-accent cursor-pointer"
                   />
                 </div>
               </div>
@@ -1875,13 +1922,13 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             {/* TITLE TAB */}
             {activeTab === 'title' && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-white border border-zinc-200 shadow-sm">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-studio-panel border border-studio-border shadow-sm">
                   <div>
-                    <span className="text-xs font-semibold text-zinc-900 block">
-                      Enable Title Overlay
+                    <span className="text-xs font-semibold text-studio-text block">
+                      Show opening title
                     </span>
-                    <span className="text-[11px] text-zinc-500">
-                      Displays cinematic title at the start
+                    <span className="text-[11px] text-studio-muted">
+                      Introduce your reel with a title
                     </span>
                   </div>
                   <input
@@ -1894,15 +1941,15 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                       };
                       updatePlanWithHistory(updated);
                     }}
-                    className="w-4 h-4 accent-zinc-900 rounded cursor-pointer"
+                    className="w-4 h-4 accent-accent rounded cursor-pointer"
                   />
                 </div>
 
                 {plan.title.enabled && (
                   <div className="space-y-3 pt-1">
                     <div>
-                      <label className="text-xs font-medium text-zinc-700 block mb-1">
-                        Main Title
+                      <label className="text-xs font-medium text-studio-text block mb-1">
+                        Opening title
                       </label>
                       <input
                         type="text"
@@ -1914,14 +1961,14 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                           };
                           setPlan(updated);
                         }}
-                        placeholder="e.g. SUMMER MEMORIES"
-                        className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs font-semibold text-zinc-900 outline-none focus:border-zinc-900 shadow-sm"
+                        placeholder="e.g. A STORY IN MOTION"
+                        className="w-full bg-studio-panel border border-studio-border rounded-lg px-3 py-2 text-xs font-semibold text-studio-text outline-none focus:border-accent shadow-sm"
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-medium text-zinc-700 block mb-1">
-                        Subtitle (Optional)
+                      <label className="text-xs font-medium text-studio-text block mb-1">
+                        Supporting line (optional)
                       </label>
                       <input
                         type="text"
@@ -1933,8 +1980,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                           };
                           setPlan(updated);
                         }}
-                        placeholder="e.g. Directed with RayFlow"
-                        className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs text-zinc-800 outline-none focus:border-zinc-900 shadow-sm"
+                        placeholder="e.g. Directed with Rayflow"
+                        className="w-full bg-studio-panel border border-studio-border rounded-lg px-3 py-2 text-xs text-studio-text outline-none focus:border-accent shadow-sm"
                       />
                     </div>
                   </div>
@@ -1945,38 +1992,42 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             {/* CAPTIONS TAB (Stage 4) */}
             {activeTab === 'captions' && (
               <div className="space-y-4">
-                <div className="space-y-2 text-xs text-zinc-700">
+                <div className="space-y-2 text-xs text-studio-text">
                   <label>Speech source<select aria-label="Transcription source" className="w-full border rounded p-1" value={transcriptionSource} onChange={e=>setTranscriptionSource(e.target.value)}>
                     <option value="">First video, or uploaded audio</option>
                     {images.filter(item=>item.media_type==='video').map(item=><option key={item.filename} value={item.filename}>{item.original_name}</option>)}
                     {audio && <option value={audio.filename}>{audio.original_name}</option>}
                   </select></label>
-                  <label>Local speech model<select aria-label="Caption transcription model" className="w-full border rounded p-1" value={whisperModel} onChange={e=>setWhisperModel(e.target.value)}><option value="tiny">Tiny</option><option value="base">Base</option><option value="small">Small</option></select></label>
-                  <label>Language code<input aria-label="Transcription language" className="w-full border rounded p-1" placeholder="Auto-detect, or en, hi?" value={transcriptionLanguage} onChange={e=>setTranscriptionLanguage(e.target.value)} /></label>
+                  <SpeechModelSelect state={speechModels} value={whisperModel} onChange={setWhisperModel} label="Caption transcription model" />
+                  <label>Language<input aria-label="Transcription language" list="caption-languages" className="w-full border rounded p-1" placeholder="Auto-detect, or a language code" value={transcriptionLanguage} onChange={e=>setTranscriptionLanguage(e.target.value)} /></label>
+                  <datalist id="caption-languages">{[['en','English'],['hi','Hindi'],['mr','Marathi'],['te','Telugu'],['kn','Kannada'],['ta','Tamil'],['ml','Malayalam'],['bn','Bengali'],['gu','Gujarati'],['pa','Punjabi'],['ne','Nepali'],['ur','Urdu'],['es','Spanish'],['fr','French'],['de','German'],['ja','Japanese']].map(([code,name])=><option key={code} value={code}>{name}</option>)}</datalist>
+                  <p className="text-studio-muted">Leave language empty for mixed speech. Processing is local and free after the selected model is cached. Regeneration keeps manual captions and captions from other sources.</p>
+                  {transcriptionStage && <p role="status" aria-live="polite">{transcriptionStage}{isTranscribing ? ` · ${transcriptionProgress}%` : ''}</p>}
                   {isTranscribing && <button className="border rounded px-2 py-1" onClick={()=>{if(transcriptionJobRef.current)void creativeRequest('/transcribe/'+transcriptionJobRef.current+'/cancel',{}).catch(error=>setErrorMessage(error.message));}}>Cancel transcription</button>}
                 </div>
                 <CaptionSettings plan={plan} onChange={updatePlanWithHistory} />
+                <CaptionTools plan={plan} source={transcriptionSource || images.find(item => item.media_type === 'video')?.filename || audio?.filename} onChange={updatePlanWithHistory} />
 
                 {/* Auto-Transcribe Action Card */}
-                <div className="p-3.5 bg-amber-500/10 border border-amber-200 rounded-xl space-y-2.5">
+                <div className="p-3.5 bg-brass/10 border border-brass-border rounded-xl space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
-                      <Subtitles className="w-4 h-4 text-amber-600" />
-                      Local Speech Transcription
+                    <span className="text-xs font-bold text-brass flex items-center gap-1.5">
+                      <Subtitles className="w-4 h-4 text-brass" />
+                    Turn speech into captions
                     </span>
-                    <span className="text-[10px] font-mono bg-amber-200/60 text-amber-900 px-1.5 py-0.5 rounded font-semibold">
+                    <span className="text-[10px] font-mono bg-brass-soft/60 text-brass px-1.5 py-0.5 rounded font-semibold">
                       Faster-Whisper
                     </span>
                   </div>
-                  <p className="text-[11px] text-amber-800 leading-relaxed">
-                    Extract word-level timestamps and auto-highlight high-energy emphasis keywords on CPU without paid APIs.
+                  <p className="text-[11px] text-brass leading-relaxed">
+                    Create editable captions from your speech. Use word timings to follow the speaker and highlight key phrases.
                   </p>
                   <Button
                     variant="primary"
                     size="sm"
                     onClick={handleAutoTranscribe}
-                    disabled={isTranscribing || (!audio && !images.some(item => item.media_type === 'video'))}
-                    className="w-full bg-amber-600 hover:bg-amber-700 text-white flex items-center justify-center gap-1.5 shadow-xs"
+                    disabled={isTranscribing || !whisperModel || (!audio && !images.some(item => item.media_type === 'video'))}
+                    className="w-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center gap-1.5 shadow-xs"
                   >
                     {isTranscribing ? (
                       <>
@@ -1986,7 +2037,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                     ) : (
                       <>
                         <Mic className="w-3.5 h-3.5" />
-                        <span>Transcribe Speech from Media</span>
+                        <span>Generate speech captions</span>
                       </>
                     )}
                   </Button>
@@ -1994,16 +2045,16 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
                 {/* Caption Presets */}
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-zinc-900 block">
-                    Caption Style Preset
+                  <label className="text-xs font-semibold text-studio-text block">
+                    Caption style
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
                       { id: 'cinematic', name: 'Cinematic', color: '#E7C48C', desc: 'Warm emphasis and balanced phrase captions' },
-                      { id: 'bold_pop', name: 'Bold Pop', color: '#FACC15', desc: 'Neon Yellow Active Pop' },
-                      { id: 'fitness_energy', name: 'Fitness Energy', color: '#38BDF8', desc: 'Electric Cyan & Amber' },
-                      { id: 'minimalist', name: 'Minimalist Clean', color: '#E11D48', desc: 'Subtle Crimson Accent' },
-                      { id: 'subtle_border', name: 'Subtle Border', color: '#10B981', desc: 'Clean Emerald Stroke' },
+                      { id: 'bold_pop', name: 'Bold Pop', color: '#FACC15', desc: 'One word at a time, with yellow emphasis' },
+                      { id: 'fitness_energy', name: 'Fitness Energy', color: '#38BDF8', desc: 'Cyan emphasis for energetic speech' },
+                      { id: 'minimalist', name: 'Minimalist Clean', color: '#E11D48', desc: 'Quiet phrase captions with crimson emphasis' },
+                      { id: 'subtle_border', name: 'Subtle Border', color: '#10B981', desc: 'Outlined phrases with emerald emphasis' },
                     ].map(preset => {
                       const currentPreset = plan.subtitles?.[0]?.style?.preset || 'bold_pop';
                       const isSelected = currentPreset === preset.id;
@@ -2018,8 +2069,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                               style: {
                                 ...(s.style || {
                                   preset: 'bold_pop' as SubtitlePreset,
-                                  font_size: 42,
-                                  font_family: 'Inter, sans-serif',
+                                  font_size: 72,
+                                  font_family: 'Noto Sans',
                                   color: '#FFFFFF',
                                   highlight_color: '#FACC15',
                                   stroke_color: '#000000',
@@ -2035,15 +2086,15 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                           }}
                           className={`p-2.5 rounded-xl border text-left transition-all ${
                             isSelected
-                              ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm ring-1 ring-zinc-900'
-                              : 'bg-white text-zinc-800 border-zinc-200 hover:border-zinc-300'
+                              ? 'bg-accent text-white border-accent shadow-sm ring-1 ring-accent'
+                              : 'bg-studio-panel text-studio-text border-studio-border hover:border-studio-border'
                           }`}
                         >
                           <div className="flex items-center gap-1.5 mb-1">
                             <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: preset.color }} />
                             <span className="text-xs font-semibold">{preset.name}</span>
                           </div>
-                          <p className={`text-[10px] leading-tight ${isSelected ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                          <p className={`text-[10px] leading-tight ${isSelected ? 'text-white' : 'text-studio-muted'}`}>
                             {preset.desc}
                           </p>
                         </button>
@@ -2054,10 +2105,10 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
                 {/* Caption Mode Switcher */}
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-zinc-900 block">
-                    Timing Display Mode
+                  <label className="text-xs font-semibold text-studio-text block">
+                    Caption timing
                   </label>
-                  <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-100 rounded-lg border border-zinc-200">
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-studio-hover rounded-lg border border-studio-border">
                     <button
                       onClick={() => {
                         if (!plan.subtitles) return;
@@ -2065,8 +2116,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                           ...s,
                           style: { ...(s.style || {
                             preset: 'bold_pop' as SubtitlePreset,
-                            font_size: 42,
-                            font_family: 'Inter, sans-serif',
+                            font_size: 72,
+                            font_family: 'Noto Sans',
                             color: '#FFFFFF',
                             highlight_color: '#FACC15',
                             stroke_color: '#000000',
@@ -2078,11 +2129,11 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                       }}
                       className={`py-1.5 px-2 rounded-md text-xs font-medium transition-all ${
                         (plan.subtitles?.[0]?.style?.caption_mode || 'word_by_word') === 'word_by_word'
-                          ? 'bg-white text-zinc-900 font-semibold shadow-xs'
-                          : 'text-zinc-600 hover:text-zinc-900'
+                          ? 'bg-studio-panel text-studio-text font-semibold shadow-xs'
+                          : 'text-studio-muted hover:text-studio-text'
                       }`}
                     >
-                      Word-by-Word
+                      One word at a time
                     </button>
                     <button
                       onClick={() => {
@@ -2091,8 +2142,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                           ...s,
                           style: { ...(s.style || {
                             preset: 'bold_pop' as SubtitlePreset,
-                            font_size: 42,
-                            font_family: 'Inter, sans-serif',
+                            font_size: 72,
+                            font_family: 'Noto Sans',
                             color: '#FFFFFF',
                             highlight_color: '#FACC15',
                             stroke_color: '#000000',
@@ -2104,11 +2155,11 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                       }}
                       className={`py-1.5 px-2 rounded-md text-xs font-medium transition-all ${
                         plan.subtitles?.[0]?.style?.caption_mode === 'phrase'
-                          ? 'bg-white text-zinc-900 font-semibold shadow-xs'
-                          : 'text-zinc-600 hover:text-zinc-900'
+                          ? 'bg-studio-panel text-studio-text font-semibold shadow-xs'
+                          : 'text-studio-muted hover:text-studio-text'
                       }`}
                     >
-                      Full Phrase
+                      Full phrases
                     </button>
                   </div>
                 </div>
@@ -2116,8 +2167,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 {/* Subtitle Segments List */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-zinc-900">
-                      Subtitle Segments ({plan.subtitles?.length || 0})
+                    <label className="text-xs font-semibold text-studio-text">
+                      Your captions ({plan.subtitles?.length || 0})
                     </label>
                     <button
                       onClick={() => {
@@ -2134,9 +2185,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                           subtitles: [...(plan.subtitles || []), newSub]
                         });
                       }}
-                      className="text-[11px] font-semibold text-amber-600 hover:text-amber-700"
+                      className="text-[11px] font-semibold text-brass hover:text-brass"
                     >
-                      + Add Segment
+                      + Add caption
                     </button>
                   </div>
 
@@ -2149,9 +2200,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                           setCurrentTime(seg.start_time);
                           renderPreviewFrame(seg.start_time);
                         }}
-                        className="p-2.5 rounded-lg border border-zinc-200 bg-white hover:border-zinc-300 transition-colors cursor-pointer group"
+                        className="p-2.5 rounded-lg border border-studio-border bg-studio-panel hover:border-studio-border transition-colors cursor-pointer group"
                       >
-                        <div className="flex items-center justify-between text-[11px] text-zinc-400 font-mono mb-1">
+                        <div className="flex items-center justify-between text-[11px] text-studio-quiet font-mono mb-1">
                           <span>{seg.start_time.toFixed(1)}s - {seg.end_time.toFixed(1)}s</span>
                           <button
                             onClick={e => {
@@ -2159,14 +2210,14 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                               const updated = (plan.subtitles || []).filter(s => s.id !== seg.id);
                               updatePlanWithHistory({ ...plan, subtitles: updated });
                             }}
-                            className="text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="Delete segment"
+                            className="text-studio-quiet hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Delete caption"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                         <textarea aria-label="Caption text" key={seg.id + seg.text} defaultValue={seg.text}
-                          className="w-full border rounded p-1.5 text-xs text-zinc-900" onBlur={e => {
+                          className="w-full border rounded p-1.5 text-xs text-studio-text" onBlur={e => {
                             if(e.target.value===seg.text)return;
                             const tokens=e.target.value.trim().split(/\s+/);
                             updatePlanWithHistory({...plan,subtitles:plan.subtitles?.map(s=>s.id===seg.id?{...s,text:e.target.value,origin:'manual',
@@ -2174,7 +2225,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                           }} />
 
                         {!!seg.words?.length && <div className="flex flex-wrap gap-1" aria-label="Word emphasis">
-                          {seg.words.map((word,index)=><button key={index} aria-pressed={!!word.emphasis} className={word.emphasis?'border rounded p-1 text-xs bg-amber-100':'border rounded p-1 text-xs'}
+                          {seg.words.map((word,index)=><button key={index} aria-pressed={!!word.emphasis} className={word.emphasis?'border rounded p-1 text-xs bg-brass-soft':'border rounded p-1 text-xs'}
                             onClick={()=>updatePlanWithHistory({...plan,subtitles:plan.subtitles?.map(s=>s.id===seg.id?{...s,origin:'manual',words:s.words?.map((w,i)=>i===index?{...w,emphasis:!w.emphasis,color:undefined}:w)}:s)})}>{word.word}</button>)}
                         </div>}
                         <div className="flex gap-2 text-[10px]">
@@ -2204,11 +2255,11 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
         </aside>
 
         {/* CENTER VIEWPORT: Video Preview & Playback Controls */}
-        <main className="flex-1 min-h-0 min-w-0 flex flex-col bg-zinc-100 items-center gap-2 p-2 sm:p-4 overflow-hidden">
+        <main className="flex-1 min-h-0 min-w-0 flex flex-col bg-studio-hover items-center gap-2 p-2 sm:p-4 overflow-hidden">
           {/* Top Info Bar */}
-          <div className="w-full max-w-sm shrink-0 flex items-center justify-between text-xs text-zinc-500 font-mono pb-2">
-            <span>PREVIEW</span>
-            <span className="font-semibold text-zinc-800 uppercase">
+          <div className="w-full max-w-sm shrink-0 flex items-center justify-between text-xs text-studio-muted font-mono pb-2">
+            <span>RAYFLOW PREVIEW</span>
+            <span className="font-semibold text-studio-text uppercase">
               {plan.aspect_ratio} • {plan.fit_mode || 'fill'} • {plan.style}
             </span>
           </div>
@@ -2220,7 +2271,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 width: `min(100cqw, calc(100cqh * ${plan.aspect_ratio === '16:9' ? 16 / 9 : plan.aspect_ratio === '1:1' ? 1 : 9 / 16}))`,
                 height: `min(100cqh, calc(100cqw / ${plan.aspect_ratio === '16:9' ? 16 / 9 : plan.aspect_ratio === '1:1' ? 1 : 9 / 16}))`
               }}
-              className="relative rounded-xl overflow-hidden border border-zinc-300 bg-zinc-950 shrink-0"
+              className="relative rounded-xl overflow-hidden border border-studio-border bg-studio-canvas shrink-0"
             >
               {/* Native HTML5 video player if exported reel is selected */}
               {viewRenderedVideo && renderStatus?.status === 'completed' && renderJobId ? (
@@ -2242,14 +2293,14 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               )}
 
               {/* Watermark badge */}
-              <div className="absolute top-3 left-3 px-2 py-0.5 rounded bg-zinc-900/80 backdrop-blur-sm text-[10px] font-mono text-white/80 border border-white/10 pointer-events-none">
+              <div className="absolute top-3 left-3 px-2 py-0.5 rounded bg-studio-canvas/80 backdrop-blur-sm text-[10px] font-mono text-white/80 border border-white/10 pointer-events-none">
                 RAYFLOW {plan.aspect_ratio}
               </div>
 
               {renderStatus?.status === 'completed' && renderJobId && (
                 <button
                   onClick={() => { setIsPlaying(false); setViewRenderedVideo(!viewRenderedVideo); }}
-                  className="absolute bottom-3 right-3 px-2.5 py-1 rounded bg-white text-zinc-900 text-[11px] font-medium shadow-md hover:bg-zinc-100 transition-colors border border-zinc-200"
+                  className="absolute bottom-3 right-3 px-2.5 py-1 rounded bg-studio-panel text-studio-text text-[11px] font-medium shadow-md hover:bg-studio-hover transition-colors border border-studio-border"
                 >
                   {viewRenderedVideo ? 'Canvas Mode' : 'Watch Exported MP4'}
                 </button>
@@ -2259,10 +2310,10 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
           {/* Playback Controller */}
           <div data-testid="playback-controls"
-          className="w-full max-w-md shrink-0 p-2 rounded-xl bg-white border border-zinc-200 shadow-sm flex items-center justify-between gap-4">
+          className="w-full max-w-md shrink-0 p-2 rounded-xl bg-studio-panel border border-studio-border shadow-sm flex items-center justify-between gap-4">
             <button
               onClick={handleTogglePlay}
-              className="w-9 h-9 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white flex items-center justify-center transition-transform active:scale-95 shrink-0 shadow-sm"
+              className="w-9 h-9 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-transform active:scale-95 shrink-0 shadow-sm"
               aria-label={isPlaying ? 'Pause' : 'Play'}
               title={isPlaying ? 'Pause' : 'Play'}
             >
@@ -2271,7 +2322,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
             {/* Time progress bar */}
             <div className="flex-1 flex flex-col gap-1">
-              <div className="flex justify-between text-[11px] font-mono text-zinc-600">
+              <div className="flex justify-between text-[11px] font-mono text-studio-muted">
                 <span>{currentTime.toFixed(1)}s</span>
                 <span>{plan.duration_seconds.toFixed(1)}s</span>
               </div>
@@ -2283,7 +2334,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 step="0.1"
                 value={currentTime}
                 onChange={e => handleSeek(parseFloat(e.target.value))}
-                className="w-full accent-zinc-900 h-1.5 bg-zinc-200 rounded-lg cursor-pointer"
+                className="w-full accent-accent h-1.5 bg-studio-line rounded-lg cursor-pointer"
               />
             </div>
 
@@ -2292,7 +2343,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 handleSeek(0.0);
                 setIsPlaying(false);
               }}
-              className="p-1.5 text-zinc-400 hover:text-zinc-800 transition-colors"
+              className="p-1.5 text-studio-quiet hover:text-studio-text transition-colors"
               title="Reset to 0s"
             >
               <RotateCcw className="w-4 h-4" />
@@ -2301,19 +2352,19 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
         </main>
 
         {/* RIGHT PANEL: Voice & Text Editing Directives */}
-        <aside className={`${mobilePanel === 'director' ? 'flex absolute inset-y-0 right-0 z-30 shadow-xl' : 'hidden'} xl:static xl:flex w-80 max-w-[85vw] border-l border-zinc-200 bg-white flex-col shrink-0 overflow-hidden`}>
+        <aside className={`${mobilePanel === 'director' ? 'flex absolute inset-y-0 right-0 z-30 shadow-xl' : 'hidden'} xl:static xl:flex w-80 max-w-[85vw] border-l border-studio-border bg-studio-panel flex-col shrink-0 overflow-hidden`}>
           <button className="xl:hidden text-xs p-2 border-b" onClick={() => setMobilePanel(null)}>Close director</button>
           {/* Header */}
-          <div className="p-4 border-b border-zinc-200 flex items-center justify-between">
+          <div className="p-4 border-b border-studio-border flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-zinc-900" />
-                <h3 className="text-sm font-semibold text-zinc-900">
-                  Direct your edit
+                <span className="w-2 h-2 rounded-full bg-accent" />
+                <h3 className="text-sm font-semibold text-studio-text">
+                  Rayflow AI Director
                 </h3>
               </div>
-              <p className="text-[11px] text-zinc-500 mt-0.5">
-                Voice-guided creative instructions
+              <p className="text-[11px] text-studio-muted mt-0.5">
+                Direct your edit.
               </p>
             </div>
 
@@ -2321,17 +2372,17 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
               <div className="flex items-center gap-1.5">
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    ollamaStatus.available ? 'bg-emerald-500 ring-2 ring-emerald-200' : 'bg-zinc-300'
+                    ollamaStatus.ready ? 'bg-jade ring-2 ring-jade-border' : 'bg-studio-border'
                   }`}
                 />
-                <span className="text-[10px] font-mono text-zinc-500 truncate max-w-[125px]">
-                  {ollamaStatus.available
-                    ? `Ollama: ${selectedOllamaModel || 'Connected'}`
-                    : 'Ollama: Offline (Fallback)'}
+                <span className="text-[10px] font-mono text-studio-muted truncate max-w-[125px]">
+                  {ollamaStatus.ready
+                    ? `Ollama: ${selectedOllamaModel || 'Ready'}`
+                    : ollamaStatus.available ? 'Select Ollama model' : 'Ollama offline'}
                 </span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 text-zinc-700 border border-zinc-200">
-                AI DIRECTOR
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-studio-hover text-studio-text border border-studio-border">
+                AI
               </span>
             </div>
           </div>
@@ -2348,13 +2399,13 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 <div
                   className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-xs leading-relaxed ${
                     msg.sender === 'user'
-                      ? 'bg-zinc-900 text-white'
-                      : 'bg-zinc-100 text-zinc-800 border border-zinc-200'
+                      ? 'bg-accent text-white'
+                      : 'bg-studio-hover text-studio-text border border-studio-border'
                   }`}
                 >
                   <p>{msg.text}</p>
                 </div>
-                <span className="text-[10px] text-zinc-400 mt-1 px-1">
+                <span className="text-[10px] text-studio-quiet mt-1 px-1">
                   {msg.time}
                 </span>
               </div>
@@ -2362,9 +2413,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
           </div>
 
           {/* Suggested Directives */}
-          <div className="px-4 py-2 border-t border-zinc-100 bg-zinc-50/60">
-            <span className="text-[10px] font-mono text-zinc-400 block mb-1.5 uppercase">
-              Suggested Instructions:
+          <div className="px-4 py-2 border-t border-studio-line bg-studio-raised/60">
+            <span className="text-[10px] font-mono text-studio-quiet block mb-1.5 uppercase">
+              Try a direction:
             </span>
             <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pb-1">
               {[
@@ -2380,7 +2431,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 <button
                   key={cmd}
                   onClick={() => handleExecuteCommand(cmd)}
-                  className="text-[11px] px-2.5 py-1 rounded-full bg-white hover:bg-zinc-100 border border-zinc-200 text-zinc-700 transition-colors text-left shadow-2xs"
+                  className="text-[11px] px-2.5 py-1 rounded-full bg-studio-panel hover:bg-studio-hover border border-studio-border text-studio-text transition-colors text-left shadow-2xs"
                 >
                   "{cmd}"
                 </button>
@@ -2389,7 +2440,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
           </div>
 
           {/* Voice & Text Input */}
-          <div className="p-3 border-t border-zinc-200 bg-white">
+          <div className="p-3 border-t border-studio-border bg-studio-panel">
             <form
               onSubmit={e => {
                 e.preventDefault();
@@ -2402,8 +2453,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 onClick={handleVoiceToggle}
                 className={`p-2.5 rounded-lg border transition-all shrink-0 ${
                   isListening
-                    ? 'bg-red-500 border-red-600 text-white animate-pulse'
-                    : 'bg-zinc-100 border-zinc-200 text-zinc-700 hover:bg-zinc-200'
+                    ? 'bg-accent border-danger-border text-white animate-pulse'
+                    : 'bg-studio-hover border-studio-border text-studio-text hover:bg-studio-line'
                 }`}
                 title={isListening ? 'Stop listening' : 'Start voice instruction'}
               >
@@ -2414,12 +2465,13 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 type="text"
                 value={commandInput}
                 onChange={e => setCommandInput(e.target.value)}
-                placeholder={isListening ? 'Listening...' : 'Type or speak your direction...'}
-                className="flex-1 bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-zinc-900 shadow-2xs"
+                placeholder={isListening ? 'Listening to your direction…' : 'Tell Rayflow what to edit…'}
+                className="flex-1 bg-studio-panel border border-studio-border rounded-lg px-3 py-2 text-xs text-studio-text placeholder-studio-quiet focus:outline-none focus:border-accent shadow-2xs"
               />
 
               <Button
                 type="submit"
+                aria-label="Send edit direction"
                 variant="primary"
                 size="sm"
                 disabled={!commandInput.trim() || isInterpreting}
@@ -2429,7 +2481,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             </form>
 
             {errorMessage && (
-              <div className="mt-2 p-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-[11px] flex items-center gap-1.5">
+              <div className="mt-2 p-2 rounded-lg bg-danger-soft border border-danger-border text-danger text-[11px] flex items-center gap-1.5">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                 <span className="truncate">{errorMessage}</span>
               </div>
@@ -2457,47 +2509,74 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
         onOpenEffectsForBoundary={handleOpenEffectsForBoundary}
       />
 
+      {pendingAIPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-studio-canvas/40 backdrop-blur-sm p-4">
+          <div className="max-w-lg w-full max-h-[85vh] overflow-y-auto bg-studio-panel border border-studio-border rounded-2xl p-6 shadow-xl space-y-4">
+            <div>
+              <h3 className="text-base font-semibold text-studio-text">Review your Rayflow edit</h3>
+              <p className="text-xs text-studio-muted mt-1">{pendingAIPlan.explanation}</p>
+            </div>
+            <div className="rounded-lg border border-studio-border bg-studio-hover p-3 space-y-2">
+              <p className="text-[10px] uppercase font-mono text-studio-muted">Proposed actions</p>
+              {pendingAIPlan.actions.length ? pendingAIPlan.actions.map((action, index) => (
+                <div key={`${action.type}-${index}`} className="text-xs text-studio-text">
+                  <span className="font-semibold">{index + 1}. {action.type.replaceAll('_', ' ')}</span>
+                  <span className="block text-studio-muted break-words">{JSON.stringify(action.params)}</span>
+                </div>
+              )) : <p className="text-xs text-studio-muted">No changes proposed.</p>}
+            </div>
+            <p className="text-[11px] text-studio-muted">Review the proposed changes, then apply them to your timeline.</p>
+            <div className="flex justify-end gap-2">
+              <button className="text-xs px-3 py-2 rounded-lg border border-studio-border hover:bg-studio-hover" onClick={() => setPendingAIPlan(null)}>Cancel</button>
+              <button className="text-xs px-3 py-2 rounded-lg bg-accent text-white disabled:opacity-50" disabled={isInterpreting} onClick={approveAIPlan}>
+                {isInterpreting ? 'Applying…' : 'Approve and apply'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Render Modal */}
       {isRenderingModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-          <div className="max-w-md w-full bg-white border border-zinc-200 rounded-2xl p-6 shadow-xl text-center space-y-4">
-            <div className="w-12 h-12 rounded-xl bg-zinc-100 border border-zinc-200 mx-auto flex items-center justify-center text-zinc-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-studio-canvas/40 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="max-w-md w-full bg-studio-panel border border-studio-border rounded-2xl p-6 shadow-xl text-center space-y-4">
+            <div className="w-12 h-12 rounded-xl bg-studio-hover border border-studio-border mx-auto flex items-center justify-center text-studio-text">
               {renderStatus?.status === 'completed' ? (
-                <CheckCircle2 className="w-6 h-6 text-zinc-900" />
+                <CheckCircle2 className="w-6 h-6 text-studio-text" />
               ) : renderStatus?.status === 'failed' ? (
-                <AlertCircle className="w-6 h-6 text-red-600" />
+                <AlertCircle className="w-6 h-6 text-danger" />
               ) : (
-                <Film className="w-6 h-6 animate-pulse text-zinc-900" />
+                <Film className="w-6 h-6 animate-pulse text-studio-text" />
               )}
             </div>
 
             <div>
-              <h3 className="text-base font-semibold text-zinc-900">
+              <h3 className="text-base font-semibold text-studio-text">
                 {renderStatus?.status === 'completed'
-                  ? 'Reel Export Complete'
+                  ? 'Your Rayflow reel is ready'
                   : renderStatus?.status === 'failed'
-                  ? 'Export Error'
-                  : 'Rendering Cinematic Reel'}
+                  ? 'Your reel could not be exported'
+                  : 'Rendering your Rayflow reel'}
               </h3>
-              <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+              <p className="text-xs text-studio-muted mt-1 leading-relaxed">
                 {renderStatus?.status === 'completed'
-                  ? `Your authentic ${plan.aspect_ratio} MP4 has been compiled with FFmpeg and verified.`
+                  ? `Your ${plan.aspect_ratio} reel is ready to download as an MP4, rendered with FFmpeg.`
                   : renderStatus?.status === 'failed'
-                  ? renderStatus.error || 'Failed to render reel with FFmpeg backend.'
-                  : `Compositing ${plan.aspect_ratio} frame, transitions, and audio sync with FFmpeg...`}
+                  ? renderStatus.error || 'FFmpeg could not finish this render. Your edit is still available in the studio.'
+                  : `Rayflow is rendering your ${plan.aspect_ratio} frames, transitions, and soundtrack with FFmpeg...`}
               </p>
             </div>
 
             {/* Progress Bar */}
             {renderStatus && renderStatus.status !== 'failed' && (
               <div className="space-y-1.5">
-                <div className="w-full h-2 bg-zinc-100 rounded-full overflow-hidden border border-zinc-200">
+                <div className="w-full h-2 bg-studio-hover rounded-full overflow-hidden border border-studio-border">
                   <div
-                    className="h-full bg-zinc-900 transition-all duration-300"
+                    className="h-full bg-accent transition-all duration-300"
                     style={{ width: `${renderStatus.progress}%` }}
                   />
                 </div>
-                <div className="flex justify-between text-[11px] font-mono text-zinc-500">
+                <div className="flex justify-between text-[11px] font-mono text-studio-muted">
                   <span className="capitalize">{renderStatus.status}</span>
                   <span>{renderStatus.progress.toFixed(0)}%</span>
                 </div>
@@ -2516,7 +2595,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                   <a
                     href={getDownloadUrl(renderJobId)}
                     download={`rayflow_${renderJobId}.mp4`}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 transition-colors shadow-sm"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors shadow-sm"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Download MP4</span>
@@ -2526,7 +2605,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                       setViewRenderedVideo(true);
                       setIsRenderingModalOpen(false);
                     }}
-                    className="text-xs font-medium px-3.5 py-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border border-zinc-200 transition-colors"
+                    className="text-xs font-medium px-3.5 py-2 rounded-lg bg-studio-hover hover:bg-studio-line text-studio-text border border-studio-border transition-colors"
                   >
                     Watch in Preview
                   </button>
@@ -2535,7 +2614,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
               <button
                 onClick={() => setIsRenderingModalOpen(false)}
-                className="text-xs font-medium px-3.5 py-2 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
+                className="text-xs font-medium px-3.5 py-2 rounded-lg text-studio-muted hover:text-studio-text hover:bg-studio-hover transition-colors"
               >
                 Close
               </button>
@@ -2546,58 +2625,59 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
 
       {/* Auto-Edit Talking-Head Reel Workflow Modal (Stage 7) */}
       {isAutoEditModalOpen && (
-        <div className="fixed inset-0 z-50 bg-zinc-950/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-zinc-200 rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 shadow-xl space-y-5 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+        <div className="fixed inset-0 z-50 bg-studio-canvas/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-studio-panel border border-studio-border rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 shadow-xl space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-studio-line pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-600">
+                <div className="w-8 h-8 rounded-lg bg-brass/10 flex items-center justify-center text-brass">
                   <Wand2 className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-zinc-900">Auto Reel</h3>
-                  <p className="text-[11px] text-zinc-500">Local AI transcription, expressive captions & B-roll</p>
+                  <h3 className="text-sm font-bold text-studio-text">Auto Reel</h3>
+                  <p className="text-[11px] text-studio-muted">Let Rayflow draft the captions, cuts, and B-roll.</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsAutoEditModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-600 text-xs p-1"
+                aria-label="Close Auto Reel"
+                className="text-studio-quiet hover:text-studio-muted text-xs p-1"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <label className="flex items-center gap-2 text-xs text-zinc-700">
+            <label className="flex items-center gap-2 text-xs text-studio-text">
               <input type="checkbox" checked={includeCaptions} onChange={e => setIncludeCaptions(e.target.checked)} />
               Generate captions from speech
             </label>
-            <p className="text-xs text-zinc-500">Output: {plan.aspect_ratio}. Uses your uploaded photos or primary video.</p>
+            <p className="text-xs text-studio-muted">Output: {plan.aspect_ratio}. Uses your uploaded photos or primary video.</p>
             <label className="flex gap-2 text-xs"><input type="checkbox" checked={plan.auto_broll !== false} onChange={e => updatePlanWithHistory({...plan,auto_broll:e.target.checked})} />Find contextual B-roll on Pixabay</label>
             <label className="flex gap-2 text-xs"><input type="checkbox" checked={tightenSpeech} onChange={e=>setTightenSpeech(e.target.checked)}/>Trim greetings and long quiet pauses in new drafts</label>
             <label className="flex gap-2 text-xs"><input type="checkbox" checked={plan.list_sounds !== false} onChange={e => updatePlanWithHistory({...plan,list_sounds:e.target.checked})} />Add clicks to spoken list items</label>
-            <label className="flex gap-2 text-xs">Local speech model<select aria-label="Whisper model" value={whisperModel} onChange={e => setWhisperModel(e.target.value)}><option value="tiny">Tiny</option><option value="base">Base</option><option value="small">Small</option></select></label>
+            <SpeechModelSelect state={speechModels} value={whisperModel} onChange={setWhisperModel} label="Whisper model" />
             {/* Choose Reel Style */}
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-zinc-800 block">
-                Select Editing Style
+              <label className="text-xs font-semibold text-studio-text block">
+                Choose your reel style
               </label>
               <div className="space-y-2">
                 {[
                   {
                     id: 'fitness_energy',
                     name: 'Fitness High Energy',
-                    desc: 'Fast pacing, vibrant color grade, active word-by-word yellow pops & PiP overlays',
+                    desc: 'Fast cuts, vivid color, highlighted words, and picture-in-picture B-roll.',
                     tag: 'Reels & TikTok'
                   },
                   {
                     id: 'minimalist',
                     name: 'Minimalist Clean',
-                    desc: 'Clean letterbox fit, subtle crimson accents, full phrase captions & split screen',
+                    desc: 'Full-frame fit, restrained color, phrase captions, and split-screen B-roll.',
                     tag: 'Educational & Podcasts'
                   },
                   {
                     id: 'cinematic',
                     name: 'Cinematic Story',
-                    desc: 'Natural color, concise display phrases, and speech-led cuts',
+                    desc: 'Natural color, concise titles, and cuts that follow the speaker.',
                     tag: 'Storytelling & Lifestyle'
                   }
                 ].map(style => (
@@ -2606,17 +2686,17 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                     onClick={() => setAutoEditStyle(style.id as any)}
                     className={`w-full p-3 rounded-xl border text-left transition-all ${
                       autoEditStyle === style.id
-                        ? 'border-zinc-900 bg-zinc-50 ring-1 ring-zinc-900 shadow-xs'
-                        : 'border-zinc-200 bg-white hover:border-zinc-300'
+                        ? 'border-accent bg-studio-raised ring-1 ring-accent shadow-xs'
+                        : 'border-studio-border bg-studio-panel hover:border-studio-border'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-zinc-900">{style.name}</span>
-                      <span className="text-[10px] font-mono text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
+                      <span className="text-xs font-bold text-studio-text">{style.name}</span>
+                      <span className="text-[10px] font-mono text-studio-muted bg-studio-hover px-1.5 py-0.5 rounded">
                         {style.tag}
                       </span>
                     </div>
-                    <p className="text-[11px] text-zinc-500 leading-relaxed">
+                    <p className="text-[11px] text-studio-muted leading-relaxed">
                       {style.desc}
                     </p>
                   </button>
@@ -2625,7 +2705,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
             </div>
 
             {/* Action buttons */}
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-zinc-100">
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-studio-line">
               <Button
                 variant="secondary"
                 size="sm"
@@ -2638,13 +2718,13 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome }) => {
                 variant="primary"
                 size="sm"
                 onClick={handleExecuteAutoEdit}
-                disabled={isAutoEditing || images.length === 0}
-                className="bg-zinc-900 hover:bg-zinc-800 text-white flex items-center gap-1.5"
+                disabled={isAutoEditing || images.length === 0 || (!whisperModel && (includeCaptions || plan.auto_broll || plan.list_sounds) && (!!audio || images.some(item => item.media_type === 'video')))}
+                className="bg-accent hover:bg-accent-hover text-white flex items-center gap-1.5"
               >
                 {isAutoEditing ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>{autoStage || 'Starting local processing'}?</span>
+                    <span>{autoStage || 'Preparing your Rayflow draft'}…</span>
                   </>
                 ) : (
                   <>

@@ -5,8 +5,8 @@ import { creativeRequest, getMediaUrl, waitCreativeJob } from '../../services/ap
 
 interface Result { id: number; media_type: 'image' | 'video'; preview_url: string; tags: string; source_page: string; contributor: string }
 interface Props { plan: EditingPlan; currentTime: number; onChange: (plan: EditingPlan) => void; onSeek: (time: number) => void }
-const field = 'w-full min-w-0 rounded border border-zinc-300 bg-white px-2 py-1.5 text-xs';
-const button = 'rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 disabled:opacity-40';
+const field = 'w-full min-w-0 rounded border border-studio-border bg-studio-panel px-2 py-1.5 text-xs';
+const button = 'rounded border border-studio-border px-2 py-1 text-xs hover:bg-studio-hover disabled:opacity-40';
 
 export function CreativePanel({ plan, currentTime, onChange, onSeek }: Props) {
   const [query, setQuery] = useState('');
@@ -54,19 +54,19 @@ export function CreativePanel({ plan, currentTime, onChange, onSeek }: Props) {
       onChange(prepared);
     });
   }
-  return <div className="space-y-5 text-xs text-zinc-700">
+  return <div className="space-y-5 text-xs text-studio-text">
     <section className="space-y-2" aria-label="B-roll controls">
-      <h3 className="font-semibold text-zinc-950">Contextual B-roll</h3>
+      <h3 className="font-semibold text-studio-text">Build your visual layers</h3>
       <label className="flex items-center gap-2"><input type="checkbox" checked={plan.auto_broll !== false}
         onChange={e => onChange({ ...plan, auto_broll: e.target.checked })} />Automatic B-roll</label>
       <button className={button} disabled={!!busy || !plan.subtitles?.length || plan.auto_broll === false}
         onClick={() => run('Finding relevant media', () => edit('/broll/regenerate', plan))}>Regenerate B-roll</button>
-      <p className="text-zinc-500">Manual replacements, timing edits, and removed suggestions are preserved.</p>
+      <p className="text-studio-muted">Manual replacements, timing edits, and removed suggestions are preserved.</p>
       <form className="flex gap-1" onSubmit={event => { event.preventDefault(); run('Searching Pixabay', async () => {
         const response = await creativeRequest<{results: Result[]}>(`/broll/search?q=${encodeURIComponent(query)}&kind=${kind}&aspect_ratio=${plan.aspect_ratio}`);
         setResults(response.results); if (!response.results.length) setMessage('No matching media. Try a more concrete phrase.');
       }); }}>
-        <input aria-label="Search Pixabay" className={field} value={query} onChange={e => setQuery(e.target.value)} placeholder="Mountain, biryani, circuit board…" required maxLength={100} />
+        <input aria-label="Search Pixabay" className={field} value={query} onChange={e => setQuery(e.target.value)} placeholder="Find B-roll: mountains, city lights…" required maxLength={100} />
         <select aria-label="B-roll media type" value={kind} onChange={e => setKind(e.target.value as 'image' | 'video')} className="border rounded text-xs">
           <option value="video">Video</option><option value="image">Image</option>
         </select><button className={button} disabled={!!busy}>Search</button>
@@ -83,7 +83,7 @@ export function CreativePanel({ plan, currentTime, onChange, onSeek }: Props) {
           })}>{replaceId ? 'Replace with this' : 'Insert at playhead'}</button>
         </div>)}
       </div>
-      {(plan.visual_inserts || []).map((ins, index) => <div key={ins.id} data-insert-id={ins.id} className="border-t border-zinc-200 pt-2 space-y-2">
+      {(plan.visual_inserts || []).map((ins, index) => <div key={ins.id} data-insert-id={ins.id} className="border-t border-studio-border pt-2 space-y-2">
         <button onClick={() => onSeek(ins.start_time)} className="font-medium text-left">{index+1}. {ins.label || 'B-roll'}</button>
         {ins.media_type === 'video' ? <video src={getMediaUrl(ins.asset_url)} controls muted preload="metadata" className="w-full max-h-32 rounded" /> :
           <img src={getMediaUrl(ins.asset_url)} alt={ins.label || 'B-roll'} className="w-full max-h-32 object-contain rounded" />}
@@ -102,7 +102,7 @@ export function CreativePanel({ plan, currentTime, onChange, onSeek }: Props) {
         </select>
         {ins.mode === 'background' && <div className="space-y-1">
           <button className={button} disabled={!!busy} onClick={() => void prepareBackground(ins)}>Refresh speaker mask</button>
-          <p className="text-zinc-500">Refresh after changing timing, trimming the speaker clip, or changing the framing.</p>
+          <p className="text-studio-muted">Refresh after changing timing, trimming the speaker clip, or changing the framing.</p>
         </div>}
         <select aria-label={`Insert ${index+1} position`} className={field} value={ins.position} onChange={e => updateInsert(ins.id, {position: e.target.value as VisualInsert['position']})}>
           <option value="top_right">Top right</option><option value="top_left">Top left</option><option value="bottom_right">Lower right</option><option value="center">Center</option>
@@ -112,12 +112,12 @@ export function CreativePanel({ plan, currentTime, onChange, onSeek }: Props) {
             suppressed_auto_inserts: [...new Set([...(plan.suppressed_auto_inserts || []), ins.id])] })}>Remove</button></div>
       </div>)}
     </section>
-    <section className="space-y-2 border-t border-zinc-300 pt-4" aria-label="List sound controls">
-      <h3 className="font-semibold text-zinc-950">Spoken-list clicks</h3>
+    <section className="space-y-2 border-t border-studio-border pt-4" aria-label="List sound controls">
+      <h3 className="font-semibold text-studio-text">Give each point a beat</h3>
       <label className="flex gap-2 items-center"><input type="checkbox" checked={plan.list_sounds !== false}
         onChange={e => onChange({ ...plan, list_sounds: e.target.checked })} />Enable list sounds</label>
       <button className={button} disabled={!!busy || !plan.subtitles?.length} onClick={() => run('Detecting lists', () => edit('/sounds/detect', plan))}>Detect list items</button>
-      {!plan.sound_cues?.length && <p className="text-zinc-500">Clicks appear only for detected spoken lists with word timestamps.</p>}
+      {!plan.sound_cues?.length && <p className="text-studio-muted">Clicks appear only for detected spoken lists with word timestamps.</p>}
       {(plan.sound_cues || []).map((cue, index) => <div key={cue.id} data-cue-id={cue.id} className="border-t pt-2 space-y-1">
         <div className="flex gap-2"><button className="truncate text-left" onClick={() => onSeek(cue.start_time)}>{index+1}. {cue.label}</button>
           <label className="ml-auto flex gap-1"><input aria-label={`Mute click ${index+1}`} type="checkbox" checked={cue.muted} onChange={e => updateSound(cue.id,{ muted:e.target.checked })} />Mute</label></div>
@@ -131,8 +131,8 @@ export function CreativePanel({ plan, currentTime, onChange, onSeek }: Props) {
           onCommit={nextValue => updateSound(cue.id,{start_time:Math.min(plan.duration_seconds,Math.max(0,nextValue))})} /></label>
       </div>)}
     </section>
-    <section className="space-y-2 border-t border-zinc-300 pt-4" aria-label="Cinematic typography controls">
-      <h3 className="font-semibold text-zinc-950">Cinematic typography</h3>
+    <section className="space-y-2 border-t border-studio-border pt-4" aria-label="Cinematic typography controls">
+      <h3 className="font-semibold text-studio-text">Give your story a title</h3>
       <button className={button} disabled={!plan.clips.length} onClick={() => {
         const clip=plan.clips.find(c => currentTime>=c.start_time && currentTime<c.start_time+c.duration) || plan.clips[0];
         const start=Math.min(currentTime,clip.start_time+clip.duration-.1);
@@ -141,7 +141,7 @@ export function CreativePanel({ plan, currentTime, onChange, onSeek }: Props) {
       }}>Add display text</button>
       {(plan.cinematic_texts || []).map(title => <div key={title.id} className="space-y-2 border-t pt-2">
         <textarea aria-label="Cinematic text" className={field} rows={3} value={title.text} maxLength={120} onChange={e => updateTitle(title.id,{text:e.target.value})} />
-        <p className="text-zinc-500">Use Enter to choose your line breaks.</p>
+        <p className="text-studio-muted">Use Enter to choose your line breaks.</p>
         <div className="grid grid-cols-2 gap-2">
           <label>Font<select aria-label="Cinematic font" className={field} value={title.font_family??'Anton'} onChange={e=>updateTitle(title.id,{font_family:e.target.value as CinematicText['font_family']})}><option value="Anton">Anton condensed</option><option value="Arial">Arial</option><option value="DejaVu Sans">DejaVu Sans</option></select></label>
           <label>Weight<select aria-label="Cinematic weight" className={field} value={title.font_weight??700} onChange={e=>updateTitle(title.id,{font_weight:Number(e.target.value)})}><option value={400}>Regular</option><option value={700}>Bold</option></select></label>
@@ -177,6 +177,6 @@ export function CreativePanel({ plan, currentTime, onChange, onSeek }: Props) {
     </section>
     {busy && <p role="status">{busy}…</p>}
     {busy && maskJob && <button className={button} onClick={()=>void creativeRequest(`/creative/jobs/${maskJob}/cancel`,{}).catch(error=>setMessage(error.message))}>Cancel mask preparation</button>}
-    {message && <p role="status" className="text-zinc-700 border-l-2 border-zinc-400 pl-2">{message}</p>}
+    {message && <p role="status" className="text-studio-text border-l-2 border-studio-border pl-2">{message}</p>}
   </div>;
 }
