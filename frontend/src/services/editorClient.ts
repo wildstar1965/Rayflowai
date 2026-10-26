@@ -1,4 +1,4 @@
-export interface EditorProvider { id: string; label: string; configured: boolean; tested?: boolean; can_test?: boolean; model?: string; hosts: string[]; local?: boolean; base_url?: string }
+export interface EditorProvider { id: string; label: string; configured: boolean; tested?: boolean; can_test?: boolean; model?: string; models?: string[]; hosts: string[]; local?: boolean; base_url?: string }
 export interface WorkspaceSession { workspace_id: string; guest: boolean; storage: 'local' | 'supabase'; preferences: Record<string, any> }
 export interface EditorProject { id: string; name: string; revision: number; document_revision?: number; version: number; kind: string; project: Record<string, any>; files?: string[]; read_only?: boolean }
 const base = (import.meta.env?.VITE_API_BASE_URL || '/api').replace(/\/$/, '');

@@ -1,15 +1,18 @@
-import { useEffect, useRef, useCallback, useMemo } from 'react';
+import { syncPreviewMedia, releasePreviewMedia } from '../../utils/previewMedia';
+import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import type { EditingPlan } from '../../types';
 import { creativeRequest, getMediaUrl } from '../../services/api';
 import { insertRect, drawCover } from '../../utils/composition';
 
 interface Matte { key: string; fps: number; frames: number; url_template: string }
+interface CaptionFrame { start_time: number; end_time: number; url: string; caption_id: string; bounds: [number, number, number, number] | null }
 export function useCreativePreview(plan: EditingPlan, isPlaying: boolean, seekVersion: number,
   timeRef: {current:number}, invalidate: {current:(time:number)=>void}, onWarning: (message:string)=>void) {
   const images = useRef(new Map<string, HTMLImageElement>());
   const videos = useRef(new Map<string, HTMLVideoElement>());
   const mattes = useRef(new Map<string, Matte>());
-  const captions = useRef<Array<{start_time:number;end_time:number;url:string}>>([]);
+  const captions = useRef<CaptionFrame[]>([]);
+  const [captionData, setCaptionData] = useState<{source: EditingPlan['subtitles']; ratio: EditingPlan['aspect_ratio']; regions: CaptionFrame[]}>({source: undefined, ratio: plan.aspect_ratio, regions: []});
   const titles = useRef(new Map<string,string[]>());
   const audioContext = useRef<AudioContext | null>(null);
   const sounds = useRef(new Map<string, Promise<AudioBuffer>>());
@@ -40,11 +43,11 @@ export function useCreativePreview(plan: EditingPlan, isPlaying: boolean, seekVe
   const mattePlan=useMemo(()=>({clips:plan.clips,cinematic_texts:plan.cinematic_texts,visual_inserts:plan.visual_inserts,
     aspect_ratio:plan.aspect_ratio,fit_mode:plan.fit_mode}),[plan.clips,plan.cinematic_texts,plan.visual_inserts,plan.aspect_ratio,plan.fit_mode]);
   useEffect(()=>{
-    const abort=new AbortController();captions.current=[];
+    const abort=new AbortController();captions.current=[];invalidate.current(timeRef.current);
     if(captionPlan.subtitles?.length) {
-      creativeRequest<Array<{start_time:number;end_time:number;url:string}>>('/cinematic/captions',captionPlan,abort.signal).then(events=>{
+      creativeRequest<CaptionFrame[]>('/cinematic/captions',captionPlan,abort.signal).then(events=>{
         if(abort.signal.aborted)return;
-        captions.current=events;events.slice(0,12).forEach(event=>image(event.url));invalidate.current(timeRef.current);
+        captions.current=events;setCaptionData({source:captionPlan.subtitles,ratio:captionPlan.aspect_ratio,regions:events});events.slice(0,12).forEach(event=>image(event.url));invalidate.current(timeRef.current);
       }).catch(error=>{if(!abort.signal.aborted)onWarning(error.message);});
     }
     return()=>abort.abort();
@@ -94,11 +97,11 @@ export function useCreativePreview(plan: EditingPlan, isPlaying: boolean, seekVe
     return()=>{active=false;sources.current.forEach(s=>{try{s.stop();}catch{/* ended */}});sources.current=[];};
   },[isPlaying,seekVersion,plan.sound_cues,plan.list_sounds,plan.duration_seconds,timeRef,onWarning]);
   useEffect(()=>()=>{
-    videos.current.forEach(v=>{v.pause();v.removeAttribute('src');v.load();});
+    videos.current.forEach(releasePreviewMedia);
     void audioContext.current?.close();
   },[]);
   useEffect(()=>{if(!isPlaying)videos.current.forEach(v=>v.pause());},[isPlaying]);
-  return (ctx:CanvasRenderingContext2D,time:number,width:number,height:number)=>{
+  const render = (ctx:CanvasRenderingContext2D,time:number,width:number,height:number)=>{
     const activeIds=new Set<string>();
     for(const ins of plan.visual_inserts||[]) {
       if(time<ins.start_time || time>=ins.start_time+ins.duration)continue;
@@ -108,21 +111,20 @@ export function useCreativePreview(plan: EditingPlan, isPlaying: boolean, seekVe
       if(ins.media_type==='video' || /\.(mp4|mov|webm|mkv)(?:\?|$)/i.test(ins.asset_url)){
         let video=videos.current.get(ins.id);
         if(!video || video.dataset.asset!==ins.asset_url){
-          video?.pause();video=document.createElement('video');video.muted=true;video.playsInline=true;video.preload='auto';
+          if(video)releasePreviewMedia(video);video=document.createElement('video');video.muted=true;video.playsInline=true;video.preload='auto';
           video.dataset.asset=ins.asset_url;video.src=getMediaUrl(ins.asset_url);
           video.onloadeddata=video.onseeked=()=>invalidate.current(timeRef.current);videos.current.set(ins.id,video);
         }
         const target=(ins.source_start||0)+time-ins.start_time;
-        if(video.readyState>=1 && Math.abs(video.currentTime-target)>(isPlaying?.08:.015) && !video.seeking)video.currentTime=target;
-        if(isPlaying && video.paused && video.readyState>=2)void video.play().catch(()=>{});
+        if(!syncPreviewMedia(video,target,isPlaying))return false;
         if(video.readyState>=2){source=video;sw=video.videoWidth;sh=video.videoHeight;}
       }else{source=image(ins.asset_url);if(source){sw=source.naturalWidth;sh=source.naturalHeight;}}
-      if(!source || !sw || !sh)continue;
+      if(!source || !sw || !sh)return false;
       if(ins.mode==='background'){
         const clip=plan.clips.find(c=>c.start_time<=time && time<c.start_time+c.duration);
         const matte=clip&&mattes.current.get(clip.id);if(!clip||!matte)continue;
         const frame=Math.min(matte.frames-1,Math.max(0,Math.floor((time-clip.start_time)*matte.fps)));
-        const mask=image(`/api/cinematic/masks/${matte.key}/${frame}.png?alpha=true`);if(!mask)continue;
+        const mask=image(`/api/cinematic/masks/${matte.key}/${frame}.png?alpha=true`);if(!mask)return false;
         const temporary=splitCanvas.current ||= document.createElement('canvas');temporary.width=width;temporary.height=height;
         const paint=temporary.getContext('2d')!;paint.drawImage(ctx.canvas,0,0);paint.globalCompositeOperation='destination-in';paint.drawImage(mask,0,0,width,height);
         drawCover(ctx,source,sw,sh,0,0,width,height);ctx.drawImage(temporary,0,0);continue;
@@ -141,7 +143,7 @@ export function useCreativePreview(plan: EditingPlan, isPlaying: boolean, seekVe
       const frames=titles.current.get(title.id);if(!frames)continue;
       const frameIndex=Math.max(0,Math.min(frames.length-1,Math.floor(time*30+1e-6)-Math.round(title.start_time*30)));
       const url=frames[frameIndex];
-      const raster=image(url);if(!raster)continue;
+      const raster=image(url);if(!raster)return false;
       const layer=titleCanvas.current ||= document.createElement('canvas');layer.width=width;layer.height=height;
       const paint=layer.getContext('2d')!;paint.drawImage(raster,0,0,width,height);
       if(title.behind_subject){
@@ -150,7 +152,7 @@ export function useCreativePreview(plan: EditingPlan, isPlaying: boolean, seekVe
         const frame=Math.min(matte.frames-1,Math.max(0,Math.floor((time-clip.start_time)*matte.fps)));
         const mask=image(`/api/cinematic/masks/${matte.key}/${frame}.png?alpha=true`);
         // Do not substitute unmasked text while a frame is loading.
-        if(!mask)continue;
+        if(!mask)return false;
         for(let next=frame+1;next<Math.min(frame+8,matte.frames);next++)image(`/api/cinematic/masks/${matte.key}/${next}.png?alpha=true`);
         const maskLayer=maskCanvas.current ||= document.createElement('canvas');maskLayer.width=width;maskLayer.height=height;
         const maskPaint=maskLayer.getContext('2d')!;maskPaint.drawImage(mask,0,0,width,height);
@@ -165,8 +167,9 @@ export function useCreativePreview(plan: EditingPlan, isPlaying: boolean, seekVe
       ctx.drawImage(layer,0,0);
     }
     for(const [index,caption] of captions.current.entries()){
-      if(time>=caption.start_time && time<caption.end_time){const raster=image(caption.url);if(raster)ctx.drawImage(raster,0,0,width,height);}
+      if(time>=caption.start_time && time<caption.end_time){const raster=image(caption.url);if(!raster)return false;ctx.drawImage(raster,0,0,width,height);}
       if(time>=caption.start_time && time<caption.end_time)captions.current.slice(index+1,index+5).forEach(next=>image(next.url));
     }
   };
+  return { render, captionRegions: captionData.source === plan.subtitles && captionData.ratio === plan.aspect_ratio ? captionData.regions : [] };
 }

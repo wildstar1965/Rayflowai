@@ -387,6 +387,7 @@ export type TimelineClip = {
     words: SubtitleWordTiming[];
   };
   transform?: {
+    rotation?: number;
     scale: number;
     opacity: number;
     position: { x: number; y: number };

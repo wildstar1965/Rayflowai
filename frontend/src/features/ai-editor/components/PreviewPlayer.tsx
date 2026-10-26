@@ -1,3 +1,4 @@
+import { syncPreviewMedia, releasePreviewMedia } from '../../../utils/previewMedia';
 
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useCallback, useState } from 'react';
 import { ClipEffectLayer, MediaItem, TimelineClip, TimelineTrack, EffectType, Keyframe, TransitionType } from '../types';
@@ -8,6 +9,7 @@ import { buildStyleFilterForEffect, getClipEffectLayers, hasOverlayRenderer, mer
 
 export interface PreviewPlayerHandle {
     getCanvas: () => HTMLCanvasElement | null;
+    isFrameReady: () => boolean;
     getAudioContext: () => AudioContext | null;
 }
 
@@ -20,6 +22,7 @@ interface PreviewPlayerProps {
     playheadPosition: number;
     isPlaying?: boolean;
     onTogglePlayback?: () => void;
+    fps?: number;
     canvasWidth?: number;
     canvasHeight?: number;
     aspectClassName?: string;
@@ -317,6 +320,7 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
     playheadPosition,
     isPlaying = false,
     onTogglePlayback,
+    fps = 30,
     canvasWidth = 1280,
     canvasHeight = 720,
     aspectClassName = 'aspect-video',
@@ -326,6 +330,7 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
     onInitialError,
 }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const presentedRef = useRef(false);
     const audioContextRef = useRef<AudioContext | null>(null);
     const mediaElementsRef = useRef<Map<string, HTMLVideoElement | HTMLImageElement | HTMLAudioElement>>(new Map());
     const mediaMapRef = useRef<Map<string, MediaItem>>(new Map());
@@ -358,45 +363,53 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
     // Expose canvas and audio context via ref for export
     useImperativeHandle(ref, () => ({
         getCanvas: () => canvasRef.current,
+        isFrameReady: () => presentedRef.current,
         getAudioContext: () => audioContextRef.current
     }));
 
-    // Load Media Assets into Elements
+    // Cache by timeline occurrence, not media ID: split/reused sources may
+    // need two independently decoded timestamps in the same composition.
     useEffect(() => {
-        const map = new Map<string, MediaItem>();
-        mediaItems.forEach(item => map.set(item.id, item));
-        mediaMapRef.current = map;
-        mediaItems.forEach(item => {
-            if (!mediaElementsRef.current.has(item.id)) {
-                if (item.type === 'video') {
-                    const vid = document.createElement('video');
-                    vid.src = item.url;
-                    vid.crossOrigin = "anonymous";
-                    vid.muted = false; // We control volume manually
-                    vid.preload = 'auto';
-                    vid.playsInline = true;
-                    const onVideoReady = () => requestRedraw();
-                    vid.addEventListener('loadedmetadata', onVideoReady);
-                    vid.addEventListener('loadeddata', onVideoReady);
-                    vid.addEventListener('canplay', onVideoReady);
-                    vid.addEventListener('seeked', onVideoReady);
-                    mediaElementsRef.current.set(item.id, vid);
-                } else if (item.type === 'image') {
-                    const img = new Image();
-                    img.src = item.url;
-                    img.crossOrigin = "anonymous";
-                    img.onload = () => requestRedraw();
-                    img.onerror = () => requestRedraw();
-                    mediaElementsRef.current.set(item.id, img);
-                } else if (item.type === 'audio') {
-                    const aud = new Audio(item.url);
-                    aud.crossOrigin = "anonymous";
-                    aud.addEventListener('canplay', () => requestRedraw());
-                    mediaElementsRef.current.set(item.id, aud);
-                }
-            }
+        mediaMapRef.current = new Map(mediaItems.map(item => [item.id, item]));
+        const live = new Set<string>();
+        for (const clip of timelineClips) {
+            const item = mediaMapRef.current.get(clip.mediaId);
+            if (!item) continue;
+            live.add(clip.id);
+            const previous = mediaElementsRef.current.get(clip.id);
+            if (previous?.dataset.source === item.url && previous.dataset.kind === item.type) continue;
+            if (previous instanceof HTMLMediaElement) releasePreviewMedia(previous);
+            else if (previous) previous.onload = previous.onerror = null;
+            const element = item.type === 'image' ? new Image() : document.createElement(item.type === 'audio' ? 'audio' : 'video');
+            element.crossOrigin = 'anonymous';
+            element.dataset.source = item.url;
+            element.dataset.kind = item.type;
+            if (element instanceof HTMLMediaElement) {
+                element.preload = 'auto';
+                element.onloadeddata = element.onloadedmetadata = element.oncanplay = element.onseeked = requestRedraw;
+                if (element instanceof HTMLVideoElement) element.playsInline = true;
+            } else element.onload = requestRedraw;
+            element.onerror = requestRedraw;
+            mediaElementsRef.current.set(clip.id, element);
+            element.src = item.url;
+        }
+        mediaElementsRef.current.forEach((element, id) => {
+            if (live.has(id)) return;
+            if (element instanceof HTMLMediaElement) releasePreviewMedia(element);
+            else element.onload = element.onerror = null;
+            mediaElementsRef.current.delete(id);
         });
-    }, [mediaItems, requestRedraw]);
+    }, [timelineClips, mediaItems, requestRedraw]);
+
+    useEffect(() => () => {
+        mediaElementsRef.current.forEach(element => {
+            if (element instanceof HTMLMediaElement) releasePreviewMedia(element);
+            else element.onload = element.onerror = null;
+        });
+        mediaElementsRef.current.clear();
+        void audioContextRef.current?.close();
+        audioContextRef.current = null;
+    }, []);
 
     useEffect(() => {
         const map = new Map<string, TimelineTrack>();
@@ -433,7 +446,7 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
         const imageData = grainCtx.createImageData(grainCanvas.width, grainCanvas.height);
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
-            const value = Math.floor(Math.random() * 255);
+            const value = Math.floor(pseudoNoise(i + Math.floor(playheadRef.current * fps + 1e-7) * 997) * 255);
             data[i] = value;
             data[i + 1] = value;
             data[i + 2] = value;
@@ -516,12 +529,9 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        const playhead = playheadRef.current;
-
-        // Clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const end = Math.max(0, ...timelineClips.map(clip => clip.end));
+        const frame = Math.min(Math.floor(playheadRef.current * fps + 1e-7), Math.max(0, Math.ceil(end * fps - 1e-7) - 1));
+        const playhead = Math.max(0, frame) / fps;
 
         // Filter clips active at current playhead
         const trackMap = trackMapRef.current;
@@ -566,16 +576,54 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
         });
         visualTrackClips.forEach((list) => list.sort((a, b) => a.start - b.start));
 
-        activeClips.forEach(clip => {
+        const nextFor = (clip: TimelineClip) => (visualTrackClips.get(clip.trackId) || [])
+            .find(candidate => candidate.id !== clip.id && Math.abs(candidate.start - clip.end) < 1e-7);
+        const transitionDurationFor = (clip: TimelineClip) => Math.max(0,
+            Math.min(clip.transitionOut?.duration || 0, clip.end - clip.start, nextFor(clip) ? nextFor(clip)!.end - nextFor(clip)!.start : Infinity));
+        const required = new Map(activeClips.map(clip => [clip.id, { clip, time: playhead, playing: isPlaying }]));
+        for (const clip of activeClips) {
+            const next = nextFor(clip);
+            if (!next) continue;
+            const needed = !!clip.transitionOut && playhead >= clip.end - transitionDurationFor(clip);
+            if (needed) required.set(next.id, { clip: next, time: next.start, playing: false });
+            else {
+                const element = mediaElementsRef.current.get(next.id);
+                if (element instanceof HTMLMediaElement) {
+                    element.muted = true;
+                    syncPreviewMedia(element, next.sourceIn ?? 0, false, next.speed || 1);
+                }
+            }
+        }
+        let ready = true;
+        required.forEach(({ clip, time, playing }) => {
+            const element = mediaElementsRef.current.get(clip.id);
+            if (element instanceof HTMLMediaElement) {
+                element.muted = !playing;
+                const target = (clip.sourceIn ?? 0) + Math.max(0, time - clip.start) * (clip.speed || 1);
+                const decoded = syncPreviewMedia(element, target, playing, clip.speed || 1);
+                if (element instanceof HTMLVideoElement && !decoded) ready = false;
+            } else if (!element?.complete || !element.naturalWidth) ready = false;
+        });
+        mediaElementsRef.current.forEach((element, id) => {
+            if (element instanceof HTMLMediaElement && !required.get(id)?.playing) element.pause();
+        });
+        if (!ready) return false;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const paintClip = (clip: TimelineClip, incoming?: { alpha: number; x: number; scale: number }) => {
             const media = mediaMapRef.current.get(clip.mediaId);
-            const element = mediaElementsRef.current.get(clip.mediaId);
+            const element = mediaElementsRef.current.get(clip.id);
 
             if (!media || !element) return;
 
             const speed = Math.max(0.05, clip.speed || 1);
             const sourceIn = clip.sourceIn ?? 0;
             const sourceOut = clip.sourceOut ?? (sourceIn + clip.duration);
-            const timelineLocalTime = Math.max(0, playhead - clip.start);
+            const timelineLocalTime = incoming ? 0 : Math.max(0, playhead - clip.start);
             const unclampedClipTime = sourceIn + timelineLocalTime * speed;
             const clipTime = Math.max(sourceIn, Math.min(sourceOut, unclampedClipTime));
             const keyframeTime = timelineLocalTime * speed;
@@ -593,17 +641,7 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
                 const mediaEl = element as HTMLMediaElement;
                 mediaEl.volume = Math.max(0, Math.min(1, volume));
 
-                // Sync Check
-                const drift = Math.abs(mediaEl.currentTime - clipTime);
-                if ((isPlaying && drift > 0.3) || (!isPlaying && drift > 0.02)) {
-                    mediaEl.currentTime = clipTime;
-                }
 
-                if (isPlaying && mediaEl.paused) {
-                    mediaEl.play().catch(() => { });
-                } else if (!isPlaying && !mediaEl.paused) {
-                    mediaEl.pause();
-                }
             }
 
             if (media.type === 'audio') return; // Don't draw audio
@@ -638,32 +676,24 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
 
             let transitionProgress = 0;
             let transitionActive = false;
-            let outgoingAlpha = 1;
-            let outgoingXOffset = 0;
+            let outgoingAlpha = incoming?.alpha ?? 1;
+            let outgoingXOffset = incoming?.x ?? 0;
             let outgoingScaleOffset = 0;
             let whiteOverlayAlpha = 0;
             let burnOverlayAlpha = 0;
             let nextTransitionClip: TimelineClip | null = null;
             const transitionType = clip.transitionOut?.type;
-            const transitionDuration = Math.max(0, clip.transitionOut?.duration || 0);
+            const transitionDuration = incoming ? 0 : transitionDurationFor(clip);
             if (transitionType && transitionDuration > 0) {
                 const transitionStart = clip.end - transitionDuration;
                 if (playhead >= transitionStart && playhead <= clip.end) {
                     transitionActive = true;
                     transitionProgress = Math.min(1, Math.max(0, (playhead - transitionStart) / transitionDuration));
-                    const sameTrackClips = visualTrackClips.get(clip.trackId) || [];
-                    const currentIndex = sameTrackClips.findIndex((entry) => entry.id === clip.id);
-                    if (currentIndex >= 0) {
-                        for (let i = currentIndex + 1; i < sameTrackClips.length; i++) {
-                            const candidate = sameTrackClips[i];
-                            if (candidate.start >= clip.end - 0.001) {
-                                nextTransitionClip = candidate;
-                                break;
-                            }
-                        }
-                    }
+                    nextTransitionClip = nextFor(clip) || null;
                     switch (transitionType) {
                         case TransitionType.CROSS_FADE:
+                            outgoingAlpha = nextTransitionClip ? 1 : 1 - transitionProgress;
+                            break;
                         case TransitionType.FADE_TO_BLACK:
                         case TransitionType.FADE_TO_WHITE:
                             outgoingAlpha = 1 - transitionProgress;
@@ -682,12 +712,12 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
                             break;
                         case TransitionType.GLITCH_CUT:
                             outgoingAlpha = 1 - transitionProgress;
-                            outgoingXOffset = Math.sin(playhead * 120) * 34 * (1 - transitionProgress);
+                            outgoingXOffset = Math.sin(playhead * 120) * 34 * Math.sin(transitionProgress * Math.PI);
                             whiteOverlayAlpha = Math.max(whiteOverlayAlpha, Math.max(0, 0.28 - Math.abs(transitionProgress - 0.5) * 0.7));
                             break;
                         case TransitionType.WHIP_PAN:
                             outgoingAlpha = 1;
-                            outgoingXOffset = -transitionProgress * canvas.width * 1.25;
+                            outgoingXOffset = -transitionProgress * canvas.width;
                             break;
                         case TransitionType.LIGHTNING_FLASH:
                             outgoingAlpha = transitionProgress < 0.58 ? 1 - transitionProgress * 1.3 : 0;
@@ -700,11 +730,14 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
                         default:
                             break;
                     }
-                    if (transitionType === TransitionType.FADE_TO_WHITE) {
-                        whiteOverlayAlpha = transitionProgress * 0.7;
+                    if (transitionType === TransitionType.FADE_TO_WHITE || transitionType === TransitionType.DIP_TO_WHITE) {
+                        outgoingAlpha = transitionProgress < .5 ? 1 : 0;
+                        whiteOverlayAlpha = 1 - Math.abs(transitionProgress * 2 - 1);
                     }
                 }
             }
+
+            if (incoming) kfScale *= incoming.scale;
 
             // Apply Context Transformations
             ctx.globalAlpha = Math.max(0, Math.min(1, kfOpacity * outgoingAlpha));
@@ -741,6 +774,7 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
             const centerY = (canvas.height * kfY) / 100;
 
             ctx.translate(centerX, centerY);
+            ctx.rotate((transform.rotation || 0) * Math.PI / 180);
             ctx.scale(kfScale + outgoingScaleOffset, kfScale + outgoingScaleOffset);
 
             let drawW = 0;
@@ -797,14 +831,6 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
             // Draw Video or Image
             if (media.type === 'video') {
                 const videoEl = element as HTMLVideoElement;
-                if (videoEl.readyState < 2) {
-                    // Keep seeking while paused so the current frame appears once decoded.
-                    if (!isPlaying && Number.isFinite(clipTime) && Math.abs(videoEl.currentTime - clipTime) > 0.04) {
-                        try { videoEl.currentTime = clipTime; } catch {
-                            // Ignore seek errors for not-yet-ready media.
-                        }
-                    }
-                }
                 if (videoEl.readyState >= 2) {
                     drawW = canvas.width;
                     drawH = drawW / (videoEl.videoWidth / videoEl.videoHeight);
@@ -949,6 +975,7 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
                     ctx.save();
                     ctx.globalAlpha = textOpacity;
                     ctx.translate(baseCenterX, baseCenterY);
+                    ctx.rotate((transform.rotation || 0) * Math.PI / 180);
                     ctx.scale(textScale, textScale);
                     ctx.textAlign = position.includes('left') ? 'left' : position.includes('right') ? 'right' : 'center';
                     ctx.textBaseline = 'top';
@@ -994,124 +1021,19 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
 
             ctx.restore();
 
-            if (transitionActive && nextTransitionClip && transitionType && transitionType !== TransitionType.FADE_TO_BLACK) {
-                const nextMedia = mediaMapRef.current.get(nextTransitionClip.mediaId);
-                const nextElement = mediaElementsRef.current.get(nextTransitionClip.mediaId);
-                if (nextMedia && nextElement && (nextMedia.type === 'video' || nextMedia.type === 'image')) {
-                    const nextTransform = nextTransitionClip.transform || { scale: 1, opacity: 1, position: { x: 50, y: 50 } };
-                    const nextFilters = normalizeFilters(nextTransitionClip.filters);
-                    const nextSpeed = Math.max(0.05, nextTransitionClip.speed || 1);
-                    const nextLocalTime = Math.max(0, playhead - nextTransitionClip.start);
-                    const nextKeyframeTime = nextLocalTime * nextSpeed;
-                    const nextEffects: ActiveClipEffect[] = getClipEffectLayers(nextTransitionClip)
-                        .filter((entry) => entry.enabled !== false)
-                        .map((entry) => {
-                            const baseIntensity = Math.max(0, Math.min(100, entry.intensity ?? 100));
-                            const keyframedIntensity = getKeyframeValue(
-                                nextTransitionClip.keyframes,
-                                'effectIntensity',
-                                nextKeyframeTime,
-                                baseIntensity,
-                                entry.id,
-                            );
-                            return {
-                                ...entry,
-                                resolvedIntensity: Math.max(0, Math.min(100, keyframedIntensity)) / 100,
-                            };
-                        })
-                        .filter((entry) => entry.resolvedIntensity > 0.001);
-                    const nextFilterString = appendStyleEffectFilters(buildFilterString(nextFilters), nextEffects);
-
-                    let incomingAlpha = transitionProgress;
-                    let incomingXOffset = 0;
-                    let incomingScale = 1;
-                    switch (transitionType) {
-                        case TransitionType.CROSS_FADE:
-                        case TransitionType.FADE_TO_WHITE:
-                            incomingAlpha = transitionProgress;
-                            break;
-                        case TransitionType.DIP_TO_WHITE:
-                            incomingAlpha = transitionProgress > 0.5 ? (transitionProgress - 0.5) * 2 : 0;
-                            break;
-                        case TransitionType.ZOOM_IN:
-                            incomingAlpha = transitionProgress;
-                            incomingScale = 1.08 - transitionProgress * 0.08;
-                            break;
-                        case TransitionType.SWIPE_LEFT:
-                            incomingAlpha = 1;
-                            incomingXOffset = (1 - transitionProgress) * canvas.width;
-                            break;
-                        case TransitionType.GLITCH_CUT:
-                            incomingAlpha = transitionProgress;
-                            incomingXOffset = Math.sin(playhead * 130 + 1.7) * 26 * transitionProgress;
-                            break;
-                        case TransitionType.WHIP_PAN:
-                            incomingAlpha = 1;
-                            incomingXOffset = (1 - transitionProgress) * canvas.width * 1.25;
-                            break;
-                        case TransitionType.LIGHTNING_FLASH:
-                            incomingAlpha = transitionProgress > 0.34 ? (transitionProgress - 0.34) / 0.66 : 0;
-                            incomingXOffset = Math.sin(playhead * 80) * 8 * (1 - transitionProgress);
-                            break;
-                        case TransitionType.FILM_BURN:
-                            incomingAlpha = transitionProgress > 0.18 ? (transitionProgress - 0.18) / 0.82 : 0;
-                            burnOverlayAlpha = Math.max(burnOverlayAlpha, Math.sin(transitionProgress * Math.PI) * 0.85);
-                            break;
-                        default:
-                            incomingAlpha = transitionProgress;
-                            break;
-                    }
-
-                    let nextDrawW = 0;
-                    let nextDrawH = 0;
-                    let drawableSource: CanvasImageSource | null = null;
-
-                    if (nextMedia.type === 'video') {
-                        const nextVideo = nextElement as HTMLVideoElement;
-                        const nextSourceIn = nextTransitionClip.sourceIn ?? 0;
-                        const nextSourceOut = nextTransitionClip.sourceOut ?? (nextSourceIn + nextTransitionClip.duration);
-                        const nextClipTime = Math.max(
-                            nextSourceIn,
-                            Math.min(nextSourceOut, nextSourceIn + nextLocalTime * nextSpeed),
-                        );
-                        if (nextVideo.readyState >= 2) {
-                            const drift = Math.abs(nextVideo.currentTime - nextClipTime);
-                            if (drift > 0.08) {
-                                nextVideo.currentTime = nextClipTime;
-                            }
-                            nextDrawW = canvas.width;
-                            nextDrawH = nextDrawW / (nextVideo.videoWidth / nextVideo.videoHeight);
-                            drawableSource = nextVideo;
-                        }
-                    } else if (nextMedia.type === 'image') {
-                        const nextImage = nextElement as HTMLImageElement;
-                        if (nextImage.complete) {
-                            const ratio = nextImage.width / nextImage.height;
-                            const canvasRatio = canvas.width / canvas.height;
-                            if (ratio > canvasRatio) {
-                                nextDrawW = canvas.width;
-                                nextDrawH = canvas.width / ratio;
-                            } else {
-                                nextDrawH = canvas.height;
-                                nextDrawW = canvas.height * ratio;
-                            }
-                            drawableSource = nextImage;
-                        }
-                    }
-
-                    if (drawableSource && nextDrawW > 0 && nextDrawH > 0) {
-                        ctx.save();
-                        ctx.globalCompositeOperation = 'source-over';
-                        ctx.globalAlpha = Math.max(0, Math.min(1, incomingAlpha * (nextTransform.opacity || 1)));
-                        const nextCenterX = (canvas.width * nextTransform.position.x) / 100 + incomingXOffset;
-                        const nextCenterY = (canvas.height * nextTransform.position.y) / 100;
-                        ctx.translate(nextCenterX, nextCenterY);
-                        ctx.scale((nextTransform.scale || 1) * incomingScale, (nextTransform.scale || 1) * incomingScale);
-                        ctx.filter = nextFilterString.trim() || 'none';
-                        ctx.drawImage(drawableSource, -nextDrawW / 2, -nextDrawH / 2, nextDrawW, nextDrawH);
-                        ctx.restore();
-                    }
+            if (transitionActive && nextTransitionClip && transitionType !== TransitionType.FADE_TO_BLACK) {
+                let alpha = transitionProgress, x = 0, scale = 1;
+                switch (transitionType) {
+                    case TransitionType.FADE_TO_WHITE:
+                    case TransitionType.DIP_TO_WHITE: alpha = transitionProgress >= .5 ? 1 : 0; break;
+                    case TransitionType.ZOOM_IN: scale = 1.08 - transitionProgress * .08; break;
+                    case TransitionType.SWIPE_LEFT: alpha = 1; x = (1 - transitionProgress) * canvas.width; break;
+                    case TransitionType.WHIP_PAN: alpha = 1; x = (1 - transitionProgress) * canvas.width; break;
+                    case TransitionType.GLITCH_CUT: x = Math.sin(playhead * 130 + 1.7) * 26 * Math.sin(transitionProgress * Math.PI); break;
+                    case TransitionType.LIGHTNING_FLASH: alpha = Math.max(0, (transitionProgress - .34) / .66); break;
+                    case TransitionType.FILM_BURN: alpha = Math.max(0, (transitionProgress - .18) / .82); break;
                 }
+                paintClip(nextTransitionClip, { alpha, x, scale });
             }
 
             if (transitionActive && whiteOverlayAlpha > 0) {
@@ -1136,21 +1058,18 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.restore();
             }
-        });
+        };
+        activeClips.forEach(clip => paintClip(clip));
 
         if (hasActiveTextOverlay) {
             drawTitleSafeGuides(ctx, canvas.width, canvas.height);
         }
 
-        // Pause inactive media
-        mediaElementsRef.current.forEach((el, id) => {
-            const isUsedActive = activeClips.some(c => c.mediaId === id);
-            if (!isUsedActive) {
-                if (el instanceof HTMLVideoElement && !el.paused) el.pause();
-                if (el instanceof HTMLAudioElement && !el.paused) el.pause();
-            }
-        });
+        presentedRef.current = true;
+        return true;
     };
+    const drawRef = useRef(draw);
+    drawRef.current = draw;
 
     // Animation Loop (only while playing)
     useEffect(() => {
@@ -1165,7 +1084,7 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
         let isActive = true;
         const animate = () => {
             if (!isActive) return;
-            draw();
+            drawRef.current();
             requestRef.current = requestAnimationFrame(animate);
         };
         requestRef.current = requestAnimationFrame(animate);
@@ -1173,20 +1092,13 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
             isActive = false;
             if (requestRef.current) cancelAnimationFrame(requestRef.current);
         };
-    }, [timelineClips, isPlaying, mediaItems]);
+    }, [isPlaying]);
 
     // Draw a single frame when paused or scrubbing.
     useEffect(() => {
         if (isPlaying) return;
-        draw();
-    }, [isPlaying, playheadPosition, timelineClips, mediaItems, canvasWidth, canvasHeight, frameRevision]);
-
-    // While paused, redraw periodically so freshly decoded video frames become visible immediately.
-    useEffect(() => {
-        if (isPlaying) return;
-        const id = window.setInterval(() => draw(), 120);
-        return () => window.clearInterval(id);
-    }, [isPlaying, timelineClips, mediaItems, canvasWidth, canvasHeight, frameRevision]);
+        drawRef.current();
+    }, [isPlaying, playheadPosition, timelineClips, timelineTracks, mediaItems, canvasWidth, canvasHeight, fps, frameRevision]);
 
     const drawInitialFrameRef = useRef(draw);
     drawInitialFrameRef.current = draw;
@@ -1199,7 +1111,7 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
         let disposed = false;
         let frame = 0;
         const required = timelineClips.filter(clip => clip.start <= playheadPosition && clip.end > playheadPosition)
-            .map(clip => ({ item: mediaItems.find(item => item.id === clip.mediaId), element: mediaElementsRef.current.get(clip.mediaId) }));
+            .map(clip => ({ item: mediaItems.find(item => item.id === clip.mediaId), element: mediaElementsRef.current.get(clip.id) }));
         const fail = () => {
             if (settled) return;
             settled = true;
@@ -1209,14 +1121,17 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
             if (settled) return;
             if (required.some(({ item, element }) => !item?.url || !element || (element instanceof HTMLMediaElement && element.error))) { fail(); return; }
             if (!required.every(({ element }) => element instanceof HTMLImageElement ? element.complete && element.naturalWidth > 0 : (element as HTMLMediaElement).readyState >= 2)) return;
-            settled = true;
-            clearTimeout(deadline);
             void document.fonts.ready.then(() => {
                 if (disposed) return;
                 frame = requestAnimationFrame(() => {
                     if (!canvasRef.current?.getContext('2d')) { onInitialError?.('The preview canvas could not initialize. Retry to reopen it.'); return; }
                     try {
-                        drawInitialFrameRef.current();
+                        if (drawInitialFrameRef.current() === false) {
+                            frame = requestAnimationFrame(check);
+                            return;
+                        }
+                        settled = true;
+                        clearTimeout(deadline);
                         onInitialReady();
                     } catch (error) {
                         onInitialError?.(error instanceof Error ? error.message : 'The opening preview could not render. Retry to reopen it.');
@@ -1228,6 +1143,7 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
         for (const { element } of required) {
             element?.addEventListener('load', check);
             element?.addEventListener('loadeddata', check);
+            element?.addEventListener('seeked', check);
             element?.addEventListener('error', fail);
         }
         check();
@@ -1239,6 +1155,7 @@ const PreviewPlayer = forwardRef<PreviewPlayerHandle, PreviewPlayerProps>(({
             for (const { element } of required) {
                 element?.removeEventListener('load', check);
                 element?.removeEventListener('loadeddata', check);
+                element?.removeEventListener('seeked', check);
                 element?.removeEventListener('error', fail);
             }
         };

@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 
 from app.core.config import CORS_ORIGINS, UPLOAD_DIR, ENVIRONMENT, MAX_REQUEST_MB
 from app.core.request_limits import RequestSizeLimit
@@ -14,7 +16,6 @@ from app.api.analytics_routes import router as analytics_router
 from app.services.job_history import recover_interrupted
 from app.api.editor_routes import router as editor_router
 from app.api.editor_live_routes import router as editor_live_router
-from app.editor.cloud import router as cloud_router
 from app.editor.accounts import router as accounts_router
 from app.editor.teams import router as teams_router
 from app.editor.collaboration import router as collaboration_router
@@ -34,6 +35,16 @@ app = FastAPI(
     docs_url=None if ENVIRONMENT == 'production' else '/docs',
     redoc_url=None if ENVIRONMENT == 'production' else '/redoc',
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(request, exc):
+    # Pydantic includes rejected input in its default response, including key
+    # submission bodies. Return only field locations and validation messages.
+    return JSONResponse(status_code=422, content={'detail': [
+        {'loc': list(error['loc']), 'msg': error['msg'], 'type': error['type']}
+        for error in exc.errors()
+    ]})
 
 # CORS middleware
 app.add_middleware(
@@ -66,7 +77,6 @@ app.include_router(analytics_router)
 app.include_router(health_router)
 app.include_router(editor_router)
 app.include_router(editor_live_router)
-app.include_router(cloud_router)
 app.include_router(accounts_router)
 app.include_router(teams_router)
 app.include_router(collaboration_router)

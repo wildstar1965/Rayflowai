@@ -33,15 +33,19 @@ def setting(key, default=''):
     if workspace_id.get():
         from app.editor.providers import credential, provider_record
         from app.editor.store import store
-        provider = {'OPENROUTER_API_KEY': 'openrouter', 'PIXABAY_API_KEY': 'pixabay'}.get(key)
+        provider = {'GEMINI_API_KEY': 'gemini', 'OPENAI_API_KEY': 'openai', 'ANTHROPIC_API_KEY': 'anthropic', 'OPENROUTER_API_KEY': 'openrouter', 'AGENTROUTER_API_KEY': 'agentrouter', 'PIXABAY_API_KEY': 'pixabay'}.get(key)
         if provider:
             return credential(provider)
         prefs = store.get('preferences', workspace_id.get(), workspace_id.get()) or {}
         values = prefs.get('rayflow', {})
-        if key == 'OPENROUTER_MODEL':
-            return (provider_record('openrouter') or {}).get('model') or default
+        if key in ('GEMINI_MODEL', 'OPENAI_MODEL', 'ANTHROPIC_MODEL', 'OPENROUTER_MODEL', 'AGENTROUTER_MODEL'):
+            return (provider_record(key.removesuffix('_MODEL').lower()) or {}).get('model') or default
         if key == 'OLLAMA_HOST':
-            return os.getenv('EDITOR_OLLAMA_URL') or os.getenv('OLLAMA_HOST', default)
+            from app.editor.providers import local_provider_url
+            return local_provider_url('ollama') or default
+        if key == 'OLLAMA_MODEL':
+            record = provider_record('ollama') or {}
+            return record['model'] if 'model' in record else values.get(key) or os.getenv(key, default)
         return values.get(key, default)
     with _lock:
         # Production configuration must not inherit a developer's private file.
@@ -62,6 +66,8 @@ def validate_host(value):
         raise ValueError('Ollama port must be a valid port number.') from None
     # Remote hosts are selected by the server operator, never arbitrary browser input.
     allowed = {os.getenv('OLLAMA_HOST', 'http://127.0.0.1:11434').rstrip('/')}
+    if os.getenv('EDITOR_OLLAMA_URL'):
+        allowed.add(os.environ['EDITOR_OLLAMA_URL'].rstrip('/'))
     allowed.update(x.strip().rstrip('/') for x in os.getenv('OLLAMA_ALLOWED_HOSTS', '').split(',') if x.strip())
     if parsed.hostname not in ('localhost', '127.0.0.1', '::1') and target not in allowed:
         raise ValueError('This remote Ollama host is not allowed. Add it to OLLAMA_ALLOWED_HOSTS on the backend.')
@@ -86,10 +92,13 @@ def save_settings(patch):
                     save_provider('openrouter' if key == 'OPENROUTER_API_KEY' else 'pixabay', key=value)
             elif key == 'OPENROUTER_MODEL':
                 save_provider('openrouter', model=value)
+            elif key == 'OLLAMA_MODEL':
+                save_provider('ollama', model=value)
+                values[key] = value
             elif key == 'OLLAMA_HOST':
                 if value != setting(key):
                     raise ValueError('The backend operator configures local model server addresses.')
-            elif key == 'AI_PROVIDER' and value not in ('auto', 'ollama', 'openrouter', 'local'):
+            elif key == 'AI_PROVIDER' and value not in ('auto', 'ollama', 'openrouter', 'openai', 'anthropic', 'gemini', 'agentrouter', 'local'):
                 raise ValueError('Unsupported AI provider.')
             else:
                 values[key] = value
@@ -106,8 +115,8 @@ def save_settings(patch):
             continue  # Empty password inputs preserve working credentials.
         if key == 'OLLAMA_HOST':
             value = validate_host(value)
-        if key == 'AI_PROVIDER' and value not in ('auto', 'ollama', 'openrouter', 'local'):
-            raise ValueError('Select Automatic, Ollama, OpenRouter, or local commands.')
+        if key == 'AI_PROVIDER' and value not in ('auto', 'ollama', 'openrouter', 'openai', 'anthropic', 'gemini', 'agentrouter', 'local'):
+            raise ValueError('Select a supported AI provider in Connections.')
         if key.endswith('_MODEL') and ((not value and key != 'OLLAMA_MODEL') or len(value) > 200 or any(c.isspace() for c in value)):
             raise ValueError('Enter a model ID without spaces (at most 200 characters).')
         clean[key] = value
@@ -127,6 +136,13 @@ def save_settings(patch):
 
 def public_settings():
     return {
+        'gemini_configured': bool(setting('GEMINI_API_KEY')),
+        'gemini_model': setting('GEMINI_MODEL', 'gemini-2.5-flash'),
+        'openai_configured': bool(setting('OPENAI_API_KEY')),
+        'agentrouter_configured': bool(setting('AGENTROUTER_API_KEY')),
+        'agentrouter_model': setting('AGENTROUTER_MODEL', 'gpt-6-astra'),
+        'agentrouter_base_url': os.getenv('AGENTROUTER_BASE_URL', 'https://agentrouter.org/v1').rstrip('/'),
+        'anthropic_configured': bool(setting('ANTHROPIC_API_KEY')),
         'openrouter_configured': bool(setting('OPENROUTER_API_KEY')),
         'openrouter_model': setting('OPENROUTER_MODEL', 'openrouter/free'),
         'pixabay_configured': bool(setting('PIXABAY_API_KEY')),

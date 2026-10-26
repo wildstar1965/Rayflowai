@@ -30,6 +30,7 @@ interface InspectorPanelProps {
 type InspectorTab = 'PROPERTIES' | 'EFFECTS' | 'COLOR' | 'TRANSITIONS' | 'TEXT' | 'AI' | 'TRANSFORM' | 'MOTION' | 'KEYFRAMES';
 
 const DEFAULT_TRANSFORM = {
+    rotation: 0,
     scale: 1,
     opacity: 1,
     position: { x: 50, y: 50 },
@@ -109,7 +110,7 @@ const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
     const assistantContext = useMemo(() => {
         if (selectedMedia && selectedClip) {
             const duration = typeof selectedClip.duration === 'number' ? `${selectedClip.duration.toFixed(2)}s` : 'unknown';
-            return `Selected clip: ${selectedMedia.name} (${selectedMedia.type}), duration ${duration}.`;
+            return `Selected clip ID: ${selectedClip.id}. Media: ${selectedMedia.name} (${selectedMedia.type}), duration ${duration}. Transform: ${JSON.stringify(selectedClip.transform || { position: { x: 50, y: 50 }, rotation: 0 })}.`;
         }
         if (selectedMedia) {
             return `Selected media: ${selectedMedia.name} (${selectedMedia.type}).`;
@@ -303,7 +304,7 @@ const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
         onUpdateChromaKeyConfig(selectedClip.id, newConfig);
     };
 
-    const handleTransformChange = (field: 'scale' | 'opacity' | 'positionX' | 'positionY', value: number) => {
+    const handleTransformChange = (field: 'scale' | 'rotation' | 'opacity' | 'positionX' | 'positionY', value: number) => {
         if (!selectedClip) return;
         const currentTransform = selectedClip.transform || DEFAULT_TRANSFORM;
         let newTransform;
@@ -615,6 +616,7 @@ const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                         <div className="pk-card">
                             <SliderRow id="scale" label="Scale" value={transform.scale} display={`${(transform.scale * 100).toFixed(0)}%`} min={0.1} max={3} step={0.01} onChange={(v) => handleTransformChange('scale', v)} onReset={() => handleTransformChange('scale', 1)} />
                             <SliderRow id="opacity" label="Opacity" value={transform.opacity} display={`${(transform.opacity * 100).toFixed(0)}%`} min={0} max={1} step={0.01} onChange={(v) => handleTransformChange('opacity', v)} onReset={() => handleTransformChange('opacity', 1)} />
+                            <SliderRow id="rotation" label="Rotation" value={transform.rotation || 0} display={`${(transform.rotation || 0).toFixed(0)}°`} min={-180} max={180} step={1} onChange={(v) => handleTransformChange('rotation', v)} onReset={() => handleTransformChange('rotation', 0)} />
                         </div>
                         <div className="pk-card">
                             <SliderRow id="positionX" label="Position X" value={transform.position.x} display={`${transform.position.x.toFixed(1)}%`} min={0} max={100} step={0.1} onChange={(v) => handleTransformChange('positionX', v)} onReset={() => handleTransformChange('positionX', 50)} />

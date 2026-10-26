@@ -62,15 +62,7 @@ export const DOCS_KNOWLEDGE_BASE: DocsChunk[] = [
     section: 'Project Workspace',
     tags: ['collaboration', 'chat', 'mentions', 'attachments', 'meeting links', 'storage links'],
     content:
-      'Project phase includes collaborator roles, meeting links, storage links, and project/shot chat threads. Team members can mention people with @, attach files, and keep shot-specific discussion inside each shot thread.',
-  },
-  {
-    id: 'project-sync-usage',
-    title: 'Project Sync Basics',
-    section: 'Project Workspace',
-    tags: ['sync', 'dropbox', 'google drive', 'one drive', 'folder', 'lock'],
-    content:
-      'When sync is configured, choose the provider and root folder so project paths stay inside the sync root. The UI shows lock and incoming update status to avoid overwrite conflicts during team editing.',
+      'Project phase includes collaborator roles, meeting links, and project/shot chat threads. Team members can mention people with @, attach files, and keep shot-specific discussion inside each shot thread.',
   },
   {
     id: 'project-realtime-collaboration-direction',

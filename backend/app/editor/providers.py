@@ -11,6 +11,9 @@ from .security import encrypt, decrypt
 from .store import store
 
 PROVIDERS = {
+    'agentrouter': ('Agent Router', ['agentrouter.org', 'co.agentrouter.org'], 'Authorization', 'Bearer ', '/v1/models'),
+    'openai': ('OpenAI GPT / Astra', ['api.openai.com'], 'Authorization', 'Bearer ', '/v1/models'),
+    'anthropic': ('Anthropic Claude Opus', ['api.anthropic.com'], 'x-api-key', '', '/v1/models'),
     'notebooklm': ('NotebookLM MCP', [], 'Authorization', 'Bearer ', None),
     'gemini': ('Google Gemini', ['generativelanguage.googleapis.com'], 'x-goog-api-key', '', '/v1beta/models'),
     'replicate': ('Replicate', ['api.replicate.com'], 'Authorization', 'Bearer ', '/v1/account'),
@@ -35,6 +38,15 @@ LOCAL_PROVIDERS = {'ollama': 'http://127.0.0.1:11434', 'lmstudio': 'http://127.0
                    'draw-things': 'http://127.0.0.1:7860'}
 
 
+def local_provider_url(provider):
+    configured = os.getenv('EDITOR_' + provider.upper().replace('-', '_') + '_URL', '')
+    if provider == 'ollama':
+        configured = configured or os.getenv('OLLAMA_HOST', '')
+        if not configured and os.getenv('RAYFLOW_ENV', 'development') != 'production':
+            configured = LOCAL_PROVIDERS['ollama']
+    return configured
+
+
 def provider_record(provider, identity=None):
     identity = identity or owner()
     return store.get('credentials', identity + ':' + provider, identity)
@@ -47,15 +59,16 @@ def credential(provider, identity=None):
 
 
 def public_providers():
+    from app.services.ai_provider import MODELS
     rows = []
     for identity, metadata in PROVIDERS.items():
         record = provider_record(identity) or {}
         rows.append({'id': identity, 'label': metadata[0], 'configured': bool(record.get('encrypted')),
                      'model': record.get('model', ''), 'tested': record.get('tested', False),
-                     'can_test': bool(metadata[4]), 'hosts': metadata[1]})
+                     'can_test': bool(metadata[4]), 'hosts': metadata[1], 'models': MODELS.get(identity, [])})
     for identity, default in LOCAL_PROVIDERS.items():
         record = provider_record(identity) or {}
-        configured = os.getenv('EDITOR_' + identity.upper().replace('-', '_') + '_URL', '')
+        configured = local_provider_url(identity)
         rows.append({'id': identity, 'label': identity, 'configured': bool(configured),
                      'model': record.get('model', ''), 'base_url': configured,
                      'local': True, 'can_test': True, 'tested': record.get('tested', False), 'hosts': []})
@@ -63,6 +76,11 @@ def public_providers():
 
 
 def save_provider(provider, key=None, model=None):
+    from app.services.ai_provider import MODELS, gemini_model
+    if provider == 'gemini' and model:
+        model = gemini_model(model)
+    elif provider in MODELS and model and model not in MODELS[provider]:
+        raise ValueError('Select a supported model from the provider catalog.')
     if provider not in PROVIDERS and provider not in LOCAL_PROVIDERS:
         raise ValueError('Unknown provider.')
     identity = owner()
@@ -80,6 +98,7 @@ def save_provider(provider, key=None, model=None):
         if not isinstance(model, str) or len(model) > 200 or any(character in model for character in '\r\n\x00'):
             raise ValueError('Invalid model identifier.')
         previous['model'] = model.strip()
+        previous['tested'] = False
     store.put('credentials', identity + ':' + provider, identity, previous)
 
 
@@ -108,7 +127,7 @@ def proxy_request(provider, url, method='GET', headers=None, body=None, body_bas
     if method not in ('GET', 'POST', 'PUT', 'PATCH', 'DELETE'):
         raise ValueError('Unsupported provider method.')
     metadata = PROVIDERS.get(provider)
-    local_base = os.getenv('EDITOR_' + provider.upper().replace('-', '_') + '_URL', '') if provider in LOCAL_PROVIDERS else ''
+    local_base = local_provider_url(provider) if provider in LOCAL_PROVIDERS else ''
     if not metadata and not local_base:
         raise ValueError('This service is not configured on the backend.')
     if local_base:
@@ -145,6 +164,8 @@ def proxy_request(provider, url, method='GET', headers=None, body=None, body_bas
         clean_headers[metadata[2]] = metadata[3] + key
     if provider == 'runway':
         clean_headers.setdefault('X-Runway-Version', '2024-11-06')
+    if provider == 'anthropic':
+        clean_headers['anthropic-version'] = '2023-06-01'
     data = base64.b64decode(body_base64, validate=True) if body_base64 else body
     files = None
     if form is not None:
@@ -182,6 +203,21 @@ def proxy_request(provider, url, method='GET', headers=None, body=None, body_bas
 
 
 def test_provider(provider):
+    if provider == 'ollama':
+        from app.services.ollama_client import check_ollama_status
+        status = check_ollama_status()
+        record = provider_record(provider) or {}
+        record['tested'] = status.ready
+        store.put('credentials', owner() + ':' + provider, owner(), record)
+        return {'ok': status.ready, 'verified': status.ready,
+                'message': status.error or f'Ollama connected. Selected model: {status.default_model}. Inference is checked when you send a direction.'}
+    if provider in ('openai', 'anthropic', 'agentrouter', 'gemini'):
+        from app.services.ai_provider import test_connection
+        result = test_connection(provider)
+        record = provider_record(provider) or {}
+        record['tested'] = result['ok']
+        store.put('credentials', owner() + ':' + provider, owner(), record)
+        return result
     if provider in LOCAL_PROVIDERS:
         path = '/api/tags' if provider == 'ollama' else '/system_stats' if provider == 'comfyui' else '/v1/models'
         result = proxy_request(provider, LOCAL_PROVIDERS[provider] + path)

@@ -23,6 +23,10 @@ interface InteractiveTimelineProps {
   isPlaying: boolean;
   selectedClipId: string | null;
   onSelectClip: (clipId: string | null) => void;
+  selectedCaptionIds?: string[];
+  onSelectCaption?: (id: string, multiple?: boolean) => void;
+  audioSelected?: boolean;
+  onSelectAudio?: () => void;
   onSeek: (time: number) => void;
   onScrubCommit?: (before: number, after: number) => void;
   onUpdatePlan: (updatedPlan: EditingPlan, recordHistory?: boolean) => void;
@@ -46,6 +50,10 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
   currentTime,
   selectedClipId,
   onSelectClip,
+  selectedCaptionIds = [],
+  onSelectCaption,
+  audioSelected = false,
+  onSelectAudio,
   onSeek,
   onScrubCommit,
   onUpdatePlan,
@@ -79,10 +87,15 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
   const startOverlayDrag = (event:React.PointerEvent<HTMLElement>, key:'visual_inserts'|'subtitles'|'sound_cues',id:string,edge:'move'|'left'|'right'='move') => {
     if(event.button!==0)return;
     event.preventDefault();event.stopPropagation();event.currentTarget.setPointerCapture(event.pointerId);
+    if (key === 'subtitles') {
+      event.currentTarget.focus();
+      onSelectCaption?.(id, event.shiftKey || event.ctrlKey || event.metaKey);
+    } else onSelectClip(null);
     overlayDrag.current={key,id,edge,x:event.clientX,plan,last:plan};
   };
   const moveOverlayDrag = (event:React.PointerEvent<HTMLElement>) => {
     const drag=overlayDrag.current;if(!drag)return;event.preventDefault();event.stopPropagation();
+    if (drag.last === drag.plan && Math.abs(event.clientX - drag.x) < 3) return;
     const delta=(event.clientX-drag.x)/pxPerSec;
     const items=drag.plan[drag.key]?.map(item=>{
       if(item.id!==drag.id)return item;
@@ -621,12 +634,18 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                       <div
                         draggable={!trimmingState && !isScrubbing}
                         data-clip-id={clip.id}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`Select clip: ${clip.label || clip.id}`}
+                        aria-pressed={selectedClipId === clip.id}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectClip(clip.id); onSeek(clip.start_time); } }}
                         onDragStart={e => handleDragStart(e, clip.id)}
                         onDragOver={e => handleDragOver(e, clip)}
                         onDrop={e => handleDrop(e, clip)}
                         onDragEnd={handleDragEnd}
                         onClick={e => {
                           e.stopPropagation();
+                          e.currentTarget.focus();
                           onSelectClip(clip.id);
                           onSeek(clip.start_time);
                         }}
@@ -778,6 +797,11 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                     <div
                       key={sub.id}
                       data-subtitle-id={sub.id}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Select caption: ${sub.text}`}
+                      aria-pressed={selectedCaptionIds.includes(sub.id)}
+                      onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelectCaption?.(sub.id, event.shiftKey || event.ctrlKey || event.metaKey); onSeek(sub.start_time); } }}
                       onPointerDown={e=>startOverlayDrag(e,'subtitles',sub.id)}
                       onPointerMove={moveOverlayDrag}
                       onPointerUp={endOverlayDrag}
@@ -791,7 +815,7 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
                         width: `${widthPx}px`, touchAction:'none'
                       }}
                       className={`absolute top-0.5 bottom-0.5 rounded px-1 flex items-center justify-between text-[10px] font-medium border cursor-pointer transition-all truncate ${
-                        isCurrent
+                        selectedCaptionIds.includes(sub.id) || isCurrent
                           ? 'bg-brass text-ink border-brass-border shadow-xs ring-1 ring-brass-border'
                           : 'bg-brass-soft/90 text-brass border-brass-border hover:bg-brass-soft'
                       }`}
@@ -822,7 +846,10 @@ export const InteractiveTimeline: React.FC<InteractiveTimelineProps> = ({
               A1
             </span>
 
-            <div className="flex-1 h-full relative rounded-lg border border-studio-border bg-studio-panel overflow-hidden shadow-2xs flex items-center">
+            <div tabIndex={audio ? 0 : undefined} role={audio ? 'button' : undefined} aria-label={audio ? 'Select audio track' : undefined} aria-pressed={audio ? audioSelected : undefined}
+              onClick={event => { if (audio) { event.stopPropagation(); event.currentTarget.focus(); onSelectAudio?.(); } }}
+              onKeyDown={event => { if (audio && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onSelectAudio?.(); } }}
+              className={`flex-1 h-full relative rounded-lg border ${audioSelected ? 'border-accent' : 'border-studio-border'} bg-studio-panel overflow-hidden shadow-2xs flex items-center`}>
               {/* Waveform HTML5 Canvas */}
               <canvas
                 ref={waveformCanvasRef}

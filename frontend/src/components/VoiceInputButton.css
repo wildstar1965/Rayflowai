@@ -1,0 +1,14 @@
+.rayflow-voice-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; min-width: 38px; padding: 9px; border: 1px solid #6665; border-radius: 9px; color: inherit; background: #8881; flex-shrink: 0; }
+.rayflow-voice-button:hover { background: #8883; }
+.rayflow-voice-button:focus-visible { outline: 2px solid #bd8d55; outline-offset: 3px; }
+.rayflow-voice-button:disabled { opacity: .45; cursor: not-allowed; }
+.rayflow-voice-button.is-listening { color: #fff; background: #986b39; }
+.rayflow-voice-wave { display: flex; align-items: center; gap: 2px; height: 20px; }
+.rayflow-voice-wave i { width: 3px; height: 7px; border-radius: 2px; background: currentColor; animation: rayflow-voice-wave 1.1s ease-in-out infinite; transform-origin: center; }
+.rayflow-voice-wave i:nth-child(2) { animation-delay: -.2s; }
+.rayflow-voice-wave i:nth-child(3) { animation-delay: -.6s; }
+.rayflow-voice-wave i:nth-child(4) { animation-delay: -.35s; }
+.rayflow-voice-wave i:nth-child(5) { animation-delay: -.8s; }
+.rayflow-voice-wave.is-speaking i { height: 11px; animation-duration: .65s; }
+@keyframes rayflow-voice-wave { 0%,100% { transform: scaleY(.45); } 50% { transform: scaleY(1.65); } }
+@media (prefers-reduced-motion: reduce) { .rayflow-voice-wave i { animation: none; } .rayflow-voice-wave i:nth-child(2n) { height: 15px; } }

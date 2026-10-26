@@ -7,6 +7,33 @@ const ts = require('typescript');
 const source = await readFile(new URL('../frontend/src/utils/timeline.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
 const { reorderClips, reconcileTransitions, recalculateTimeline, uploadedClip } = await import('data:text/javascript;base64,' + Buffer.from(compiled).toString('base64'));
+const timingSource = await readFile(new URL('../frontend/src/utils/previewTiming.ts', import.meta.url), 'utf8');
+const timingModule = ts.transpileModule(timingSource, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
+const { previewTimeline, transitionAt, frameAt } = await import('data:text/javascript;base64,' + Buffer.from(timingModule).toString('base64'));
+
+test('Preview uses cumulative export boundaries without changing precise source ranges', () => {
+  const plan = { clips: [{ id: 'a', duration: .51, source_start: .123 }, { id: 'b', duration: .73, source_start: .1 }],
+    transitions: [{ from_clip_id: 'a', to_clip_id: 'b', duration: .3, enabled: true, type: 'crossfade' }] };
+  const clips = previewTimeline(plan);
+  assert.equal(clips[1].start_time, .5);
+  assert.equal(frameAt(clips[1].duration), 22);
+  assert.equal(clips[0].source_start, .123);
+  assert.equal(plan.clips[0].duration, .51);
+  assert.equal(transitionAt(plan, clips, 0).duration, .3);
+  plan.transitions[0].enabled = false;
+  assert.equal(transitionAt(plan, clips, 0), null);
+  const legacy = { clips: [{ id: 'a', duration: 1, transition: 'crossfade' }, { id: 'b', duration: 1 }] };
+  assert.equal(transitionAt(legacy, previewTimeline(legacy), 0).duration, .5);
+});
+
+test('Transitions cannot overflow short clips or invent a minimum overlap', () => {
+  const clips = [{ id: 'a', duration: 1/30 }, { id: 'b', duration: .5 }];
+  const transitions = reconcileTransitions(clips, [{ from_clip_id: 'a', to_clip_id: 'b', enabled: true, type: 'crossfade', duration: 1 }]);
+  assert.equal(transitions[0].duration, 0);
+  assert.equal(transitions[0].enabled, false);
+  const plan = { clips, transitions };
+  assert.equal(transitionAt(plan, previewTimeline(plan), 0), null);
+});
 
 test('Video upload, initialization and reordering retain precise full source ranges', () => {
   const videos = [121.23333333333333, 10.01001, 0.06666666666666667].map((duration, i) =>

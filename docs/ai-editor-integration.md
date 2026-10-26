@@ -31,10 +31,10 @@ Upstream GPL-3.0-or-later attribution is preserved in the module's NOTICE and LI
 - Jobs implement bounded admission, polling, cancellation, encrypted receipts and durable
   outputs. Submission keys prevent duplicate jobs. Known provider receipts can be polled
   from Dashboard without resubmitting generation.
-- Optional account/team/presence/chat, Yjs, Drive/Dropbox OAuth and HTTP NotebookLM adapters
-  are present. Saves merge independent edits against the loaded revision; overlapping
-  edits preserve local state and offer a separate project copy. Cloud project writes
-  update the authoritative record. The conflicting copy never syncs to the original cloud target.
+- Optional account/team/presence/chat, Yjs and HTTP NotebookLM adapters are present.
+  Saves merge independent edits against the loaded revision; overlapping edits preserve
+  local state and offer a separate project copy. Drive/Dropbox storage connections and
+  synchronization were removed. Older project sync metadata is retained without activation.
 - CPU normal-map and working local audio mastering/remastering run as backend jobs.
   GPU/model services and downloadable native-host assets retain configuration requirements.
 - HQ export prepares browser-generated media, mixes trimmed/speed-adjusted audio with
@@ -66,7 +66,7 @@ upstream paths/hashes and excluded standalone/payment modules.
 | Assistant, Live, Studio Agent | Source tools and backend transport/ticket adapters | Live voice, cancellation/timeouts, approvals and full resumable production |
 | Export | Real H.264, 10-bit HEVC/ProRes with audio; fresh Design title -> HQ MP4 and private WebM; cancellation/retry; four volume easing modes/custom LUTs; OTIO/FCPXML/OCIO/Nuke/Natron generators | Remaining HQ limitations below; HDR/12-bit, print and native NLE/VFX imports |
 | Settings/onboarding/security | Skip/reload, key replacement/deletion, model/ownership checks, two-guest browser denial | Every preference/UI mode, recovery and deployed cookies/Storage |
-| Accounts/teams/collaboration/cloud | Mocked OTP/team/OAuth; two same-workspace browsers converge/save/reload; conflicting script saved as separate copy | Actual OTP/OAuth, two verified users, broader live fields/media and history compaction |
+| Accounts/teams/collaboration | Mocked OTP/team; two same-workspace browsers converge/save/reload; conflicting script saved as separate copy | Actual OTP, two verified users, broader live fields/media and history compaction |
 
 ## Actual validation
 

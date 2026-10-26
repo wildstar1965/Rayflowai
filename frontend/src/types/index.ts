@@ -147,6 +147,9 @@ export interface CinematicText {
 }
 
 export interface ClipConfig {
+  rotation?: number;
+  offset_x?: number;
+  offset_y?: number;
   id: string;
   image_url: string;
   start_time: number;
@@ -224,7 +227,18 @@ export interface CommandResponse {
 
 export type AIActionType =
   | 'add_subtitles' | 'set_aspect_ratio' | 'add_title' | 'add_transition'
-  | 'set_clip_volume' | 'split_clip' | 'trim_clip' | 'undo' | 'redo';
+  | 'set_clip_volume' | 'split_clip' | 'trim_clip' | 'undo' | 'redo'
+  | 'remove_subtitles' | 'style_subtitles' | 'generate_subtitles' | 'remove_title'
+  | 'move_clip' | 'transform_clip' | 'delete_clip' | 'shorten_video' | 'remove_silence';
+
+export interface DirectorContext {
+  selected_clip_id: string | null;
+  selected_caption_ids: string[];
+  playhead_time: number;
+  can_undo: boolean;
+  can_redo: boolean;
+}
+export interface DirectorTurn { role: 'user' | 'assistant'; content: string }
 
 export interface AIAction {
   type: AIActionType;

@@ -4,7 +4,7 @@ import StudioPage from './pages/StudioPage';
 import SettingsPage from './pages/SettingsPage';
 import DashboardPage from './pages/DashboardPage';
 import { checkBackendHealth } from './services/api';
-import { initializeWorkspace, getWorkspaceSession } from './services/editorClient';
+import { initializeWorkspace, getWorkspaceSession, getEditorProviders } from './services/editorClient';
 import WorkspaceSetup from './components/WorkspaceSetup';
 import ProjectManager from './components/ProjectManager';
 import SharedAssets from './components/SharedAssets';
@@ -26,7 +26,7 @@ export function App() {
     try {
       if (!await checkBackendHealth()) throw new Error('The video engine could not be reached.');
       const session = await initializeWorkspace();
-      setSetup(!session.preferences.setupComplete); setStartup('ready');
+      setSetup(!session.preferences.setupComplete && !getEditorProviders().some(provider => provider.configured && !provider.local)); setStartup('ready');
     } catch (error) { setStartupError(error instanceof Error ? error.message : 'Workspace startup failed.'); setStartup('error'); }
   };
   useEffect(() => {

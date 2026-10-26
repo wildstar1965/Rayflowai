@@ -21,6 +21,9 @@ class ClipConfig(BaseModel):
     transition: str = "none"  # "none", "crossfade", "dip_black", "dip_white", "fade"
     label: Optional[str] = None
     volume: float = Field(default=1, ge=0, le=2, allow_inf_nan=False)
+    rotation: float = Field(default=0, ge=-360, le=360, allow_inf_nan=False)
+    offset_x: float = Field(default=0, ge=-1, le=1, allow_inf_nan=False)
+    offset_y: float = Field(default=0, ge=-1, le=1, allow_inf_nan=False)
 
 class WordTiming(BaseModel):
     word: str = Field(max_length=500)

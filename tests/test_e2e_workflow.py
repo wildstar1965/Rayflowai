@@ -34,7 +34,8 @@ def create_dummy_audio(path: Path, duration: float = 4.0, sample_rate: int = 220
             data = struct.pack('<h', max(-32768, min(32767, val)))
             wav_file.writeframesraw(data)
 
-def test_full_e2e_workflow():
+def test_full_e2e_workflow(tmp_path):
+    assert client.post('/api/session').status_code == 200
     print("=== Step 1: Health Check ===")
     res = client.get("/api/health")
     assert res.status_code == 200
@@ -45,7 +46,7 @@ def test_full_e2e_workflow():
     test_img_paths = []
     colors = [(240, 240, 245), (20, 20, 25), (100, 100, 110)]
     for i, col in enumerate(colors):
-        p = UPLOAD_DIR / f"e2e_photo_{i}.jpg"
+        p = tmp_path / f"e2e_photo_{i}.jpg"
         img = Image.new("RGB", (720, 1280), col)
         draw = ImageDraw.Draw(img)
         draw.text((100, 600), f"E2E TEST PHOTO {i+1}", fill=(255, 255, 255) if col[0] < 128 else (0, 0, 0))
@@ -62,7 +63,7 @@ def test_full_e2e_workflow():
     print(f"Uploaded {len(uploaded_images)} images successfully.")
 
     print("\n=== Step 3: Upload Soundtrack & Audio Analysis ===")
-    audio_path = UPLOAD_DIR / "e2e_beat_track.wav"
+    audio_path = tmp_path / "e2e_beat_track.wav"
     create_dummy_audio(audio_path, duration=4.5)
     
     with open(audio_path, "rb") as af:
@@ -121,14 +122,14 @@ def test_full_e2e_workflow():
         style="cinematic",
         title={"enabled": True, "text": "RAYFLOW CINEMA", "gradient": ["#FFFFFF", "#CCCCCC"]},
         clips=[
-            {"id": "c1", "image_url": str(test_img_paths[0]), "start_time": 0.0, "duration": 1.5, "motion": "zoom_in", "transition": "crossfade"},
-            {"id": "c2", "image_url": str(test_img_paths[1]), "start_time": 1.5, "duration": 1.5, "motion": "zoom_out", "transition": "crossfade"},
+            {"id": "c1", "image_url": uploaded_images[0]['url'], "start_time": 0.0, "duration": 1.5, "motion": "zoom_in", "transition": "crossfade"},
+            {"id": "c2", "image_url": uploaded_images[1]['url'], "start_time": 1.5, "duration": 1.5, "motion": "zoom_out", "transition": "crossfade"},
         ]
     )
 
     render_req = {
         "plan": render_plan.model_dump(),
-        "image_filenames": [p.name for p in test_img_paths[:2]],
+        "image_filenames": [image['filename'] for image in uploaded_images[:2]],
         "audio_filename": audio_info["filename"]
     }
     res_render = client.post("/api/render", json=render_req)
@@ -161,4 +162,6 @@ def test_full_e2e_workflow():
     print("\nSUCCESS! All End-to-End Workflow Verification Steps Passed Successfully!")
 
 if __name__ == "__main__":
-    test_full_e2e_workflow()
+    import tempfile
+    with tempfile.TemporaryDirectory() as directory:
+        test_full_e2e_workflow(Path(directory))

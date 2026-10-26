@@ -434,27 +434,35 @@ export async function interpretNaturalCommand(
   return localInterpretCommand(command, currentPlan);
 }
 
-export async function createOpenRouterPlan(command: string, currentPlan: EditingPlan): Promise<AIEditingPlan> {
+export async function createDirectorPlan(command: string, currentPlan: EditingPlan, context?: import('../types').DirectorContext, conversation?: import('../types').DirectorTurn[]): Promise<AIEditingPlan> {
   const res = await fetch(`${API_BASE}/ai/plan`, {
     method: 'POST',
+    credentials: 'include',
+    signal: AbortSignal.timeout(610000),
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ command, current_plan: currentPlan }),
+    body: JSON.stringify({ command, current_plan: currentPlan, context, conversation }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'The AI planning request failed.');
   return body;
 }
 
-export async function applyOpenRouterPlan(aiPlan: AIEditingPlan, currentPlan: EditingPlan): Promise<AIEditingPlan> {
+export async function applyDirectorPlan(aiPlan: AIEditingPlan, currentPlan: EditingPlan): Promise<AIEditingPlan> {
   const res = await fetch(`${API_BASE}/ai/apply`, {
     method: 'POST',
+    credentials: 'include',
+    signal: AbortSignal.timeout(180000),
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ai_plan: aiPlan, current_plan: currentPlan }),
+    body: JSON.stringify({ ai_plan: { explanation: aiPlan.explanation, actions: aiPlan.actions, clarification: aiPlan.clarification }, current_plan: currentPlan }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'The approved edit could not be applied.');
   return body;
 }
+
+// Keep existing integrations compatible while all providers share one Director transport.
+export const createOpenRouterPlan = createDirectorPlan;
+export const applyOpenRouterPlan = applyDirectorPlan;
 
 export async function generateProjectPlan(
   plan: EditingPlan,

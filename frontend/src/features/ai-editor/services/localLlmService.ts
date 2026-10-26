@@ -482,6 +482,31 @@ export const generateContentWithLocalLlm = async (params: { model?: string; cont
   if (!isLocalLlmReady(config)) throw new Error('No local model selected. Choose one in Local AI.');
   const expectJson = String(params.config?.responseMimeType || '').toLowerCase() === 'application/json';
   const body = buildChatCompletionRequest(params, config.model, config.provider);
+  // Qwen3's native API can disable thinking reliably for interactive edits.
+  if (config.provider === 'ollama' && config.model.startsWith('qwen3:') && body.messages.every((message: any) => !Array.isArray(message.content))) {
+    if (JSON.stringify(body).length > 22000) throw new Error('This conversation exceeds the local model context. Start a new chat or choose Agent Router in Connections.');
+    const toolNames = new Map<string, string>();
+    for (const message of body.messages) for (const call of message.tool_calls || []) toolNames.set(call.id, call.function.name);
+    const messages = body.messages.map((message: any) => ({ ...message,
+      ...(message.role === 'tool' ? { tool_name: toolNames.get(message.tool_call_id) } : {}),
+      ...(message.tool_calls ? { tool_calls: message.tool_calls.map((call: any) => ({ ...call,
+        function: { ...call.function, arguments: JSON.parse(call.function.arguments) },
+      })) } : {}),
+    }));
+    const data = await localJson(`${trimUrl(config.baseUrl)}/api/chat`, { timeoutMs: 600000, body: {
+      model: config.model, messages, stream: false, think: false, tools: body.tools,
+      ...(expectJson ? { format: body.response_format?.json_schema?.schema || 'json' } : {}),
+      options: { temperature: body.temperature ?? .2, top_p: body.top_p, seed: body.seed, num_predict: body.max_tokens ?? 1024, num_ctx: 8192 },
+    } });
+    if (!data?.done || data.done_reason === 'length' || !data.message) throw new Error('Ollama did not finish the response. Try a shorter direction.');
+    const message = data.message;
+    return toGeminiResponse({ choices: [{ finish_reason: 'stop', message: { ...message,
+      tool_calls: message.tool_calls?.map((call: any, index: number) => ({
+        ...call, id: call.id || `ollama_${Date.now()}_${index}`, type: 'function',
+        function: { ...call.function, arguments: JSON.stringify(call.function.arguments || {}) },
+      })),
+    } }] }, expectJson);
+  }
   const url = `${trimUrl(config.baseUrl)}/v1/chat/completions`;
   try {
     return toGeminiResponse(await localJson(url, { body, timeoutMs: 600000 }), expectJson);

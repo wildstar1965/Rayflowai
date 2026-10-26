@@ -153,16 +153,28 @@ def remove_provider(provider: str):
 
 
 @router.post('/api/editor/providers/{provider}/test')
-def verify_provider(provider: str):
+def verify_provider(provider: str, patch: ProviderPatch = None):
+    if provider in ('openai', 'anthropic', 'agentrouter', 'gemini') and patch and (patch.key or patch.model):
+        from app.services.ai_provider import test_connection, MODELS
+        from app.editor.providers import provider_record
+        record = provider_record(provider) or {}
+        if patch.key or patch.model != (record.get('model') or (MODELS.get(provider) or ['gpt-6-astra'])[0]):
+            return test_connection(provider, patch.key, patch.model)
     return test_provider(provider)
 
 
 @router.get('/api/editor/providers/{provider}/models')
 def provider_models(provider: str):
+    if provider == 'gemini':
+        from app.services.ai_provider import gemini_models
+        return {'models': gemini_models()}
     paths = {'gemini': 'https://generativelanguage.googleapis.com/v1beta/models',
              'openrouter': 'https://openrouter.ai/api/v1/models', 'xai': 'https://api.x.ai/v1/models',
              'ollama': 'http://127.0.0.1:11434/api/tags', 'lmstudio': 'http://127.0.0.1:1234/v1/models',
              'openai-compatible': 'http://127.0.0.1:8080/v1/models'}
+    if provider == 'agentrouter':
+        from app.services.ai_provider import agentrouter_base
+        paths[provider] = agentrouter_base() + '/models'
     if provider not in paths:
         return {'models': [], 'catalog': True}
     result = proxy_request(provider, paths[provider])
@@ -208,8 +220,7 @@ def capabilities():
                                 for module in ('@google/genai', 'fluent-ffmpeg'))),
             'payments': False, 'desktop': False, 'processors': processors,
             'optional': {'notebooklm': bool(os.getenv('EDITOR_NOTEBOOKLM_URL')),
-                         'collaboration': True, 'accounts': store.cloud, 'teams': store.cloud,
-                         'cloud_sync': bool(os.getenv('GOOGLE_DRIVE_CLIENT_ID') or os.getenv('DROPBOX_CLIENT_ID'))},
+                         'collaboration': True, 'accounts': store.cloud, 'teams': store.cloud},
             'unavailable': {'midjourney': 'This integration requires an interactive native login window.',
                             'native_agents': 'Native agent login windows are unavailable in the hosted runtime.',
                             'world_mesh_conversion': 'The upstream world provider does not implement mesh conversion.'}}

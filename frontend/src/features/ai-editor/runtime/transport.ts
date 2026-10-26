@@ -29,9 +29,7 @@ export async function editorFetch(input: RequestInfo | URL, init: RequestInit = 
   }
   if (['data:', 'blob:'].includes(url.protocol) || url.origin === location.origin) return globalThis.fetch(input, { credentials: 'include', ...init });
   const provider = findProvider(url);
-  const cloud = ['api.dropboxapi.com', 'content.dropboxapi.com'].includes(url.hostname) ? 'dropbox'
-    : ['www.googleapis.com', 'content.googleapis.com'].includes(url.hostname) ? 'google-drive' : undefined;
-  if (!provider && !cloud) return globalThis.fetch(input, init);
+  if (!provider) return globalThis.fetch(input, init);
   const request = input instanceof Request ? input : undefined;
   const method = (init.method || request?.method || 'GET').toUpperCase();
   const headers = Object.fromEntries(new Headers(init.headers || request?.headers).entries());
@@ -50,7 +48,7 @@ export async function editorFetch(input: RequestInfo | URL, init: RequestInit = 
     });
   }
   else if (request && method !== 'GET') body = await request.text();
-  const result = await runEditorJob(cloud ? 'cloud' : 'provider', { provider: cloud || provider, url: url.href, method, headers, body, body_base64, form }, init.signal || undefined);
+  const result = await runEditorJob('provider', { provider, url: url.href, method, headers, body, body_base64, form }, init.signal || undefined);
   if (result.asset_path) return globalThis.fetch(editorFileUrl(result.asset_path), { credentials: 'include', signal: init.signal });
   const bytes = result.base64 ? Uint8Array.from(atob(result.base64), ch => ch.charCodeAt(0)) : result.text || '';
   return new Response([204, 304].includes(result.status) ? null : bytes, { status: result.status, headers: { ...result.headers, 'Content-Type': result.content_type } });

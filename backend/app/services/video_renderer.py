@@ -308,6 +308,11 @@ def _render_worker(
             else:
                 vf = f"{scale_filter}{color_filter},setsar=1,format=yuv420p"
                 input_args = ["-loop", "1", "-framerate", str(fps), "-i", img_file]
+            if clip.rotation:
+                vf += f",rotate={clip.rotation}*PI/180:ow=iw:oh=ih:c=black"
+            if clip.offset_x or clip.offset_y:
+                vf += (f",pad={width * 3}:{height * 3}:{width}:{height}:black,"
+                       f"crop={width}:{height}:{round(width * (1 - clip.offset_x))}:{round(height * (1 - clip.offset_y))}")
             cmd = [FFMPEG_PATH, "-y", "-xerror", "-filter_threads", "1", *input_args,
                    "-vf", vf, "-frames:v", str(total_frames), "-an",
                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
@@ -401,9 +406,16 @@ def _render_worker(
                         f"[{prev_tag}][{next_tag}]concat=n=2:v=1:a=0,settb=1/{fps},setpts=N,fps={fps}:eof_action=pass[{out_tag}]"
                     )
                 else:
-                    transition = {"crossfade": "fade", "dip_black": "fadeblack",
-                                  "dip_white": "fadewhite", "fade_in": "fadeblack",
-                                  "fade_out": "fadeblack"}.get(t_type, "fade")
+                    transition = "fade"
+                    if t_type in ("dip_black", "dip_white", "fade_in", "fade_out"):
+                        # xfade's built-in fadeblack/fadewhite uses a different
+                        # curve/peak from the editor. P runs from 1 to 0; use the
+                        # same linear, midpoint dip as the canvas composition.
+                        level = 235 if t_type == "dip_white" else 16
+                        color = f"if(eq(PLANE,0),{level},128)"
+                        transition = ("custom:expr='if(gte(P,0.5),"
+                                      f"A*(2*P-1)+({color})*(2-2*P),"
+                                      f"B*(1-2*P)+({color})*(2*P))'")
                     lead_tag = f"lead_{i + 1}"
                     filter_steps.append(
                         f"[{next_tag}]tpad=start_mode=clone:start={frame_at(t_dur, fps)},"

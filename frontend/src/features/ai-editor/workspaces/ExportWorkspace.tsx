@@ -72,7 +72,7 @@ const ExportWorkspace: React.FC<ExportWorkspaceProps> = ({ mediaItems, timelineC
 
     // Rendering State
     const [renderPlayhead, setRenderPlayhead] = useState(0);
-    const [isRendering, setIsRendering] = useState(false);
+    const [isRecording, setIsRecording] = useState(false);
     const playerRef = useRef<PreviewPlayerHandle>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const requestRef = useRef<number>(0);
@@ -81,6 +81,7 @@ const ExportWorkspace: React.FC<ExportWorkspaceProps> = ({ mediaItems, timelineC
     const streamRef = useRef<MediaStream | null>(null);
     const mountedRef = useRef(true);
     const stopRender = () => {
+        setIsRecording(false);
         renderAbortRef.current?.abort();
         if (startTimerRef.current) clearTimeout(startTimerRef.current);
         cancelAnimationFrame(requestRef.current);
@@ -91,7 +92,6 @@ const ExportWorkspace: React.FC<ExportWorkspaceProps> = ({ mediaItems, timelineC
     const cancelRender = () => {
         stopRender();
         if (mountedRef.current) {
-            setIsRendering(false);
             setStatus('IDLE');
             setRenderDetail('Export cancelled.');
         }
@@ -364,7 +364,6 @@ const ExportWorkspace: React.FC<ExportWorkspaceProps> = ({ mediaItems, timelineC
         setStatus('RENDERING');
         setProgress(0);
         setRenderPlayhead(0);
-        setIsRendering(true);
         setRenderDetail('');
         setDownloadUrl(null);
         setDownloadName(normalizedSettings.filename);
@@ -378,14 +377,12 @@ const ExportWorkspace: React.FC<ExportWorkspaceProps> = ({ mediaItems, timelineC
             if (normalizedSettings.useFfmpeg) {
                 if (!projectApi?.exportVideo) {
                     setRenderDetail('The backend export adapter is unavailable.');
-                    setIsRendering(false);
                     setStatus('IDLE');
                     return;
                 }
 
                 try {
                     setStatus('RENDERING');
-                    setIsRendering(true);
                     setProgress(0);
 
                     // Listen for progress
@@ -427,7 +424,6 @@ const ExportWorkspace: React.FC<ExportWorkspaceProps> = ({ mediaItems, timelineC
                     setRenderDetail((e as Error).message || 'Export failed.');
                 } finally {
                     if (renderAbortRef.current === controller) {
-                        if (!controller.signal.aborted) setIsRendering(false);
                         projectApi.removeExportProgressListener();
                     }
                 }
@@ -439,10 +435,33 @@ const ExportWorkspace: React.FC<ExportWorkspaceProps> = ({ mediaItems, timelineC
             if (!canvas) {
                 setStatus('ERROR');
                 setRenderDetail('Render canvas is not available.');
-                setIsRendering(false);
                 return;
             }
 
+            try {
+                // Mounting or metadata alone does not mean a trimmed opening
+                // frame has decoded. Start the recording clock after presentation.
+                await new Promise<void>((resolve, reject) => {
+                    const deadline = performance.now() + 30000;
+                    const abort = () => reject(new DOMException('Cancelled', 'AbortError'));
+                    controller.signal.addEventListener('abort', abort, { once: true });
+                    const check = () => {
+                        if (controller.signal.aborted) return;
+                        if (playerRef.current?.isFrameReady()) {
+                            controller.signal.removeEventListener('abort', abort); resolve();
+                        } else if (performance.now() >= deadline) {
+                            controller.signal.removeEventListener('abort', abort);
+                            reject(new Error('The opening frame could not decode. Check the source media.'));
+                        } else requestRef.current = requestAnimationFrame(check);
+                    };
+                    check();
+                });
+            } catch (error) {
+                if (controller.signal.aborted) return;
+                setStatus('ERROR');
+                setRenderDetail(error instanceof Error ? error.message : 'Could not prepare the opening frame.');
+                return;
+            }
             const fps = Math.max(1, normalizedSettings.fps || 30);
             const bitrateKbps = Math.max(500, normalizedSettings.bitrateKbps || 6000);
             // Preview audio is still driven by HTMLAudioElements, so Quick Export records the visual canvas only.
@@ -457,7 +476,6 @@ const ExportWorkspace: React.FC<ExportWorkspaceProps> = ({ mediaItems, timelineC
             } catch (error) {
                 streamRef.current?.getTracks().forEach(track => track.stop());
                 setStatus('ERROR');
-                setIsRendering(false);
                 setRenderDetail(error instanceof Error ? error.message : 'Could not start MediaRecorder.');
                 return;
             }
@@ -467,9 +485,9 @@ const ExportWorkspace: React.FC<ExportWorkspaceProps> = ({ mediaItems, timelineC
             };
 
             recorder.onstop = async () => {
+                setIsRecording(false);
                 if (controller.signal.aborted) return;
                 streamRef.current?.getTracks().forEach(track => track.stop());
-                setIsRendering(false);
                 const blob = new Blob(chunks, { type: normalizedSettings.mimeType || 'video/webm' });
                 try {
                     setRenderDetail('Saving your video…');
@@ -486,21 +504,21 @@ const ExportWorkspace: React.FC<ExportWorkspaceProps> = ({ mediaItems, timelineC
             recorder.onerror = () => {
                 if (controller.signal.aborted) return;
                 stopRender();
-                setIsRendering(false);
                 setRenderDetail('The browser could not finish recording. Retry or use HQ FFmpeg.');
                 setStatus('ERROR');
             };
 
             mediaRecorderRef.current = recorder;
             recorder.start();
+            setIsRecording(true);
 
             // Start playback loop
             const totalDuration = Math.max(...timelineClips.map(c => c.end));
-            const startTime = Date.now();
+            const startTime = performance.now();
 
             const renderLoop = () => {
                 if (controller.signal.aborted) return;
-                const elapsed = (Date.now() - startTime) / 1000;
+                const elapsed = (performance.now() - startTime) / 1000;
                 setRenderPlayhead(elapsed);
                 setProgress(Math.min((elapsed / totalDuration) * 100, 100));
 
@@ -739,7 +757,8 @@ const ExportWorkspace: React.FC<ExportWorkspaceProps> = ({ mediaItems, timelineC
                                 timelineTracks={timelineTracks}
                                 mediaItems={mediaItems}
                                 playheadPosition={renderPlayhead}
-                                isPlaying={isRendering}
+                                isPlaying={isRecording}
+                                fps={renderSettings.fps}
                                 canvasWidth={renderSettings.width}
                                 canvasHeight={renderSettings.height}
                                 aspectClassName={resolveAspectClassName(renderSettings)}

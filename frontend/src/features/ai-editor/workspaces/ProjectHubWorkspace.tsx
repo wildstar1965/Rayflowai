@@ -4,7 +4,7 @@ import { editorFetch as fetch } from '../runtime/transport';
 import { projectApi } from '../runtime/project';
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { MediaItem, StoryBible, ProjectCollaboration, ProjectSyncConfig, ProjectCollaboratorRole, ProjectCollaborativeLock, ReferenceItem, ShotPrompt, ShotContinuityReview, ReviewFeedback, ScriptLength, CinematographyCritique, ScriptQualityReport, ScriptDoctorImprovement, RecentProject, CharacterOutfit, OutfitGarmentPiece, GarmentCategory, ProjectChatAttachment, ProjectMeetingProvider, ProjectStorageProvider, DirectorTreatment, DirectorSceneSelectionScope, DirectorStoryboardSnapshot, ExtraAsset, AngleMetadata, AnglePresetSelection, SceneWallState, SetDesignAsset } from '../types';
+import { MediaItem, StoryBible, ProjectCollaboration, ProjectCollaboratorRole, ProjectCollaborativeLock, ReferenceItem, ShotPrompt, ShotContinuityReview, ReviewFeedback, ScriptLength, CinematographyCritique, ScriptQualityReport, ScriptDoctorImprovement, RecentProject, CharacterOutfit, OutfitGarmentPiece, GarmentCategory, ProjectChatAttachment, ProjectMeetingProvider, DirectorTreatment, DirectorSceneSelectionScope, DirectorStoryboardSnapshot, ExtraAsset, AngleMetadata, AnglePresetSelection, SceneWallState, SetDesignAsset } from '../types';
 import { PRODUCTION_FORMATS, getProductionFormat } from '../data/productionFormats';
 import {
     generateProductionGuidelines,
@@ -62,7 +62,7 @@ import { DOP_ENTRY, HIGGSFIELD_IMAGE_MODELS, generateImageWithHiggsfield, higgsf
 import { pickImageModel, pickVideoModel } from '../utils/modelAutoSelect';
 import { generateWorldFromImageUrl, generateWorldFromImageViews, generateWorldFromText, getWorldAssetUrls, hasWorldLabsApiKey, MarbleModel } from '../services/worldLabsService';
 import { DEFAULT_WORLD_MODEL_ID, getWorldModelGeneratedBy, getWorldModelLabel, getWorldModelOptionsForProvider, normalizeWorldModelId } from '../services/worldModelProviderRegistry';
-import { loadProjectFromFolder, selectProjectFolder } from '../services/projectService';
+import { loadProjectFromFolder } from '../services/projectService';
 import { isReplicateGoogleProvider } from '../services/googleModelProvider';
 import {
     ScriptIcon, MagicWandIcon, PdfIcon, UserCircleIcon, LandscapeIcon,
@@ -158,15 +158,11 @@ interface ProjectHubWorkspaceProps {
     storyBible: StoryBible;
     setStoryBible: React.Dispatch<React.SetStateAction<StoryBible>>;
     projectPath: string | null;
-    projectSync: ProjectSyncConfig;
-    setProjectSync: React.Dispatch<React.SetStateAction<ProjectSyncConfig>>;
     projectCollaboration: ProjectCollaboration;
     setProjectCollaboration: React.Dispatch<React.SetStateAction<ProjectCollaboration>>;
     syncStatus: ProjectSyncStatus;
     activeProfileName: string;
     onReloadProject: () => void;
-    onPushToCloud: () => void;
-    onPullFromCloud: () => void;
     shotPrompts: ShotPrompt[];
     setShotPrompts: React.Dispatch<React.SetStateAction<ShotPrompt[]>>;
     onRoughCutReady: (newMedia: MediaItem[]) => void;
@@ -1085,14 +1081,6 @@ const formatTimestamp = (value?: string) => {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     return date.toLocaleString();
-};
-
-const normalizePath = (value: string) => value.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-const isPathWithinRoot = (root?: string, target?: string | null) => {
-    if (!root || !target) return false;
-    const normalizedRoot = normalizePath(root);
-    const normalizedTarget = normalizePath(target);
-    return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}/`);
 };
 
 const resolveModelAspectRatio = (ratio: AspectRatioOption): ModelAspectRatio => (
@@ -3969,15 +3957,11 @@ const ProjectHubWorkspace: React.FC<ProjectHubWorkspaceProps> = ({
     storyBible,
     setStoryBible,
     projectPath,
-    projectSync,
-    setProjectSync,
     projectCollaboration,
     setProjectCollaboration,
     syncStatus,
     activeProfileName,
     onReloadProject,
-    onPushToCloud,
-    onPullFromCloud,
     shotPrompts,
     setShotPrompts,
     onRoughCutReady,
@@ -4840,9 +4824,6 @@ const ProjectHubWorkspace: React.FC<ProjectHubWorkspaceProps> = ({
     const [meetingProvider, setMeetingProvider] = useState<ProjectMeetingProvider>('google-meet');
     const [meetingLabel, setMeetingLabel] = useState('');
     const [meetingUrl, setMeetingUrl] = useState('');
-    const [storageProvider, setStorageProvider] = useState<ProjectStorageProvider>('one-drive');
-    const [storageLabel, setStorageLabel] = useState('');
-    const [storageUrl, setStorageUrl] = useState('');
     const [libraryPicker, setLibraryPicker] = useState<{ isOpen: boolean; target: LibraryTarget | null }>({ isOpen: false, target: null });
     const [libraryAssets, setLibraryAssets] = useState<LibraryAsset[]>([]);
     const [libraryStatus, setLibraryStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
@@ -4921,7 +4902,6 @@ const ProjectHubWorkspace: React.FC<ProjectHubWorkspaceProps> = ({
     const collaborators = projectCollaboration?.collaborators || [];
     const chatThreads = projectCollaboration?.chatThreads || [];
     const meetingLinks = projectCollaboration?.meetingLinks || [];
-    const storageLinks = projectCollaboration?.storageLinks || [];
     const activeChatThread = useMemo(() => {
         const current = chatThreads.find(thread => thread.id === activeChatThreadId);
         if (current) return current;
@@ -4933,15 +4913,6 @@ const ProjectHubWorkspace: React.FC<ProjectHubWorkspaceProps> = ({
         };
     }, [chatThreads, activeChatThreadId]);
     const chatMessages = activeChatThread.messages || [];
-    const canSelectSyncFolder = typeof window !== 'undefined' && !!projectApi;
-    const isSyncConfigured = !!projectSync.provider;
-    const isInSyncRoot = isPathWithinRoot(projectSync.rootPath, projectPath);
-    const syncProviderLabel = projectSync.provider === 'dropbox'
-        ? 'Dropbox'
-        : projectSync.provider === 'google-drive'
-            ? 'Google Drive'
-            : 'Not configured';
-
     const quickstartStatus = useMemo(() => {
         const shotCount = shotPrompts.length;
         const generatedShotImages = shotPrompts.filter((shot) => Boolean(shot.imageUrl)).length;
@@ -5764,45 +5735,10 @@ const ProjectHubWorkspace: React.FC<ProjectHubWorkspaceProps> = ({
         }));
     };
 
-    const addStorageLink = () => {
-        const url = storageUrl.trim();
-        if (!url) return;
-        const label = storageLabel.trim();
-        setProjectCollaboration(prev => ({
-            ...prev,
-            storageLinks: [
-                ...(prev.storageLinks || []),
-                {
-                    id: `storage-${Date.now()}`,
-                    provider: storageProvider,
-                    url,
-                    label: label || undefined,
-                    createdAt: new Date().toISOString(),
-                },
-            ],
-        }));
-        setStorageUrl('');
-        setStorageLabel('');
-    };
-
-    const removeStorageLink = (id: string) => {
-        setProjectCollaboration(prev => ({
-            ...prev,
-            storageLinks: (prev.storageLinks || []).filter(link => link.id !== id),
-        }));
-    };
-
     const formatMeetingProvider = (provider: ProjectMeetingProvider) => {
         if (provider === 'google-meet') return 'Google Meet';
         if (provider === 'microsoft-teams') return 'Microsoft Teams';
         return 'Zoom';
-    };
-
-    const formatStorageProvider = (provider: ProjectStorageProvider) => {
-        if (provider === 'google-drive') return 'Google Drive';
-        if (provider === 'one-drive') return 'OneDrive';
-        if (provider === 'dropbox') return 'Dropbox';
-        return 'Shared Link';
     };
 
     useEffect(() => {
@@ -5811,20 +5747,6 @@ const ProjectHubWorkspace: React.FC<ProjectHubWorkspaceProps> = ({
         setChatMessage('');
         setChatAttachments([]);
     }, [projectPath]);
-
-    const handleSyncProviderChange = (value: string) => {
-        setProjectSync(prev => ({
-            ...prev,
-            provider: value ? (value as ProjectSyncConfig['provider']) : undefined,
-        }));
-    };
-
-    const handlePickSyncFolder = async () => {
-        if (!canSelectSyncFolder) return;
-        const folder = await selectProjectFolder();
-        if (!folder) return;
-        setProjectSync(prev => ({ ...prev, rootPath: folder }));
-    };
 
     const openLibraryPicker = (target: LibraryTarget) => {
         setLibrarySearch('');
@@ -14742,90 +14664,30 @@ const ProjectHubWorkspace: React.FC<ProjectHubWorkspaceProps> = ({
                                 <div className="phase-bar flex justify-between items-end">
                                     <div>
                                         <h2 className="text-2xl font-bold text-white">Team</h2>
-                                        <p className="text-gray-400 text-sm mt-1">Keep the crew in sync: shared folder, collaborators, chat and meeting links live here instead of the script.</p>
+                                        <p className="text-gray-400 text-sm mt-1">Manage collaborators, chat and meeting links here.</p>
                                     </div>
                                 </div>
                                 <div className="team-page__grid">
                                         <details className="script-section" open>
-                                            <summary className="script-section__summary"><span>Cloud Sync</span><small>Shared folder and collaborators</small></summary>
+                                            <summary className="script-section__summary"><span>Collaborators</span><small>Project team</small></summary>
                                             <div className="flex items-start justify-between gap-3">
                                                 <div>
-                                                    <p className="text-xs text-gray-400">Link a shared folder to keep everyone up to date.</p>
+                                                    <p className="text-xs text-gray-400">Keep your project team up to date.</p>
                                                 </div>
                                                 <div className="text-[10px] text-gray-500 uppercase tracking-wider">
                                                     {activeProfileName ? `You: ${activeProfileName}` : 'No profile'}
                                                 </div>
                                             </div>
                                             <div className="mt-4 space-y-4">
-                                                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                                                    <div>
-                                                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Provider</label>
-                                                        <select
-                                                            value={projectSync.provider || ''}
-                                                            onChange={(e) => handleSyncProviderChange(e.target.value)}
-                                                            className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 transition-shadow text-white"
-                                                        >
-                                                            <option value="">Not configured</option>
-                                                            <option value="dropbox">Dropbox</option>
-                                                            <option value="google-drive">Google Drive</option>
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Sync Folder</label>
-                                                        <div className="flex gap-2">
-                                                            <input
-                                                                type="text"
-                                                                value={projectSync.rootPath || ''}
-                                                                readOnly
-                                                                className="flex-1 bg-gray-900 border border-gray-700 rounded-lg p-3 text-xs text-gray-300"
-                                                                placeholder="Choose a shared folder"
-                                                            />
-                                                            <button
-                                                                onClick={handlePickSyncFolder}
-                                                                disabled={!canSelectSyncFolder}
-                                                                className="text-xs bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 text-white px-3 rounded-lg"
-                                                            >
-                                                                Browse
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <label className="flex items-center gap-2 text-xs text-gray-400">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={projectSync.autoSync !== false}
-                                                        onChange={(e) => setProjectSync(prev => ({ ...prev, autoSync: e.target.checked }))}
-                                                    />
-                                                    Auto-sync in the background
-                                                </label>
-                                                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                                                    <span className="px-2 py-1 rounded-full bg-gray-900 border border-gray-700">
-                                                        {syncProviderLabel}
-                                                    </span>
-                                                    {projectPath ? (
-                                                        <span className={`px-2 py-1 rounded-full border ${isInSyncRoot || !projectSync.rootPath ? 'border-emerald-500/40 text-emerald-300' : 'border-amber-500/40 text-amber-300'}`}>
-                                                            {projectSync.rootPath
-                                                                ? (isInSyncRoot ? 'Project in sync folder' : 'Project outside sync folder')
-                                                                : 'No sync folder selected'}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="px-2 py-1 rounded-full border border-gray-700 text-gray-500">Save the project to enable sync</span>
-                                                    )}
-                                                </div>
                                                 <div className="flex items-center justify-between bg-gray-900/60 border border-gray-700 rounded-lg p-3">
                                                     <div>
                                                         <div className="text-xs font-semibold text-gray-300">Status</div>
                                                         <div className="text-[10px] text-gray-500">
-                                                            {syncStatus.message || (isSyncConfigured ? 'Checking for updates...' : 'Sync not configured')}
+                                                            {syncStatus.message || 'Ready'}
                                                         </div>
                                                         {projectCollaboration.lastModifiedBy && (
                                                             <div className="text-[10px] text-gray-500 mt-1">
                                                                 Last saved by {projectCollaboration.lastModifiedBy} - {formatTimestamp(projectCollaboration.lastModifiedAt)}
-                                                            </div>
-                                                        )}
-                                                        {projectSync.remoteModifiedAt && (
-                                                            <div className="text-[10px] text-gray-500 mt-1">
-                                                                Cloud updated - {formatTimestamp(projectSync.remoteModifiedAt)}
                                                             </div>
                                                         )}
                                                         {syncStatus.lock?.by && (
@@ -14850,20 +14712,6 @@ const ProjectHubWorkspace: React.FC<ProjectHubWorkspaceProps> = ({
                                                                 Reload
                                                             </button>
                                                         )}
-                                                        <button
-                                                            onClick={onPushToCloud}
-                                                            disabled={!projectPath || !projectSync.provider}
-                                                            className="text-xs bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 text-white px-3 py-2 rounded-lg"
-                                                        >
-                                                            Push
-                                                        </button>
-                                                        <button
-                                                            onClick={onPullFromCloud}
-                                                            disabled={!projectPath || !projectSync.provider}
-                                                            className="text-xs bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 text-white px-3 py-2 rounded-lg"
-                                                        >
-                                                            Pull
-                                                        </button>
                                                     </div>
                                                 </div>
                                                 <div>
@@ -14994,67 +14842,6 @@ const ProjectHubWorkspace: React.FC<ProjectHubWorkspaceProps> = ({
                                                         <button
                                                             onClick={addMeetingLink}
                                                             className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg"
-                                                        >
-                                                            Add
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Shared Storage Links</span>
-                                                        <span className="text-[10px] text-gray-500">{storageLinks.length} links</span>
-                                                    </div>
-                                                    {storageLinks.length === 0 ? (
-                                                        <div className="text-xs text-gray-500 border border-dashed border-gray-700 rounded-lg p-3 text-center">
-                                                            Add a shared Dropbox, Google Drive, or OneDrive folder link.
-                                                        </div>
-                                                    ) : (
-                                                        <div className="space-y-2">
-                                                            {storageLinks.map(link => (
-                                                                <div key={link.id} className="flex flex-wrap items-center gap-2 bg-gray-900/60 border border-gray-700 rounded-lg p-2 text-xs text-gray-300">
-                                                                    <span className="px-2 py-1 rounded-full bg-gray-800 text-[10px] text-gray-400">
-                                                                        {formatStorageProvider(link.provider)}
-                                                                    </span>
-                                                                    <a href={link.url} target="_blank" rel="noreferrer" className="text-indigo-300 hover:text-indigo-200 truncate max-w-[220px]">
-                                                                        {link.label || link.url}
-                                                                    </a>
-                                                                    <span className="text-[10px] text-gray-500">{formatTimestamp(link.createdAt)}</span>
-                                                                    <button
-                                                                        onClick={() => removeStorageLink(link.id)}
-                                                                        className="ml-auto text-[10px] text-gray-400 hover:text-red-300"
-                                                                    >
-                                                                        Remove
-                                                                    </button>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    <div className="mt-3 flex flex-wrap gap-2">
-                                                        <select
-                                                            value={storageProvider}
-                                                            onChange={(e) => setStorageProvider(e.target.value as ProjectStorageProvider)}
-                                                            className="bg-gray-900 border border-gray-700 rounded-lg p-2 text-xs text-white"
-                                                        >
-                                                            <option value="one-drive">OneDrive</option>
-                                                            <option value="google-drive">Google Drive</option>
-                                                            <option value="dropbox">Dropbox</option>
-                                                            <option value="other">Other</option>
-                                                        </select>
-                                                        <input
-                                                            value={storageUrl}
-                                                            onChange={(e) => setStorageUrl(e.target.value)}
-                                                            placeholder="Shared folder link"
-                                                            className="flex-1 min-w-[180px] bg-gray-900 border border-gray-700 rounded-lg p-2 text-xs text-white"
-                                                        />
-                                                        <input
-                                                            value={storageLabel}
-                                                            onChange={(e) => setStorageLabel(e.target.value)}
-                                                            placeholder="Label (optional)"
-                                                            className="flex-1 min-w-[160px] bg-gray-900 border border-gray-700 rounded-lg p-2 text-xs text-white"
-                                                        />
-                                                        <button
-                                                            onClick={addStorageLink}
-                                                            className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg"
                                                         >
                                                             Add
                                                         </button>

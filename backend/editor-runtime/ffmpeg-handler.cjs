@@ -1088,6 +1088,12 @@ const buildTimelineCommand = ({ renderPlan, width, height, fps, outputPath, enco
         );
         stepCounter += 1;
 
+        const rotation = Number(transform.rotation ?? 0);
+        if (!Number.isFinite(rotation) || Math.abs(rotation) > 360) throw new Error('Clip rotation must be between -360 and 360 degrees.');
+        if (rotation) {
+            const angle = formatNumber(rotation * Math.PI / 180, 8);
+            currentLabel = addSimpleStep(currentLabel, `format=rgba,rotate=${angle}:ow=rotw(${angle}):oh=roth(${angle}):c=none`, clipTag, stepCounter++);
+        }
         const staticOpacity = clamp(Number(transform.opacity ?? 1), 0, 1);
         if (Math.abs(staticOpacity - 1) > 0.0001) {
             currentLabel = addSimpleStep(currentLabel, `format=rgba,colorchannelmixer=aa=${formatNumber(staticOpacity, 4)}`, clipTag, stepCounter);

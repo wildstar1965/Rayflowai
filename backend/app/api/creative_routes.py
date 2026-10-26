@@ -186,7 +186,7 @@ def caption_previews(plan: EditingPlan):
     from app.services.caption_frames import caption_events
     width,height={'9:16':(1080,1920),'16:9':(1920,1080),'1:1':(1080,1080)}[plan.aspect_ratio]
     try:
-        return [{k:v for k,v in event.items() if k!='path'} for event in caption_events(plan.subtitles,width,height)]
+        return [{k:v for k,v in event.items() if k!='path'} for event in caption_events(plan.subtitles,width,height,include_bounds=True)]
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
 

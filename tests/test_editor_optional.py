@@ -1,7 +1,4 @@
 import base64
-import hashlib
-import json
-from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 from test_editor_integration import guests
 from app.editor.store import store
@@ -67,23 +64,13 @@ def test_collaboration_documents_are_private_and_durable(guests):
     assert b.post(route, json=request).status_code == 404
 
 
-def test_cloud_oauth_state_is_one_use_owned_and_tokens_are_encrypted(guests, monkeypatch):
-    a, b = guests
-    monkeypatch.setenv('DROPBOX_CLIENT_ID', 'public-client-id')
-    monkeypatch.setenv('RAYFLOW_FRONTEND_URL', 'https://rayflow.example')
-    response = a.post('/api/editor/cloud/dropbox/start')
-    params = parse_qs(urlparse(response.json()['url']).query)
-    assert params['redirect_uri'] == ['https://rayflow.example/api/editor/cloud/callback']
-    assert params['code_challenge_method'] == ['S256']
-    state = params['state'][0]
-    assert b.get('/api/editor/cloud/callback', params={'state': state, 'code': 'code'}).status_code == 422
-    with patch('app.editor.cloud.token_request', return_value={'access_token': 'cloud-secret', 'refresh_token': 'cloud-refresh', 'expires_in': 3600}):
-        result = a.get('/api/editor/cloud/callback', params={'state': state, 'code': 'code'}, follow_redirects=False)
-        assert result.status_code == 303
-        assert a.get('/api/editor/cloud/callback', params={'state': state, 'code': 'code'}).status_code == 422
+def test_removed_storage_workflows_are_unreachable_and_preserve_records(guests):
+    a, _ = guests
     workspace = a.get('/api/session').json()['workspace_id']
-    encrypted = store.get('cloud_credentials', workspace + ':dropbox', workspace)
-    assert 'cloud-secret' not in json.dumps(encrypted) and 'cloud-refresh' not in json.dumps(encrypted)
-    assert 'cloud-secret' not in a.get('/api/editor/cloud').text
-    assert a.delete('/api/editor/cloud/dropbox').status_code == 200
-    assert not store.get('cloud_credentials', workspace + ':dropbox', workspace)
+    # Removing the feature must not delete old data or unrelated auth records.
+    store.put('cloud_credentials', workspace + ':dropbox', workspace, {'encrypted': 'legacy'})
+    for method, path in [('GET', ''), ('POST', '/dropbox/start'), ('DELETE', '/dropbox'), ('GET', '/callback')]:
+        assert a.request(method, '/api/editor/cloud' + path).status_code == 404
+    response = a.post('/api/editor/jobs', json={'kind': 'cloud', 'payload': {}, 'submission_key': 'old-cloud'})
+    assert response.status_code == 422
+    assert store.get('cloud_credentials', workspace + ':dropbox', workspace)['encrypted'] == 'legacy'

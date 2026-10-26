@@ -21,7 +21,7 @@ _processes = {}
 
 def submit(kind, payload, submission_key):
     identity = owner()
-    if kind not in ('provider', 'provider-status', 'gemini', 'cloud', 'mcp', 'export', 'audio-mastering', 'audio-remaster', 'surface-map', 'corridor-key'):
+    if kind not in ('provider', 'provider-status', 'gemini', 'mcp', 'export', 'audio-mastering', 'audio-remaster', 'surface-map', 'corridor-key'):
         raise ValueError('Unsupported editor operation.')
     if not submission_key or len(submission_key) > 128:
         raise ValueError('A submission key is required.')
@@ -69,10 +69,6 @@ def _execute(identity, workspace, kind, payload, event):
             elif kind == 'mcp':
                 from .mcp import call
                 result = call(**payload)
-            elif kind == 'cloud':
-                from .cloud import cloud_request
-                result = cloud_request(**payload)
-                result = persist_result(result, payload['provider'], workspace, identity)
             elif kind == 'provider-status':
                 source = store.get('jobs', payload.get('source_job_id', ''), workspace)
                 if not source or not source.get('poll_url'):

@@ -263,10 +263,10 @@ def interpret_command_endpoint(request: CommandRequest):
 
 @router.post("/ai/plan", response_model=AIPlanResponse)
 def create_ai_editing_plan(request: AIPlanRequest, http_request: Request):
-    """Create and validate a proposed OpenRouter edit without mutating editor state."""
+    """Create and validate a provider-backed proposal without mutating editor state."""
     _check_ai_rate_limit(http_request)
     try:
-        ai_plan = request_plan(request.command.strip(), request.current_plan)
+        ai_plan = request_plan(request.command.strip(), request.current_plan, request.context, request.conversation)
         proposed, changes = apply_actions(request.current_plan, ai_plan)
     except (AIEditingError, ValueError, TypeError, KeyError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None

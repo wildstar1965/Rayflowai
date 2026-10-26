@@ -2,12 +2,19 @@
 def retime_attached(before, after):
     old = {c.id: c for c in before.clips}
     current = {c.id: c for c in after.clips}
-    for collection in ('subtitles', 'visual_inserts', 'sound_cues', 'cinematic_texts'):
+    for collection in ('subtitles', 'transcript', 'visual_inserts', 'sound_cues', 'cinematic_texts'):
         items = []
         for item in getattr(after, collection):
             identity = item.source_clip_id
             if not identity:
                 if item.start_time < after.duration_seconds:
+                    if hasattr(item, 'end_time'):
+                        item.end_time = min(item.end_time, after.duration_seconds)
+                        item.words = [w for w in item.words if w.start < item.end_time]
+                        for word in item.words:
+                            word.end = min(word.end, item.end_time)
+                    elif hasattr(item, 'duration'):
+                        item.duration = min(item.duration, after.duration_seconds - item.start_time)
                     items.append(item)
                 continue
             if identity not in current or identity not in old:

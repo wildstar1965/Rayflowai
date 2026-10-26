@@ -62,8 +62,9 @@ def caption_units(segment, end):
     return units
 
 
-def caption_events(segments, width, height, check=None):
+def caption_events(segments, width, height, check=None, include_bounds=False):
     events = []
+    bounds = {}
     ordered = sorted(segments, key=lambda s: s.start_time)
     for index, segment in enumerate(ordered):
         end = min(segment.end_time, ordered[index+1].start_time) if index+1 < len(ordered) else segment.end_time
@@ -80,8 +81,15 @@ def caption_events(segments, width, height, check=None):
             with _CAPTION_LOCK:
                 if not path.exists():
                     atomic_png(_paint(glyphs, style, width, height, active), path)
-            events.append({'start_time': start, 'end_time': finish,
-                           'url': f'/api/cinematic/captions/{key}.png', 'path': str(path)})
+            event = {'start_time': start, 'end_time': finish,
+                     'url': f'/api/cinematic/captions/{key}.png', 'path': str(path)}
+            if include_bounds:
+                if key not in bounds:
+                    with Image.open(path) as raster:
+                        box = raster.getchannel('A').getbbox()
+                    bounds[key] = [box[0]/width, box[1]/height, (box[2]-box[0])/width, (box[3]-box[1])/height] if box else None
+                event.update(caption_id=segment.id, bounds=bounds[key])
+            events.append(event)
     return events
 
 

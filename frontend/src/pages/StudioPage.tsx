@@ -1,3 +1,6 @@
+import { syncPreviewMedia, releasePreviewMedia } from '../utils/previewMedia';
+import { previewTimeline, transitionAt, frameAt, PREVIEW_FPS } from '../utils/previewTiming';
+import { VoiceInputButton } from '../components/VoiceInputButton';
 import { NumericInput } from '../components/ui/NumericInput';
 import { useSharedReel } from '../services/useSharedReel';
 import { editorRequest } from '../services/editorClient';
@@ -26,11 +29,9 @@ import {
   loadDemoProject,
   startTranscription,
   getTranscriptionStatus,
-  checkOllamaStatus,
   generateAutoEditReel
 } from '../services/api';
 import { recalculateTimeline, uploadedClip } from '../utils/timeline';
-import { interpretWithOllama } from '../services/api';
 import { getSettings } from '../services/settings';
 import { InteractiveTimeline } from '../components/studio/InteractiveTimeline';
 import { CreativePanel } from '../components/studio/CreativePanel';
@@ -40,13 +41,13 @@ import { CaptionTools } from '../components/studio/CaptionTools';
 import { SpeechModelSelect } from '../components/studio/SpeechModelSelect';
 import { useSpeechModels } from '../components/studio/useSpeechModels';
 import { attachTranscript, editCaptionTiming, newCaptionInterval, mergeSourceCaptions } from '../utils/subtitles';
-import { applyOpenRouterPlan, createOpenRouterPlan, creativeRequest } from '../services/api';
+import { applyDirectorPlan, createDirectorPlan, creativeRequest } from '../services/api';
+import { deleteCaptions, isEditingText } from '../utils/editorSelection';
 import type { AIEditingPlan } from '../types';
 import { EffectsPanel } from '../components/studio/EffectsPanel';
 import { downloadTimeline, exportTimeline } from '../utils/timelineExport';
 import {
   Mic,
-  MicOff,
   Send,
   Play,
   Pause,
@@ -111,13 +112,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
   const [transcriptionStage, setTranscriptionStage] = useState('');
   const transcriptionJobRef = useRef<string | null>(null);
 
-  // Ollama Client State
-  const [ollamaStatus, setOllamaStatus] = useState<{ available: boolean; ready?: boolean; host: string; models: string[]; default_model?: string; error?: string }>({
-    available: false,
-    host: 'http://127.0.0.1:11434',
-    models: []
-  });
-  const [selectedOllamaModel, setSelectedOllamaModel] = useState<string>('');
+  const [directorConnection, setDirectorConnection] = useState({ label: 'AI connections', configured: false });
 
   // Auto-Edit Workflow Modal State
   const [isAutoEditModalOpen, setIsAutoEditModalOpen] = useState(false);
@@ -161,22 +156,35 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
   // Selected Clip and Transition in Timeline / Inspector
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedTransitionId, setSelectedTransitionId] = useState<string | null>(null);
+  const [selectedCaptionIds, setSelectedCaptionIds] = useState<string[]>([]);
+  const [audioSelected, setAudioSelected] = useState(false);
+  const selectClip = (id: string | null) => { setSelectedClipId(id); setSelectedCaptionIds([]); setAudioSelected(false); setSelectedTransitionId(null); };
+  const selectCaption = (id: string, multiple = false) => {
+    setSelectedCaptionIds(previous => multiple ? previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id] : [id]);
+    setSelectedClipId(null); setSelectedTransitionId(null); setAudioSelected(false);
+  };
 
   // Undo / Redo History
-  const [history, setHistory] = useState<EditingPlan[]>([]);
-  const [redoStack, setRedoStack] = useState<EditingPlan[]>([]);
+  type HistoryEntry = { plan: EditingPlan; audio: UploadedAudio | null; audioAnalysis: AudioAnalysisResult | null };
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
   const timelineRefreshIdRef = useRef(0);
   const editOriginRef = useRef<EditingPlan | null>(null);
   const planRef = useRef(plan);
   useLayoutEffect(() => { planRef.current = plan; }, [plan]);
   const pollTimersRef = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
-  const recognitionRef = useRef<any>(null);
 
   // Assistant / Directing State
   const [commandInput, setCommandInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isInterpreting, setIsInterpreting] = useState(false);
   const [pendingAIPlan, setPendingAIPlan] = useState<AIEditingPlan | null>(null);
+  const pendingOrigin = useRef<EditingPlan | null>(null);
+  const directorBusy = useRef(false);
+  const [directorStage, setDirectorStage] = useState('');
+  const [directionTips, setDirectionTips] = useState(() => {
+    try { return sessionStorage.getItem('rayflow:direction-tips-dismissed') !== 'true'; } catch { return true; }
+  });
   const [conversation, setConversation] = useState<Array<{ sender: 'user' | 'assistant'; text: string; time: string }>>([
     {
       sender: 'assistant',
@@ -191,15 +199,16 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
   const currentTimeRef = useRef(0.0);
   const lastUiUpdateRef = useRef(0);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const transformCanvases = useRef<HTMLCanvasElement[]>([]);
   const synchronizedAudioRef = useRef<HTMLAudioElement | null>(null);
   const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const videoCacheRef = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const previewBackBufferRef = useRef<HTMLCanvasElement | null>(null);
   const drawFrameRef = useRef<(time: number) => void>(() => {});
   const playbackRef = useRef(false);
   useLayoutEffect(() => { playbackRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => () => {
     pollTimersRef.current.forEach(clearInterval);
-    recognitionRef.current?.abort();
     videoCacheRef.current.forEach(video => {
       video.pause(); video.removeAttribute('src'); video.load();
     });
@@ -212,7 +221,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [viewRenderedVideo, setViewRenderedVideo] = useState(false);
 
-  const renderCreative = useCreativePreview(plan, isPlaying, seekVersion, currentTimeRef, drawFrameRef, setErrorMessage);
+  const { render: renderCreative, captionRegions } = useCreativePreview(plan, isPlaying, seekVersion, currentTimeRef, drawFrameRef, setErrorMessage);
 
   const readOnly = useSharedReel({ projectName, images, audio, audioAnalysis, plan }, parsed => {
     setProjectName(parsed.projectName || 'My Rayflow Reel');
@@ -221,6 +230,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
     setAudioAnalysis(parsed.audioAnalysis || null);
     if (parsed.plan) setPlan({ ...parsed.plan, fit_mode: parsed.plan.fit_mode || 'fill', transitions: parsed.plan.transitions || [] });
     setHistory([]); setRedoStack([]);
+    setPendingAIPlan(null); pendingOrigin.current = null;
+    setSelectedCaptionIds([]); setSelectedClipId(null); setSelectedTransitionId(null); setAudioSelected(false);
+    setConversation([{ sender: 'assistant', text: 'Project loaded. Tell me what you want to change.', time: 'Just now' }]);
   }, setErrorMessage, hasHydrated, setHasHydrated);
 
   useEffect(() => {
@@ -243,7 +255,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
     if (recordHistory) {
       const before = editOriginRef.current || planRef.current;
       if (JSON.stringify(before) !== JSON.stringify(newPlan)) {
-        setHistory(prev => [...prev.slice(-25), before]);
+        setHistory(prev => [...prev.slice(-25), { plan: before, audio, audioAnalysis }]);
         setRedoStack([]);
       }
       editOriginRef.current = null;
@@ -257,25 +269,27 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
   const handleUndo = () => {
     if (history.length === 0) return;
     const previous = history[history.length - 1];
-    setRedoStack(prev => [plan, ...prev]);
+    const current = { plan: planRef.current, audio, audioAnalysis };
+    setRedoStack(prev => [current, ...prev]);
     setHistory(prev => prev.slice(0, -1));
     timelineRefreshIdRef.current++;
     editOriginRef.current = null;
     setViewRenderedVideo(false);
-    setPlan(previous);
-    if (previous.playhead_time !== undefined) { currentTimeRef.current = previous.playhead_time; setCurrentTime(previous.playhead_time); setSeekVersion(v => v + 1); }
+    planRef.current = previous.plan; setPlan(previous.plan); setAudio(previous.audio); setAudioAnalysis(previous.audioAnalysis);
+    if (previous.plan.playhead_time !== undefined) { currentTimeRef.current = previous.plan.playhead_time; setCurrentTime(previous.plan.playhead_time); setSeekVersion(v => v + 1); }
   };
 
   const handleRedo = () => {
     if (redoStack.length === 0) return;
     const next = redoStack[0];
-    setHistory(prev => [...prev, plan]);
+    const current = { plan: planRef.current, audio, audioAnalysis };
+    setHistory(prev => [...prev, current]);
     setRedoStack(prev => prev.slice(1));
     timelineRefreshIdRef.current++;
     editOriginRef.current = null;
     setViewRenderedVideo(false);
-    setPlan(next);
-    if (next.playhead_time !== undefined) { currentTimeRef.current = next.playhead_time; setCurrentTime(next.playhead_time); setSeekVersion(v => v + 1); }
+    planRef.current = next.plan; setPlan(next.plan); setAudio(next.audio); setAudioAnalysis(next.audioAnalysis);
+    if (next.plan.playhead_time !== undefined) { currentTimeRef.current = next.plan.playhead_time; setCurrentTime(next.plan.playhead_time); setSeekVersion(v => v + 1); }
   };
 
   // Re-generate timeline whenever plan, images, or audio changes
@@ -325,7 +339,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
         liveVideos.add(clip.id);
         let video = videoCacheRef.current.get(clip.id);
         if (!video || video.dataset.source !== clip.image_url) {
-          video?.pause();
+          if (video) releasePreviewMedia(video);
           video = document.createElement('video');
           video.crossOrigin = 'anonymous';
           video.playsInline = true;
@@ -354,7 +368,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
     });
     videoCacheRef.current.forEach((video, key) => {
       if (!liveVideos.has(key)) {
-        video.pause(); video.removeAttribute('src'); video.load(); videoCacheRef.current.delete(key);
+        releasePreviewMedia(video); videoCacheRef.current.delete(key);
       }
     });
   }, [plan.clips, plan.visual_inserts]);
@@ -363,21 +377,17 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
     if (clip.media_type !== 'video') return imageCacheRef.current.get(clip.image_url);
     const video = videoCacheRef.current.get(clip.id);
     if (!video) return;
-    const target = Math.max(0, Math.min((clip.source_start || 0) + Math.max(0, time - clip.start_time),
-      Number.isFinite(video.duration) ? Math.max(0, video.duration - 1 / 30) : Infinity));
+    const target = (clip.source_start || 0) + Math.max(0, time - clip.start_time);
     const active = time >= clip.start_time && time < clip.start_time + clip.duration;
     const shouldPlay = active && playbackRef.current;
     video.muted = !active;
-    video.volume = Math.min(1, clip.volume ?? 1);
-    if (video.readyState >= 1 && !video.seeking && Math.abs(video.currentTime - target) > (shouldPlay ? 0.12 : 1 / 60)) {
-      video.currentTime = target;
-    }
-    if (shouldPlay && video.paused) video.play().catch(() => {});
-    else if (!shouldPlay && !video.paused) video.pause();
+    video.volume = Math.max(0, Math.min(1, clip.volume ?? 1));
+    if (!syncPreviewMedia(video, target, shouldPlay)) return;
+
     return video;
   };
   const mediaReady = (media?: HTMLImageElement | HTMLVideoElement) => media instanceof HTMLVideoElement
-    ? media.readyState >= 2 : Boolean(media?.complete && media.naturalWidth > 0);
+    ? media.readyState >= 2 && !media.seeking : Boolean(media?.complete && media.naturalWidth > 0);
 
   // Photo Upload Handler with validation
   const processImageFiles = async (fileList: File[]) => {
@@ -537,13 +547,19 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
   };
 
   const handleRemoveAudio = () => {
+    if (!audio) return;
+    const current = { plan: planRef.current, audio, audioAnalysis };
+    setHistory(previous => [...previous.slice(-25), current]);
+    setRedoStack([]);
     if (isAudioPreviewPlaying && mediaAudioRef.current) {
       mediaAudioRef.current.pause();
       setIsAudioPreviewPlaying(false);
     }
     setAudio(null);
     setAudioAnalysis(null);
-    refreshTimeline(plan, images, null, false);
+    setAudioSelected(false);
+    synchronizedAudioRef.current?.pause();
+    setViewRenderedVideo(false);
   };
 
   const handleToggleAudioPreview = () => {
@@ -562,6 +578,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
 
   // Open Effects Panel for specific boundary transition
   const handleOpenEffectsForBoundary = (fromClipId: string, toClipId: string) => {
+    selectClip(null);
     const trans = (plan.transitions || []).find(t => t.from_clip_id === fromClipId && t.to_clip_id === toClipId);
     if (trans) {
       setSelectedTransitionId(trans.id);
@@ -572,16 +589,18 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
     setMobilePanel('media');
   };
 
-  // Check local Ollama status on mount
+  // Reflect the Director's selected provider, independent of Auto Reel's local tools.
   useEffect(() => {
-    checkOllamaStatus()
-      .then(st => {
-        setOllamaStatus(st);
-        if (st.models && st.models.length > 0) {
-          setSelectedOllamaModel(st.default_model || st.models[0]);
-        }
-      })
-      .catch(() => {});
+    let active = true;
+    const refresh = () => { void getSettings().then(settings => {
+      if (!active) return;
+      const configured: Record<string, boolean> = { openai: settings.openai_configured, anthropic: settings.anthropic_configured, gemini: settings.gemini_configured, openrouter: settings.openrouter_configured, agentrouter: settings.agentrouter_configured };
+      const id = settings.ai_provider === 'auto' ? Object.keys(configured).find(id => configured[id]) || '' : settings.ai_provider;
+      const names: Record<string, string> = { openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Google Gemini', openrouter: 'OpenRouter', agentrouter: 'Agent Router', ollama: 'Ollama', local: 'Local commands' };
+      setDirectorConnection({ label: names[id] || 'Set up AI', configured: id === 'local' || id === 'ollama' || !!configured[id] });
+    }).catch(() => {}); };
+    refresh(); window.addEventListener('rayflow:providers', refresh); window.addEventListener('rayflow:director-settings', refresh);
+    return () => { active = false; window.removeEventListener('rayflow:providers', refresh); window.removeEventListener('rayflow:director-settings', refresh); };
   }, []);
 
   // Speech-to-Text Transcription via local Faster-Whisper
@@ -705,115 +724,76 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
     }
   };
 
-  // Voice Recognition via Web Speech API
-  const handleVoiceToggle = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setErrorMessage('Speech recognition is not supported in this browser. Please type your direction.');
-      return;
-    }
-
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      return;
-    }
-
-    try {
-      const recognition = new SpeechRecognition();
-      recognitionRef.current = recognition;
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
-
-      recognition.onstart = () => {
-        setIsListening(true);
-        setErrorMessage(null);
-      };
-
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setCommandInput(transcript);
-        setIsListening(false);
-        handleExecuteCommand(transcript);
-      };
-
-      recognition.onerror = () => {
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognition.start();
-    } catch {
-      setIsListening(false);
-    }
-  };
-
   // Natural Language Command Execution
   const handleExecuteCommand = async (cmdToRun?: string) => {
     const cmd = cmdToRun || commandInput;
-    if (!cmd.trim()) return;
-
+    if (!cmd.trim() || directorBusy.current || pendingAIPlan || readOnly) return;
+    directorBusy.current = true;
+    const origin = planRef.current;
     setIsInterpreting(true);
+    setDirectorStage('Understanding your direction…');
     setErrorMessage(null);
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     setConversation(prev => [...prev, { sender: 'user', text: cmd, time: timeStr }]);
     setCommandInput('');
 
-    let preferredProvider = 'auto';
     try {
-      preferredProvider = (await getSettings()).ai_provider;
-      if (preferredProvider === 'local' || preferredProvider === 'ollama') {
-        const result = preferredProvider === 'ollama'
-          ? await interpretWithOllama(cmd, plan)
-          : await interpretNaturalCommand(cmd, plan);
+      const preferredProvider = (await getSettings()).ai_provider;
+      if (preferredProvider === 'ollama') setDirectorStage('Ollama is planning your edit. CPU inference can take a few minutes...');
+      if (preferredProvider === 'local') {
+        const result = await interpretNaturalCommand(cmd, origin);
+        if (planRef.current !== origin) throw new Error('The project changed while interpreting. Please send your direction again.');
         updatePlanWithHistory(result.plan);
         setConversation(prev => [...prev, { sender: 'assistant', text: result.explanation, time: timeStr }]);
         return;
       }
-      const aiPlan = await createOpenRouterPlan(cmd, plan);
-      if (aiPlan.clarification) {
-        setConversation(prev => [...prev, { sender: 'assistant', text: aiPlan.clarification!, time: timeStr }]);
+      const aiPlan = await createDirectorPlan(cmd, origin, {
+        selected_clip_id: selectedClipId, selected_caption_ids: selectedCaptionIds,
+        playhead_time: currentTimeRef.current, can_undo: history.length > 0, can_redo: redoStack.length > 0,
+      }, conversation.slice(-20).map(turn => ({ role: turn.sender, content: turn.text.slice(0, 4000) })));
+      if (planRef.current !== origin) throw new Error('The project changed while planning. Please send your direction again.');
+      if (aiPlan.clarification || !aiPlan.actions.length) {
+        setConversation(prev => [...prev, { sender: 'assistant', text: aiPlan.clarification || aiPlan.explanation, time: timeStr }]);
       } else {
+        pendingOrigin.current = origin;
         setPendingAIPlan(aiPlan);
         setConversation(prev => [...prev, { sender: 'assistant', text: `${aiPlan.explanation} Review the proposed changes below before applying them.`, time: timeStr }]);
       }
-    } catch (err: any) {
-      if (preferredProvider !== 'auto') {
-        setErrorMessage(err.message || 'The selected provider could not process this instruction. Check Connections.');
-        return;
-      }
-      // Preserve the existing deterministic/Ollama workflow when OpenRouter is not configured.
-      try {
-        const res = await interpretNaturalCommand(cmd, plan);
-        updatePlanWithHistory(res.plan);
-        setConversation(prev => [...prev, { sender: 'assistant', text: res.explanation, time: timeStr }]);
-      } catch (fallbackError: any) {
-        setErrorMessage(fallbackError.message || err.message || 'Failed to interpret command.');
-      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not interpret this direction. Check Connections.';
+      setErrorMessage(message);
+      setConversation(prev => [...prev, { sender: 'assistant', text: message, time: timeStr }]);
     } finally {
+      directorBusy.current = false;
+      setDirectorStage('');
       setIsInterpreting(false);
     }
   };
 
   const approveAIPlan = async () => {
-    if (!pendingAIPlan) return;
+    if (!pendingAIPlan || directorBusy.current || readOnly) return;
+    directorBusy.current = true;
     setIsInterpreting(true);
+    setDirectorStage('Applying your edit…');
     try {
-      const result = await applyOpenRouterPlan(pendingAIPlan, planRef.current);
+      const origin = pendingOrigin.current;
+      if (!origin || planRef.current !== origin) throw new Error('The project changed after this proposal. Send your direction again to use the current timeline.');
       const historyAction = pendingAIPlan.actions.find(action => action.type === 'undo' || action.type === 'redo');
-      setPendingAIPlan(null);
+      if (historyAction?.type === 'undo' && !history.length || historyAction?.type === 'redo' && !redoStack.length) throw new Error('There is no matching history change available.');
+      const result = historyAction ? null : await applyDirectorPlan(pendingAIPlan, origin);
+      if (planRef.current !== origin) throw new Error('The project changed while applying. No AI changes were applied; please try again.');
       if (historyAction?.type === 'undo') handleUndo();
       else if (historyAction?.type === 'redo') handleRedo();
-      else updatePlanWithHistory(result.proposed_plan);
-      setConversation(prev => [...prev, { sender: 'assistant', text: result.applied_changes.join(' ') || result.explanation, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+      else if (result) updatePlanWithHistory(result.proposed_plan);
+      setConversation(prev => [...prev, { sender: 'assistant', text: historyAction ? (historyAction.type === 'undo' ? 'Undid the last edit.' : 'Redid the last edit.') : result!.applied_changes.join(' '), time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'The approved edit could not be applied.');
+      const message = error instanceof Error ? error.message : 'The approved edit could not be applied.';
+      setErrorMessage(message);
+      setConversation(prev => [...prev, { sender: 'assistant', text: message, time: 'Now' }]);
     } finally {
+      setPendingAIPlan(null); pendingOrigin.current = null;
+      directorBusy.current = false; setDirectorStage('');
       setIsInterpreting(false);
     }
   };
@@ -886,8 +866,17 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
     progress: number,
     alpha: number = 1.0
   ) => {
+    const destination = ctx;
+    const transformed = !!(clip.rotation || clip.offset_x || clip.offset_y);
+    if (transformed) {
+      if (!transformCanvases.current.length) transformCanvases.current = [document.createElement('canvas'), document.createElement('canvas')];
+      const source = transformCanvases.current[0];
+      source.width = w; source.height = h;
+      ctx = source.getContext('2d')!;
+    }
     ctx.save();
-    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    ctx.globalAlpha = transformed ? 1 : Math.max(0, Math.min(1, alpha));
+    if (transformed) { ctx.fillStyle = 'black'; ctx.fillRect(0, 0, w, h); }
     if (plan.style === 'cinematic') {
       const strength = plan.color_strength ?? 1;
       ctx.filter = `contrast(${1 + .1 * strength}) saturate(${1 + .15 * strength})`;
@@ -921,14 +910,48 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
 
     ctx.drawImage(img, sx, sy, sw, sh);
     ctx.restore();
+    if (transformed) {
+      const [source, rotated] = transformCanvases.current;
+      rotated.width = w; rotated.height = h;
+      const rotationContext = rotated.getContext('2d')!;
+      rotationContext.fillStyle = 'black'; rotationContext.fillRect(0, 0, w, h);
+      rotationContext.translate(w / 2, h / 2);
+      rotationContext.rotate((clip.rotation || 0) * Math.PI / 180);
+      rotationContext.drawImage(source, -w / 2, -h / 2);
+      // Compose the black exposed borders and the shifted frame before fading.
+      const sourceContext = source.getContext('2d')!;
+      sourceContext.fillStyle = 'black'; sourceContext.fillRect(0, 0, w, h);
+      sourceContext.drawImage(rotated, (clip.offset_x || 0) * w, (clip.offset_y || 0) * h);
+      destination.save(); destination.globalAlpha = Math.max(0, Math.min(1, alpha));
+      destination.drawImage(source, 0, 0); destination.restore();
+    }
   };
 
   // Direct canvas render function decoupled from React rendering cycle
   const renderPreviewFrame = (time: number) => {
-    const canvas = previewCanvasRef.current;
-    if (!canvas) return;
+    const displayCanvas = previewCanvasRef.current;
+    if (!displayCanvas) return;
+    const canvas = previewBackBufferRef.current ||= document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    const clips = previewTimeline(plan);
+    const totalFrames = frameAt(plan.duration_seconds);
+    // Presentation uses the export grid; editable source ranges stay precise.
+    time = Math.max(0, Math.min(Math.floor(time * PREVIEW_FPS + 1e-7), totalFrames - 1)) / PREVIEW_FPS;
+    const clipIdx = clips.findIndex(c => time >= c.start_time && time < c.start_time + c.duration);
+    const activeClip = clips[clipIdx];
+    const nextClip = clips[clipIdx + 1];
+    const boundary = transitionAt(plan, clips, clipIdx);
+    const cached = activeClip ? clipMedia(activeClip, time) : undefined;
+    // Warm the next occurrence at its source-in even for hard cuts.
+    const nextCached = nextClip ? clipMedia(nextClip, time) : undefined;
+    const inTransition = !!(activeClip && boundary && time >= activeClip.start_time + activeClip.duration - boundary.duration);
+    videoCacheRef.current.forEach((video, id) => {
+      if (id !== activeClip?.id) video.pause();
+    });
+    // Do not clear/publish a partial composition while a decoder is seeking.
+    if (activeClip && (!mediaReady(cached) || (inTransition && !mediaReady(nextCached)))) return;
 
     // Set canvas dimensions to match current project aspect ratio
     const ratio = plan.aspect_ratio || '9:16';
@@ -954,38 +977,23 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
     ctx.fillStyle = '#09090B';
     ctx.fillRect(0, 0, w, h);
 
-    videoCacheRef.current.forEach((video, id) => {
-      const clip = plan.clips.find(c => c.id === id);
-      if (!clip || time < clip.start_time || time >= clip.start_time + clip.duration) video.pause();
-    });
-    const clipIdx = plan.clips.findIndex(
-      c => time >= c.start_time && time < c.start_time + c.duration
-    );
-    const activeClip = clipIdx >= 0 ? plan.clips[clipIdx] : (plan.clips.length > 0 ? plan.clips[plan.clips.length - 1] : null);
-
     if (activeClip && activeClip.image_url) {
-      const cached = clipMedia(activeClip, time);
       if (cached && mediaReady(cached)) {
         const clipProgress = activeClip.duration > 0
-          ? Math.min(1, Math.max(0, (time - activeClip.start_time) / activeClip.duration))
+          ? Math.min(1, Math.max(0, (time - activeClip.start_time) / Math.max(1 / PREVIEW_FPS, activeClip.duration - 1 / PREVIEW_FPS)))
           : 0;
 
         // Check if a transition is active with the next clip
         let transitionHandled = false;
-        if (clipIdx >= 0 && clipIdx < plan.clips.length - 1) {
-          const nextClip = plan.clips[clipIdx + 1];
-          const boundaryTrans = (plan.transitions || []).find(
-            t => t.from_clip_id === activeClip.id && t.to_clip_id === nextClip.id
-          );
-
-          if (boundaryTrans && boundaryTrans.enabled && boundaryTrans.type !== 'none') {
-            const tDur = Math.round(Math.max(0, Math.min(boundaryTrans.duration, activeClip.duration - 0.1, nextClip.duration - 0.1, 2)) * 30) / 30;
+        if (nextClip) {
+          const boundaryTrans = boundary;
+          if (boundaryTrans) {
+            const tDur = boundaryTrans.duration;
             const clipEnd = activeClip.start_time + activeClip.duration;
             const tStart = clipEnd - tDur;
 
             if (time >= tStart && time < clipEnd) {
               const transProgress = (time - tStart) / tDur;
-              const nextCached = clipMedia(nextClip, time);
 
               if (boundaryTrans.type === 'crossfade') {
                 drawImageFrame(ctx, cached, activeClip, w, h, clipProgress, 1.0);
@@ -1094,7 +1102,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
           ctx.restore();
         }
 
-        renderCreative(ctx, time, w, h);
+        if (renderCreative(ctx, time, w, h) === false) return;
 
       } else {
         // Drawing placeholder while image decodes
@@ -1117,6 +1125,10 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
       ctx.fillStyle = '#aebdb3';
       ctx.fillText('Add photos or video to see your edit', w / 2, h / 2 + Math.min(w, h) * .04);
     }
+    if (displayCanvas.width !== w || displayCanvas.height !== h) {
+      displayCanvas.width = w; displayCanvas.height = h;
+    }
+    displayCanvas.getContext('2d')?.drawImage(canvas, 0, 0);
   };
 
   useLayoutEffect(() => { drawFrameRef.current = renderPreviewFrame; });
@@ -1132,6 +1144,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
     let lastStamp: number | null = null;
 
     const tick = (stamp: number) => {
+      const plan = planRef.current;
       if (lastStamp !== null && isPlaying) {
         const delta = (stamp - lastStamp) / 1000;
         const next = currentTimeRef.current + delta;
@@ -1177,7 +1190,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isPlaying, plan]);
+  }, [isPlaying]);
 
   useEffect(() => {
     if (!isPlaying) {
@@ -1228,15 +1241,30 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
     renderPreviewFrame(newTime);
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const element = event.target as HTMLElement;
-      if (element.matches('input, textarea, select, [contenteditable="true"]')) return;
+      if (event.defaultPrevented || event.isComposing || isEditingText(event.target) || readOnly || pendingAIPlan || isAutoEditModalOpen || isRenderingModalOpen) return;
+      const element = event.target instanceof Element ? event.target : null;
+      if (element && element !== document.body && !element.closest('.rayflow-studio')) return;
+      if (element?.closest('[role="dialog"], .rayflow-modal-backdrop') || document.querySelector('[role="dialog"]')) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault();
         if (event.shiftKey) handleRedo(); else handleUndo();
       } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
         event.preventDefault(); handleRedo();
+      } else if (!event.ctrlKey && !event.metaKey && !event.altKey && (event.key === 'Delete' || event.key === 'Backspace')) {
+        if (event.repeat) return;
+        if (selectedCaptionIds.length) {
+          event.preventDefault();
+          updatePlanWithHistory(deleteCaptions(planRef.current, selectedCaptionIds));
+          setSelectedCaptionIds([]);
+        } else if (audioSelected && audio) {
+          event.preventDefault(); handleRemoveAudio();
+        } else if (selectedClipId && planRef.current.clips.some(clip => clip.id === selectedClipId)) {
+          event.preventDefault();
+          updatePlanWithHistory(recalculateTimeline(planRef.current.clips.filter(clip => clip.id !== selectedClipId), planRef.current.transitions, planRef.current));
+          selectClip(null);
+        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -1797,7 +1825,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
                 images={images}
                 selectedTransitionId={selectedTransitionId}
                 onUpdatePlan={updatePlanWithHistory}
-                onSelectTransition={setSelectedTransitionId}
+                onSelectTransition={id => { selectClip(null); setSelectedTransitionId(id); }}
               />
             )}
 
@@ -2195,22 +2223,23 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
                     {(plan.subtitles || []).map(seg => (
                       <div
                         key={seg.id}
-                        onClick={() => {
-                          currentTimeRef.current = seg.start_time;
-                          setCurrentTime(seg.start_time);
-                          renderPreviewFrame(seg.start_time);
+                        tabIndex={0}
+                        data-caption-card={seg.id}
+                        onKeyDown={event => { if (event.target === event.currentTarget && (event.key === ' ' || event.key === 'Enter')) { event.preventDefault(); selectCaption(seg.id, event.shiftKey || event.ctrlKey || event.metaKey); } }}
+                        onClick={event => {
+                          if (!isEditingText(event.target)) { selectCaption(seg.id, event.shiftKey || event.ctrlKey || event.metaKey); handleSeek(seg.start_time); }
                         }}
-                        className="p-2.5 rounded-lg border border-studio-border bg-studio-panel hover:border-studio-border transition-colors cursor-pointer group"
+                        className={`p-2.5 rounded-lg border ${selectedCaptionIds.includes(seg.id) ? 'border-accent' : 'border-studio-border'} bg-studio-panel transition-colors cursor-pointer group`}
                       >
                         <div className="flex items-center justify-between text-[11px] text-studio-quiet font-mono mb-1">
                           <span>{seg.start_time.toFixed(1)}s - {seg.end_time.toFixed(1)}s</span>
                           <button
                             onClick={e => {
                               e.stopPropagation();
-                              const updated = (plan.subtitles || []).filter(s => s.id !== seg.id);
-                              updatePlanWithHistory({ ...plan, subtitles: updated });
+                              updatePlanWithHistory(deleteCaptions(planRef.current, [seg.id]));
+                              setSelectedCaptionIds(ids => ids.filter(id => id !== seg.id));
                             }}
-                            className="text-studio-quiet hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="text-studio-quiet hover:text-danger opacity-70 group-hover:opacity-100 focus:opacity-100 transition-opacity"
                             title="Delete caption"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -2293,6 +2322,15 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
               )}
 
               {/* Watermark badge */}
+              {!viewRenderedVideo && captionRegions.filter(region => region.bounds && currentTime >= region.start_time && currentTime < region.end_time && plan.subtitles?.some(caption => caption.id === region.caption_id)).map(region => {
+                const [left, top, width, height] = region.bounds!;
+                return <button key={`${region.caption_id}-${region.start_time}`} type="button"
+                  aria-label={`Select preview caption: ${plan.subtitles?.find(caption => caption.id === region.caption_id)?.text}`}
+                  aria-pressed={selectedCaptionIds.includes(region.caption_id)}
+                  onClick={event => { setIsPlaying(false); selectCaption(region.caption_id, event.shiftKey || event.ctrlKey || event.metaKey); }}
+                  style={{ left: `${left * 100}%`, top: `${top * 100}%`, width: `${width * 100}%`, height: `${height * 100}%` }}
+                  className={`absolute rounded focus-visible:outline-accent ${selectedCaptionIds.includes(region.caption_id) ? 'ring-2 ring-accent' : 'hover:ring-1 hover:ring-accent'}`} />;
+              })}
               <div className="absolute top-3 left-3 px-2 py-0.5 rounded bg-studio-canvas/80 backdrop-blur-sm text-[10px] font-mono text-white/80 border border-white/10 pointer-events-none">
                 RAYFLOW {plan.aspect_ratio}
               </div>
@@ -2331,7 +2369,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
                 aria-label="Playback position"
                 min="0"
                 max={plan.duration_seconds}
-                step="0.1"
+                step={1 / PREVIEW_FPS}
                 value={currentTime}
                 onChange={e => handleSeek(parseFloat(e.target.value))}
                 className="w-full accent-accent h-1.5 bg-studio-line rounded-lg cursor-pointer"
@@ -2372,13 +2410,11 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
               <div className="flex items-center gap-1.5">
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    ollamaStatus.ready ? 'bg-jade ring-2 ring-jade-border' : 'bg-studio-border'
+                    directorConnection.configured ? 'bg-jade ring-2 ring-jade-border' : 'bg-studio-border'
                   }`}
                 />
                 <span className="text-[10px] font-mono text-studio-muted truncate max-w-[125px]">
-                  {ollamaStatus.ready
-                    ? `Ollama: ${selectedOllamaModel || 'Ready'}`
-                    : ollamaStatus.available ? 'Select Ollama model' : 'Ollama offline'}
+                  <a href="#/connections">{directorConnection.label}</a>
                 </span>
               </div>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-studio-hover text-studio-text border border-studio-border">
@@ -2413,10 +2449,12 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
           </div>
 
           {/* Suggested Directives */}
-          <div className="px-4 py-2 border-t border-studio-line bg-studio-raised/60">
-            <span className="text-[10px] font-mono text-studio-quiet block mb-1.5 uppercase">
-              Try a direction:
-            </span>
+          {directionTips && <div className="px-4 py-2 border-t border-studio-line bg-studio-raised/60" role="region" aria-label="Try AI Direction">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-mono text-studio-quiet uppercase">Try AI Direction</span>
+              <button type="button" aria-label="Close Try AI Direction panel" className="p-1 rounded hover:bg-studio-hover focus-visible:outline-accent"
+                onClick={() => { setDirectionTips(false); try { sessionStorage.setItem('rayflow:direction-tips-dismissed', 'true'); } catch { /* Session storage is optional. */ } }}><X className="w-4 h-4" /></button>
+            </div>
             <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pb-1">
               {[
                 'Move the fifth photo to the beginning.',
@@ -2430,6 +2468,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
               ].map(cmd => (
                 <button
                   key={cmd}
+                  disabled={isInterpreting || !!pendingAIPlan}
                   onClick={() => handleExecuteCommand(cmd)}
                   className="text-[11px] px-2.5 py-1 rounded-full bg-studio-panel hover:bg-studio-hover border border-studio-border text-studio-text transition-colors text-left shadow-2xs"
                 >
@@ -2437,10 +2476,11 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
 
           {/* Voice & Text Input */}
           <div className="p-3 border-t border-studio-border bg-studio-panel">
+            {directorStage && <p role="status" className="text-xs text-studio-muted mb-2">{directorStage}</p>}
             <form
               onSubmit={e => {
                 e.preventDefault();
@@ -2448,25 +2488,19 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
               }}
               className="flex items-center gap-2"
             >
-              <button
-                type="button"
-                onClick={handleVoiceToggle}
-                className={`p-2.5 rounded-lg border transition-all shrink-0 ${
-                  isListening
-                    ? 'bg-accent border-danger-border text-white animate-pulse'
-                    : 'bg-studio-hover border-studio-border text-studio-text hover:bg-studio-line'
-                }`}
-                title={isListening ? 'Stop listening' : 'Start voice instruction'}
-              >
-                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </button>
+              <VoiceInputButton disabled={isInterpreting || !!pendingAIPlan || readOnly}
+                onTranscript={setCommandInput} onSubmit={text => void handleExecuteCommand(text)}
+                onError={setErrorMessage} onListeningChange={setIsListening} />
 
-              <input
-                type="text"
+              <textarea
+                aria-label="Edit direction"
+                rows={2}
+                maxLength={2000}
                 value={commandInput}
                 onChange={e => setCommandInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void handleExecuteCommand(); } }}
                 placeholder={isListening ? 'Listening to your direction…' : 'Tell Rayflow what to edit…'}
-                className="flex-1 bg-studio-panel border border-studio-border rounded-lg px-3 py-2 text-xs text-studio-text placeholder-studio-quiet focus:outline-none focus:border-accent shadow-2xs"
+                className="min-w-0 flex-1 resize-y bg-studio-panel border border-studio-border rounded-lg px-3 py-2 text-xs text-studio-text placeholder-studio-quiet focus:outline-none focus:border-accent shadow-2xs"
               />
 
               <Button
@@ -2474,7 +2508,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
                 aria-label="Send edit direction"
                 variant="primary"
                 size="sm"
-                disabled={!commandInput.trim() || isInterpreting}
+                disabled={!commandInput.trim() || isInterpreting || !!pendingAIPlan || readOnly}
               >
                 {isInterpreting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
               </Button>
@@ -2483,7 +2517,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
             {errorMessage && (
               <div className="mt-2 p-2 rounded-lg bg-danger-soft border border-danger-border text-danger text-[11px] flex items-center gap-1.5">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{errorMessage}</span>
+                <span>{errorMessage} <a className="underline" href="#/connections">Open AI settings</a></span>
               </div>
             )}
           </div>
@@ -2498,7 +2532,11 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
         currentTime={currentTime}
         isPlaying={isPlaying}
         selectedClipId={selectedClipId}
-        onSelectClip={setSelectedClipId}
+        onSelectClip={selectClip}
+        selectedCaptionIds={selectedCaptionIds}
+        onSelectCaption={selectCaption}
+        audioSelected={audioSelected}
+        onSelectAudio={() => { selectClip(null); setAudioSelected(true); }}
         onSeek={handleSeek}
         onScrubCommit={(before, after) => {
           if (Math.abs(after - before) < .001) return;
@@ -2511,7 +2549,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
 
       {pendingAIPlan && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-studio-canvas/40 backdrop-blur-sm p-4">
-          <div className="max-w-lg w-full max-h-[85vh] overflow-y-auto bg-studio-panel border border-studio-border rounded-2xl p-6 shadow-xl space-y-4">
+          <div role="dialog" aria-modal="true" aria-label="Review your Rayflow edit" className="max-w-lg w-full max-h-[85vh] overflow-y-auto bg-studio-panel border border-studio-border rounded-2xl p-6 shadow-xl space-y-4">
             <div>
               <h3 className="text-base font-semibold text-studio-text">Review your Rayflow edit</h3>
               <p className="text-xs text-studio-muted mt-1">{pendingAIPlan.explanation}</p>
@@ -2521,13 +2559,13 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
               {pendingAIPlan.actions.length ? pendingAIPlan.actions.map((action, index) => (
                 <div key={`${action.type}-${index}`} className="text-xs text-studio-text">
                   <span className="font-semibold">{index + 1}. {action.type.replaceAll('_', ' ')}</span>
-                  <span className="block text-studio-muted break-words">{JSON.stringify(action.params)}</span>
+                  <span className="block text-studio-muted break-words">{pendingAIPlan.applied_changes[index]}</span>
                 </div>
               )) : <p className="text-xs text-studio-muted">No changes proposed.</p>}
             </div>
             <p className="text-[11px] text-studio-muted">Review the proposed changes, then apply them to your timeline.</p>
             <div className="flex justify-end gap-2">
-              <button className="text-xs px-3 py-2 rounded-lg border border-studio-border hover:bg-studio-hover" onClick={() => setPendingAIPlan(null)}>Cancel</button>
+              <button disabled={isInterpreting} className="text-xs px-3 py-2 rounded-lg border border-studio-border hover:bg-studio-hover" onClick={() => { setPendingAIPlan(null); pendingOrigin.current = null; setConversation(prev => [...prev, { sender: 'assistant', text: 'Proposal cancelled. No changes were applied.', time: 'Now' }]); }}>Cancel</button>
               <button className="text-xs px-3 py-2 rounded-lg bg-accent text-white disabled:opacity-50" disabled={isInterpreting} onClick={approveAIPlan}>
                 {isInterpreting ? 'Applying…' : 'Approve and apply'}
               </button>

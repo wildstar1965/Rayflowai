@@ -82,7 +82,7 @@ def test_provider_specific_secret_fields_are_rejected(guests):
 def test_keys_are_encrypted_write_only_and_owned(guests):
     a, b = guests
     key = 'test-only-provider-secret-1234567890'
-    response = a.put('/api/editor/providers/gemini', json={'key': key, 'model': 'example-model'})
+    response = a.put('/api/editor/providers/gemini', json={'key': key, 'model': 'gemini-2.5-flash'})
     assert response.status_code == 200
     assert key not in response.text
     assert next(p for p in response.json()['providers'] if p['id'] == 'gemini')['configured']
@@ -95,7 +95,7 @@ def test_keys_are_encrypted_write_only_and_owned(guests):
         assert credential('gemini') == key
     finally:
         workspace_id.reset(token)
-    assert a.put('/api/editor/providers/gemini', json={'key': '', 'model': 'another-model'}).status_code == 200
+    assert a.put('/api/editor/providers/gemini', json={'key': '', 'model': 'gemini-2.5-pro'}).status_code == 200
     assert a.delete('/api/editor/providers/gemini').status_code == 200
     assert not next(p for p in a.get('/api/editor/providers').json()['providers'] if p['id'] == 'gemini')['configured']
 

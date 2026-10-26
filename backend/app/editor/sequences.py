@@ -33,6 +33,8 @@ def transfer(sequence, destination, project_id):
         media, clips = [], []
         assets = {asset.get('filename'): asset for asset in source.get('images', [])}
         for index, clip in enumerate(plan.get('clips', [])):
+            if any(clip.get(field, 0) for field in ('rotation', 'offset_x', 'offset_y')):
+                reasons.append('clip transform (Studio and AI Editor use different canvas fitting)')
             if clip.get('motion', 'static') != 'static' or clip.get('transition', 'none') not in ('none', 'cut'):
                 reasons.append('clip motion or transitions')
             start, duration = number(clip['start_time']), number(clip['duration'])

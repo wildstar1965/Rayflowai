@@ -4,7 +4,8 @@ import { GoogleGenAI } from '../runtime/google';
 import { projectApi } from '../runtime/project';
 import { Modality, Type, GenerateContentResponse, Operation, Chat, FunctionDeclaration, GenerateImagesResponse } from "@google/genai";
 import { withModelFallback } from './geminiModelFallback';
-import { isLocalLlmReady, withLocalLlm } from './localLlmService';
+import { isLocalLlmReady, withLocalLlm, generateContentWithLocalLlm } from './localLlmService';
+import { getSettings, backendRequest } from '../../../services/settings';
 import { MediaItem, ScriptAnalysisResult, StoryBible, ChatMessage, ShotPrompt, ReviewFeedback, ScriptLength, CinematographyCritique, AudioScoreRequest, TimelineClip, ReferenceItem, AudioCue, ScriptQualityReport, ScriptDoctorImprovement, NeurocinematicsAnalysisResult, AudioPsychoacousticsResult, DirectorShot, DirectorTreatment, SubtitleWordTiming, ShotContinuityReview } from '../types';
 import { getVideoDuration, fileToBase64, decode } from "../utils/helpers";
 import { recordUsage } from '../utils/usageTracker';
@@ -1541,7 +1542,9 @@ export const runChat = async (
     tools?: FunctionDeclaration[],
     systemInstruction?: string,
 ): Promise<GenerateContentResponse> => {
-    const ai = getAiClient();
+    const director = await getSettings();
+    const shared = director.ai_provider === 'ollama' || director.ai_provider === 'agentrouter'
+        || (director.ai_provider === 'auto' && director.agentrouter_configured && !director.openai_configured && !director.anthropic_configured && !director.gemini_configured && !director.openrouter_configured);
     const normalizeToolResponseParts = (toolResponses: any[] | undefined) => {
         if (!Array.isArray(toolResponses)) return [];
         return toolResponses
@@ -1584,7 +1587,7 @@ export const runChat = async (
 
                 const name = typeof entry.name === 'string' ? entry.name : '';
                 const thoughtSignature = typeof entry.thoughtSignature === 'string' ? entry.thoughtSignature : undefined;
-                if (!name || !thoughtSignature) return null;
+                if (!name) return null;
                 return {
                     functionCall: {
                         id: typeof entry.id === 'string' ? entry.id : undefined,
@@ -1633,6 +1636,26 @@ export const runChat = async (
             break;
     }
 
+    if (shared) {
+        if (mode === 'search' || mode === 'maps') throw new Error('Choose Chat mode for Agent Router or Ollama editing commands.');
+        const ollama = director.ai_provider === 'ollama';
+        const localTools = (tools || []).filter(tool => ['moveSelectedClip', 'rotateSelectedClip', 'resetSelectedClipTransform', 'splitClipAtPlayhead', 'addTextOverlayToClip', 'navigateWorkspace', 'openSettings', 'addTrack', 'toggleSnapping'].includes(tool.name || ''));
+        config.tools = ollama ? [{ functionDeclarations: localTools }] : functionTool;
+        config.maxOutputTokens = ollama ? 1024 : 4096;
+        if (!ollama && !director.agentrouter_configured) throw new Error('Add your Agent Router key in Connections and test it first.');
+        const status = ollama ? await backendRequest<{ready: boolean; error?: string; default_model: string; host: string}>('/ollama/status') : null;
+        if (status && !status.ready) throw new Error(status.error || 'Ollama is not ready. Check Connections.');
+        return await generateContentWithLocalLlm({ contents, config }, {
+            provider: ollama ? 'ollama' : 'openai-compatible',
+            baseUrl: status?.host || director.agentrouter_base_url.replace(/\/v1\/?$/, ''),
+            model: status?.default_model || director.agentrouter_model,
+            textProvider: 'local',
+        }) as GenerateContentResponse;
+    }
+    if (director.ai_provider === 'gemini' && !director.gemini_configured) throw new Error('Add your Google Gemini key in Connections and test it first.');
+    const ai = director.ai_provider === 'gemini'
+        ? new GoogleGenAI({})
+        : getAiClient();
     const response = await withRetry(() => ai.models.generateContent({ model, contents, config }));
     return response;
 };

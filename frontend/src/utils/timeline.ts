@@ -70,14 +70,14 @@ export function reconcileTransitions(
     const matched = transMap.get(key);
 
     const rawAllowed = Math.min(c1.duration, c2.duration) - 0.1;
-    const maxAllowedDur = Math.max(0.1, Math.round(rawAllowed * 100) / 100);
+    const maxAllowedDur = Math.max(0, Math.round(rawAllowed * 1e9) / 1e9);
 
     if (matched) {
       // Preserve existing transition, clamping duration safely to fit adjacent clips
       result.push({
         ...matched,
-        duration: Math.max(0.1, Math.min(matched.duration, maxAllowedDur, 2.0)),
-        enabled: matched.enabled && matched.type !== 'none'
+        duration: Math.max(0, Math.min(matched.duration, maxAllowedDur, 2.0)),
+        enabled: matched.enabled && matched.type !== 'none' && maxAllowedDur > 0
       });
     } else {
       // Rebuild clean transition for newly adjacent boundary
@@ -88,7 +88,7 @@ export function reconcileTransitions(
         to_clip_id: c2.id,
         type: defaultType as any,
         duration: Math.min(0.5, maxAllowedDur),
-        enabled: defaultType !== 'none'
+        enabled: defaultType !== 'none' && maxAllowedDur > 0
       });
     }
   }

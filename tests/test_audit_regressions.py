@@ -19,6 +19,12 @@ from app.core.config import UPLOAD_DIR
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def workspace_session():
+    # Media reads now require the same workspace session used for uploads.
+    assert client.post('/api/session').status_code == 200
+
+
 def upload_image(color='red'):
     output = io.BytesIO()
     Image.new('RGB', (320, 180), color).save(output, 'PNG')

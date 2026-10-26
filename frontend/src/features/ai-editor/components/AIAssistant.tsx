@@ -1,6 +1,7 @@
+import { VoiceInputButton } from '../../../components/VoiceInputButton';
 import StudioIcon from './StudioIcon';
 import { editorStorage } from '../runtime/storage';
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { ChatMessage } from '../types';
 import { runChat, analyzeImage } from '../services/geminiService';
 import { MagicWandIcon, UploadIcon } from './icons';
@@ -200,6 +201,10 @@ const extractGrounding = (response: any): ChatMessage['grounding'] => {
 const AIAssistant: React.FC<AIAssistantProps> = ({ apiKeyReady, tools, toolExecutor, context, onUserTurnStart, prefill }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
+  const [voiceError, setVoiceError] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const currentTools = useRef(toolExecutor);
+  useLayoutEffect(() => { currentTools.current = toolExecutor; });
   useEffect(() => {
     if (prefill?.text) setInput(prefill.text);
   }, [prefill?.nonce, prefill?.text]);
@@ -279,7 +284,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKeyReady, tools, toolExecu
   }, [agentChoice]);
 
   const activeLocalAgent = agentChoice === 'gemini' ? null : localAgents.find((a) => a.id === agentChoice) || null;
-  const agentLabel = agentChoice === 'gemini' ? 'Gemini' : activeLocalAgent?.label || agentChoice;
+  const agentLabel = agentChoice === 'gemini' ? 'Assistant' : activeLocalAgent?.label || agentChoice;
 
   const handleLocalAgentTurn = async (text: string) => {
     if (!activeLocalAgent?.installed) {
@@ -519,11 +524,12 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKeyReady, tools, toolExecu
     );
   };
 
-  const handleSubmit = async (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent, voiceText?: string) => {
     e?.preventDefault();
-    if (!input.trim() && !image) return;
-
-    const userMessageText = input.trim();
+    if (isLoading) return;
+    const userMessageText = (voiceText ?? input).trim();
+    if (!userMessageText && !image) return;
+    setVoiceError('');
     const rememberPrefix = '/remember ';
     if (userMessageText.toLowerCase().startsWith(rememberPrefix)) {
       const remembered = userMessageText.slice(rememberPrefix.length).trim();
@@ -556,7 +562,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKeyReady, tools, toolExecu
       return;
     }
 
-    if (!apiKeyReady) {
+    if (!apiKeyReady && image) {
       alert('Please select an API key first.');
       return;
     }
@@ -575,7 +581,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKeyReady, tools, toolExecu
         setImage(null);
       } else {
         let currentHistory = [...newHistory];
-        while (true) {
+        for (let step = 0; step < 12; step++) {
           const response = await runChat(currentHistory, mode, tools, systemInstruction);
           const functionCalls = response.functionCalls;
 
@@ -590,7 +596,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKeyReady, tools, toolExecu
           const toolResponses = [];
           for (const call of functionCalls) {
             if (!call.name) continue;
-            const tool = toolExecutor[call.name];
+            const tool = currentTools.current[call.name];
             if (tool) {
               const result = await tool(call.args);
               toolResponses.push({
@@ -608,6 +614,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKeyReady, tools, toolExecu
           }
 
           currentHistory.push(buildMessage('tool', '', { toolResponses }));
+          if (step === 11) throw new Error('The assistant reached its action limit. Review the edit before sending another direction.');
         }
       }
     } catch (error) {
@@ -635,7 +642,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKeyReady, tools, toolExecu
           <h2 className="text-xl font-bold">Assistant</h2>
           {localAgents.length > 0 && (
             <div className="edit-seg" role="tablist" aria-label="Agent">
-              {([{ id: 'gemini' as AgentChoice, label: 'Gemini', ok: true }, ...localAgents.map((a) => ({ id: a.id as AgentChoice, label: a.label, ok: a.installed && a.adapterAvailable }))]).map((entry) => (
+              {([{ id: 'gemini' as AgentChoice, label: 'Assistant', ok: true }, ...localAgents.map((a) => ({ id: a.id as AgentChoice, label: a.label, ok: a.installed && a.adapterAvailable }))]).map((entry) => (
                 <button key={entry.id} type="button" role="tab" aria-selected={agentChoice === entry.id} className={`edit-seg__item ${agentChoice === entry.id ? 'edit-seg__item--active' : ''}`} onClick={() => setAgentChoice(entry.id)} disabled={!entry.ok} title={entry.ok ? `Use ${entry.label}` : `${entry.label} is not installed`}>
                   {entry.label}
                 </button>
@@ -861,6 +868,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKeyReady, tools, toolExecu
             </button>
           ))}
         </div>
+        {voiceError && <p role="alert">{voiceError}</p>}
         {image && (
           <div className="relative w-24 h-24 mb-2">
             <img src={image.url} alt="upload preview" className="w-full h-full object-cover rounded" />
@@ -872,7 +880,11 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKeyReady, tools, toolExecu
           <button type="button" onClick={handleUploadClick} className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600">
             <UploadIcon className="w-5 h-5" />
           </button>
+          <VoiceInputButton disabled={isLoading} onTranscript={setInput}
+            onSubmit={text => void handleSubmit(undefined, text)} onError={setVoiceError}
+            onListeningChange={setIsListening} />
           <textarea
+            aria-label="AI Editor direction"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -881,7 +893,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKeyReady, tools, toolExecu
                 handleSubmit();
               }
             }}
-            placeholder="Ask anything — e.g. 'Make me a cinematic image of a sunset'"
+            placeholder={isListening ? "Listening to your direction..." : "Ask anything, for example rotate the selected clip 90 degrees"}
             className="flex-grow bg-gray-900 border border-gray-600 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 resize-none"
             rows={2}
           />

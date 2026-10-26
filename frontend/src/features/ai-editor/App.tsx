@@ -1,3 +1,5 @@
+import { splitTimelineClip } from './utils/splitClip';
+import { transformAssistantClip, type AssistantTransform } from './utils/assistantTransform';
 import { editorStorage } from './runtime/storage';
 import { editorFetch as fetch } from './runtime/transport';
 import { projectApi, isProjectReadOnly } from './runtime/project';
@@ -9,7 +11,7 @@ import TeamConnections from '../../components/TeamConnections';
 import WorkspaceLoading from '../../components/WorkspaceLoading';
 
 import { FAL_VIDEO_CATALOG } from './services/falVideoCatalog';
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import {
     Workspace,
     MediaItem,
@@ -156,9 +158,6 @@ import {
     readProjectMetaFile,
     writeProjectMetaFile,
     deleteProjectMetaFile,
-    readProjectBinaryFile,
-    writeProjectBinaryFile,
-    statProjectAsset,
     collectMediaIntoProject,
 } from './services/projectService';
 import {
@@ -188,7 +187,6 @@ import {
 import { subscribeUsage } from './utils/usageTracker';
 import { FunctionDeclaration, Type } from '@google/genai';
 import { EFFECT_STACK_PRESETS, TRANSITIONS } from './constants';
-import { handleCloudOAuthCallback } from './services/cloudAuthService';
 import { getSupabase } from './lib/supabase';
 import {
     createProjectRealtimeSession,
@@ -201,8 +199,6 @@ import {
     toProjectSnapshot,
 } from './services/collaborativeProjectService';
 import { loginWithEmail, loginWithProvider, logoutStudio, onStudioAuthChange, resolveStudioUser } from './services/studioAuth';
-import { downloadProjectJsonFromCloud, fetchCloudProjectMeta, uploadProjectJsonToCloud, uploadProjectAssetToCloud, downloadProjectAssetFromCloud } from './services/cloudSyncService';
-import { collectAssetPathsFromProjectJson } from './services/projectAssetService';
 import { createDefaultCategorizedMoodboard } from './data/moodboardTypes';
 import {
     buildSceneWallFromProjectContext,
@@ -706,7 +702,6 @@ const normalizeAutosaveSettings = (value?: Partial<AutosaveSettings> | null): Au
     recoverOnCrash: value?.recoverOnCrash !== false,
 });
 
-const SYNC_POLL_INTERVAL_MS = 12000;
 const LOCK_HEARTBEAT_MS = 30000;
 const LOCK_STALE_AFTER_MS = 120000;
 const LOCK_FILE_NAME = '.aivp-lock.json';
@@ -933,7 +928,8 @@ function App() {
     const [editTrimMode, setEditTrimMode] = useState<'normal' | 'ripple' | 'roll' | 'slip' | 'slide'>('normal');
     const [storyBible, setStoryBible] = useState<StoryBible>(INITIAL_BIBLE);
     const [projectCollaboration, setProjectCollaboration] = useState<ProjectCollaboration>(DEFAULT_PROJECT_COLLABORATION);
-    const [projectSync, setProjectSync] = useState<ProjectSyncConfig>(DEFAULT_PROJECT_SYNC);
+    // Preserve old project metadata without reconnecting or scheduling sync.
+    const legacySync = useRef<ProjectSyncConfig>(DEFAULT_PROJECT_SYNC);
     const [projectSyncStatus, setProjectSyncStatus] = useState<ProjectSyncStatus>({ state: 'idle' });
     const [realtimePresence, setRealtimePresence] = useState<ProjectCollaborationPresence[]>([]);
     const [realtimeStatus, setRealtimeStatus] = useState<'DISCONNECTED' | ProjectRealtimeStatus>('DISCONNECTED');
@@ -1284,8 +1280,9 @@ function App() {
     const isHydratingRef = useRef(false);
     const playbackRafRef = useRef<number | null>(null);
     const playheadRef = useRef(0);
+    const playbackDurationRef = useRef(0);
+    playbackDurationRef.current = Math.max(0, ...timelineClips.map(clip => clip.end));
     const projectFileMtimeRef = useRef<number | null>(null);
-    const syncStatusRef = useRef<ProjectSyncStatus>({ state: 'idle' });
     const sessionIdRef = useRef(`session-${Date.now()}-${Math.random().toString(16).slice(2)}`);
     const startupAppliedRef = useRef(false);
     const projectHubActivePhaseRef = useRef<ProjectHubPhase | null>(null);
@@ -1337,8 +1334,6 @@ function App() {
         collaboration: {
             collaboratorCount: Math.max(projectCollaboration.collaborators.length, realtimePresence.length),
             activePresenceCount: realtimePresence.filter((entry) => entry.status !== 'idle').length,
-            syncProvider: projectSync.provider || null,
-            autoSync: projectSync.autoSync !== false,
         },
     }), [
         activeWorkspace,
@@ -1346,8 +1341,6 @@ function App() {
         projectCollaboration.collaborators.length,
         projectHubActivePhase,
         projectName,
-        projectSync.autoSync,
-        projectSync.provider,
         realtimePresence,
         references.length,
         resolvedCreativeDNA,
@@ -2462,18 +2455,6 @@ function App() {
         }
     }, []);
 
-    useEffect(() => {
-        handleCloudOAuthCallback()
-            .then((handled) => {
-                if (handled) {
-                    setShowSettings(true);
-                }
-            })
-            .catch((error) => {
-                console.error('Cloud OAuth callback failed', error);
-            });
-    }, []);
-
     useEffect(() => subscribeUsage(entry => {
         setUsageLedger(previous => ({ entries: [...previous.entries, entry] }));
     }), []);
@@ -2499,9 +2480,6 @@ function App() {
         }
     }, [activeProfileId]);
 
-    useEffect(() => {
-        syncStatusRef.current = projectSyncStatus;
-    }, [projectSyncStatus]);
 
     useEffect(() => {
         if (typeof document === 'undefined') return;
@@ -2572,16 +2550,16 @@ function App() {
             return;
         }
 
-        if (timelineClips.length === 0) {
+        if (playbackDurationRef.current === 0) {
             setIsPlaying(false);
             return;
         }
 
-        const totalDuration = Math.max(...timelineClips.map(c => c.end), 0);
         let lastTime = performance.now();
         let current = playheadRef.current;
 
         const tick = () => {
+            const totalDuration = playbackDurationRef.current;
             const now = performance.now();
             const delta = (now - lastTime) / 1000;
             lastTime = now;
@@ -2606,7 +2584,7 @@ function App() {
                 playbackRafRef.current = null;
             }
         };
-    }, [isPlaying, timelineClips]);
+    }, [isPlaying]);
 
     // Check for API Key on load
     useEffect(() => {
@@ -2774,20 +2752,6 @@ function App() {
         };
     }, [activeProfile, projectCollaboration]);
 
-    const getProjectDisplayName = useCallback(() => {
-        return projectName || storyBible.title || 'Untitled Project';
-    }, [projectName, storyBible.title]);
-
-    const mergeProjectSyncIntoRaw = useCallback((raw: string, sync: ProjectSyncConfig) => {
-        try {
-            const parsed = JSON.parse(raw);
-            parsed.sync = sync;
-            return JSON.stringify(parsed, null, 2);
-        } catch {
-            return raw;
-        }
-    }, []);
-
     const normalizeShotPrompts = useCallback((shots?: ShotPrompt[]) => {
         return normalizeShotPromptList(shots);
     }, []);
@@ -2869,7 +2833,7 @@ function App() {
                 meetingLinks: loadedCollaboration.meetingLinks || [],
                 storageLinks: loadedCollaboration.storageLinks || [],
             });
-            setProjectSync({ ...DEFAULT_PROJECT_SYNC, ...project.sync });
+            legacySync.current = { ...DEFAULT_PROJECT_SYNC, ...project.sync };
             setProjectSyncStatus({ state: 'idle' });
             resetReferences(project.references || []);
             setAvatars(project.avatars || []);
@@ -2971,7 +2935,7 @@ function App() {
             setProjectName(storyBible.title || 'Untitled Project');
             setLastAgentApplyBatch(null);
             setProjectCollaboration(DEFAULT_PROJECT_COLLABORATION);
-            setProjectSync(DEFAULT_PROJECT_SYNC);
+            legacySync.current = DEFAULT_PROJECT_SYNC;
             setProjectSyncStatus({ state: 'idle' });
             setUsageLedger(INITIAL_USAGE_LEDGER);
             setCostSettings(DEFAULT_COST_SETTINGS);
@@ -2990,115 +2954,6 @@ function App() {
     const handleOpenRecentProject = async (path: string) => {
         await handleLoadProject(path);
     };
-
-    const pushProjectToCloud = useCallback(async (folderPath: string) => {
-        if (!projectSync.provider) return;
-        try {
-            const raw = await readProjectMetaFile(folderPath, 'project.json');
-            if (!raw) {
-                throw new Error('Project file not found.');
-            }
-            const result = await uploadProjectJsonToCloud(
-                projectSync.provider,
-                projectSync,
-                getProjectDisplayName(),
-                raw,
-            );
-            const assetPaths = collectAssetPathsFromProjectJson(raw);
-            let nextSync = result.sync;
-            for (let i = 0; i < assetPaths.length; i++) {
-                const path = assetPaths[i];
-                const data = await readProjectBinaryFile(folderPath, path);
-                if (!data) {
-                    setProjectSyncStatus(prev => ({
-                        ...prev,
-                        state: 'checking',
-                        message: `Skipping missing asset ${i + 1}/${assetPaths.length}...`,
-                    }));
-                    continue;
-                }
-                setProjectSyncStatus(prev => ({
-                    ...prev,
-                    state: 'checking',
-                    message: `Uploading assets ${i + 1}/${assetPaths.length}...`,
-                }));
-                nextSync = await uploadProjectAssetToCloud(
-                    projectSync.provider,
-                    nextSync,
-                    getProjectDisplayName(),
-                    path,
-                    data,
-                );
-            }
-            const mergedRaw = mergeProjectSyncIntoRaw(raw, nextSync);
-            if (mergedRaw !== raw) {
-                await writeProjectMetaFile(folderPath, 'project.json', mergedRaw);
-                refreshProjectFileMtime(folderPath);
-            }
-            setProjectSync(nextSync);
-            setProjectSyncStatus(prev => ({
-                ...prev,
-                state: 'up-to-date',
-                message: assetPaths.length ? 'Project and assets uploaded.' : 'Project uploaded.',
-                incoming: undefined,
-            }));
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : 'Cloud upload failed.';
-            setProjectSyncStatus(prev => ({ ...prev, state: 'error', message: msg }));
-        }
-    }, [projectSync, getProjectDisplayName, mergeProjectSyncIntoRaw, refreshProjectFileMtime]);
-
-    const pullProjectFromCloud = useCallback(async () => {
-        if (!projectPath || !projectSync.provider) return;
-        try {
-            const download = await downloadProjectJsonFromCloud(
-                projectSync.provider,
-                projectSync,
-                getProjectDisplayName(),
-            );
-            const conflictStamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const localRaw = await readProjectMetaFile(projectPath, 'project.json');
-            if (localRaw) {
-                await writeProjectMetaFile(projectPath, `conflicts/project_conflict_${conflictStamp}.json`, localRaw);
-            }
-            let nextSync = download.sync;
-            const mergedContent = mergeProjectSyncIntoRaw(download.content, nextSync);
-            await writeProjectMetaFile(projectPath, 'project.json', mergedContent);
-            const assetPaths = collectAssetPathsFromProjectJson(mergedContent);
-            for (let i = 0; i < assetPaths.length; i++) {
-                const path = assetPaths[i];
-                setProjectSyncStatus(prev => ({
-                    ...prev,
-                    state: 'checking',
-                    message: `Downloading assets ${i + 1}/${assetPaths.length}...`,
-                }));
-                const asset = await downloadProjectAssetFromCloud(
-                    projectSync.provider,
-                    nextSync,
-                    getProjectDisplayName(),
-                    path,
-                );
-                nextSync = asset.sync;
-                const stat = await statProjectAsset(projectPath, path);
-                if (stat?.exists) {
-                    const localData = await readProjectBinaryFile(projectPath, path);
-                    if (localData) {
-                        await writeProjectBinaryFile(
-                            projectPath,
-                            `conflicts/assets_${conflictStamp}/${path}`,
-                            localData
-                        );
-                    }
-                }
-                await writeProjectBinaryFile(projectPath, path, new Uint8Array(asset.data));
-            }
-            setProjectSync(nextSync);
-            await handleLoadProject(projectPath);
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : 'Cloud download failed.';
-            setProjectSyncStatus(prev => ({ ...prev, state: 'error', message: msg }));
-        }
-    }, [projectPath, projectSync, getProjectDisplayName, handleLoadProject]);
 
     const handleReloadProject = async () => {
         if (!projectPath) return;
@@ -3142,7 +2997,7 @@ function App() {
                 {
                     storyBible,
                     collaboration: collaborationForSave,
-                    sync: targetProjectPath ? DEFAULT_PROJECT_SYNC : projectSync,
+                    sync: targetProjectPath ? DEFAULT_PROJECT_SYNC : legacySync.current,
                     references,
                     avatars,
                     projectHub: { shotPrompts },
@@ -3166,7 +3021,7 @@ function App() {
             if (targetProjectPath) {
                 await saveWorkspacePreferences({ activeProject: folderPath });
                 setProjectPath(folderPath);
-                setProjectSync({ ...DEFAULT_PROJECT_SYNC });
+                legacySync.current = { ...DEFAULT_PROJECT_SYNC };
             }
             setLastSavedAt(savedAt);
             setProjectName(savedName);
@@ -3175,13 +3030,10 @@ function App() {
             setProjectCollaboration(collaborationForSave);
             setProjectSyncStatus(prev => ({
                 ...prev,
-                state: projectSync.provider ? 'up-to-date' : prev.state,
-                message: projectSync.provider ? 'Saved to your workspace.' : prev.message,
+                state: 'up-to-date',
+                message: 'Saved to your workspace.',
             }));
             refreshProjectFileMtime(folderPath);
-            if (!targetProjectPath && projectSync.provider && projectSync.autoSync !== false && typeof window !== 'undefined' && projectApi) {
-                await pushProjectToCloud(folderPath);
-            }
             upsertRecentProject({
                 path: folderPath,
                 name: savedName,
@@ -3232,7 +3084,7 @@ function App() {
         setLastSavedAt(null);
         setLastAutoSavedAt(null);
         setProjectCollaboration(DEFAULT_PROJECT_COLLABORATION);
-        setProjectSync(DEFAULT_PROJECT_SYNC);
+        legacySync.current = DEFAULT_PROJECT_SYNC;
         setProjectSyncStatus({ state: 'idle' });
         setRealtimePresence([]);
         setRealtimeStatus('DISCONNECTED');
@@ -3272,7 +3124,7 @@ function App() {
                 {
                     storyBible,
                     collaboration: collaborationForSave,
-                    sync: projectSync,
+                    sync: legacySync.current,
                     references,
                     avatars,
                     projectHub: { shotPrompts },
@@ -3299,13 +3151,10 @@ function App() {
             setProjectCollaboration(collaborationForSave);
             setProjectSyncStatus(prev => ({
                 ...prev,
-                state: projectSync.provider ? 'up-to-date' : prev.state,
-                message: projectSync.provider ? 'Auto-saved to disk.' : prev.message,
+                state: 'up-to-date',
+                message: 'Auto-saved to disk.',
             }));
             refreshProjectFileMtime(projectPath);
-            if (projectSync.provider && projectSync.autoSync !== false && typeof window !== 'undefined' && projectApi) {
-                await pushProjectToCloud(projectPath);
-            }
             editorStorage.setItem(
                 AUTOSAVE_META_KEY,
                 JSON.stringify({
@@ -3353,10 +3202,8 @@ function App() {
         isAutoSaving,
         autosaveSettings,
         projectSyncStatus.state,
-        projectSync,
         buildCollaborationForSave,
         refreshProjectFileMtime,
-        pushProjectToCloud,
         upsertRecentProject,
     ]);
 
@@ -3390,7 +3237,6 @@ function App() {
         projectName,
         storyBible,
         projectCollaboration,
-        projectSync,
         references,
         avatars,
         shotPrompts,
@@ -3416,120 +3262,6 @@ function App() {
             }
         };
     }, [projectPath]);
-
-    useEffect(() => {
-        if (!projectPath || !projectSync.provider) {
-            setProjectSyncStatus(prev => ({ ...prev, state: 'idle', message: projectPath ? 'Sync not configured.' : undefined, incoming: undefined }));
-            return;
-        }
-        if (projectSync.autoSync === false) {
-            setProjectSyncStatus(prev => ({ ...prev, state: 'idle', message: 'Auto-sync paused.', incoming: undefined }));
-            return;
-        }
-        if (typeof window === 'undefined' || !projectApi) {
-            setProjectSyncStatus(prev => ({ ...prev, state: 'error', message: 'Connect cloud storage in Connections before syncing.', incoming: undefined }));
-            return;
-        }
-        const normalizePath = (value: string) => value.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-        const root = projectSync.rootPath ? normalizePath(projectSync.rootPath) : '';
-        const projectFolder = normalizePath(projectPath);
-        if (root && !projectFolder.startsWith(`${root}/`) && projectFolder !== root) {
-            setProjectSyncStatus(prev => ({ ...prev, state: 'idle', message: 'Project is outside the selected sync folder.', incoming: undefined }));
-            return;
-        }
-
-        let isActive = true;
-        const poll = async () => {
-            if (!isActive) return;
-            if (syncStatusRef.current.state === 'incoming') return;
-            const timestamp = new Date().toISOString();
-            try {
-                setProjectSyncStatus(prev => ({ ...prev, state: 'checking', lastCheckedAt: timestamp }));
-                const stat = await statProjectFile(projectPath);
-                if (!stat.exists || typeof stat.mtimeMs !== 'number') {
-                    setProjectSyncStatus(prev => ({ ...prev, state: 'error', message: 'Project file not found.', incoming: undefined }));
-                    return;
-                }
-                const known = projectFileMtimeRef.current;
-                if (known && stat.mtimeMs > known + 2000 && !isProjectSaving && !isProjectLoading && !isAutoSaving) {
-                    const remote = await loadProjectFromFolder(projectPath);
-                    if (!isActive) return;
-                    setProjectSyncStatus(prev => ({
-                        ...prev,
-                        state: 'incoming',
-                        message: 'Incoming update detected.',
-                        lastCheckedAt: timestamp,
-                        incoming: {
-                            by: remote.collaboration?.lastModifiedBy,
-                            at: remote.collaboration?.lastModifiedAt,
-                        },
-                    }));
-                    return;
-                }
-                projectFileMtimeRef.current = stat.mtimeMs;
-                setProjectSyncStatus(prev => ({
-                    ...prev,
-                    state: 'up-to-date',
-                    message: 'Up to date.',
-                    lastCheckedAt: timestamp,
-                    incoming: undefined,
-                }));
-
-                if (projectSync.provider) {
-                    try {
-                        const remote = await fetchCloudProjectMeta(projectSync.provider, projectSync, getProjectDisplayName());
-                        if (remote) {
-                            setProjectSync(remote.sync);
-                            if (remote.modifiedAt && projectSync.remoteModifiedAt) {
-                                const remoteTime = new Date(remote.modifiedAt).getTime();
-                                const knownTime = new Date(projectSync.remoteModifiedAt).getTime();
-                                if (Number.isFinite(remoteTime) && Number.isFinite(knownTime) && remoteTime > knownTime + 2000) {
-                                    setProjectSyncStatus(prev => ({
-                                        ...prev,
-                                        state: 'incoming',
-                                        message: 'Incoming cloud update detected.',
-                                        lastCheckedAt: timestamp,
-                                        incoming: {
-                                            by: prev.incoming?.by,
-                                            at: remote.modifiedAt,
-                                        },
-                                    }));
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        const msg = e instanceof Error ? e.message : 'Cloud sync check failed.';
-                        const normalized = msg.toLowerCase();
-                        const friendly = normalized.includes('not_found') || normalized.includes('not found')
-                            ? 'Cloud file not found. Push to create it.'
-                            : msg;
-                        setProjectSyncStatus(prev => ({ ...prev, message: friendly }));
-                    }
-                }
-            } catch (e) {
-                if (!isActive) return;
-                const msg = e instanceof Error ? e.message : 'Sync status failed.';
-                setProjectSyncStatus(prev => ({ ...prev, state: 'error', message: msg }));
-            }
-        };
-
-        poll();
-        const intervalId = window.setInterval(poll, SYNC_POLL_INTERVAL_MS);
-        return () => {
-            isActive = false;
-            window.clearInterval(intervalId);
-        };
-    }, [
-        projectPath,
-        projectSync.provider,
-        projectSync.rootPath,
-        projectSync.autoSync,
-        projectSync.remoteModifiedAt,
-        isProjectSaving,
-        isProjectLoading,
-        isAutoSaving,
-        getProjectDisplayName,
-    ]);
 
     useEffect(() => {
         if (!projectPath) {
@@ -5037,32 +4769,9 @@ function App() {
     const handleSplitClip = (clipId: string, splitAt: number) => {
         const clip = timelineClips.find(c => c.id === clipId);
         if (!clip) return;
-        if (splitAt <= clip.start || splitAt >= clip.end) return;
-
-        const sourceIn = clip.sourceIn ?? 0;
-        const sourceOut = clip.sourceOut ?? (sourceIn + clip.duration);
-        const splitSourceAt = sourceIn + (splitAt - clip.start) * clip.speed;
-        const firstDuration = Math.max(MIN_TIMELINE_CLIP_DURATION, splitSourceAt - sourceIn);
-        const secondDuration = Math.max(MIN_TIMELINE_CLIP_DURATION, sourceOut - splitSourceAt);
-
-        const firstClip = normalizeClipTiming({
-            ...clip,
-            end: splitAt,
-            duration: firstDuration,
-            sourceIn,
-            sourceOut: splitSourceAt,
-        });
-
-        const secondClip = normalizeClipTiming({
-            ...clip,
-            id: `clip-${Date.now()}`,
-            start: splitAt,
-            duration: secondDuration,
-            sourceIn: splitSourceAt,
-            sourceOut,
-        });
-
-        setTimelineClips(timelineClips.map(c => c.id === clipId ? firstClip : c).concat(secondClip));
+        const split = splitTimelineClip(clip, splitAt, `clip-${crypto.randomUUID()}`);
+        if (!split) return;
+        setTimelineClips(timelineClips.flatMap(c => c.id === clipId ? split : [c]));
     };
 
     const simulateEditPlan = useCallback((plan: EditPlan, selectedOperationIds?: string[]): EditPlanApplyResult & {
@@ -6147,6 +5856,8 @@ function App() {
         setStudioAgentYieldedToManualControl(false);
     }, []);
 
+    const assistantEditState = useRef({ clips: timelineClips, tracks: timelineTracks, selectedId: selectedClipId });
+    useLayoutEffect(() => { assistantEditState.current = { clips: timelineClips, tracks: timelineTracks, selectedId: selectedClipId }; }, [timelineClips, timelineTracks, selectedClipId]);
     const assistantContext = useMemo(() => {
         const moodboardCount =
             storyBible.categorizedMoodboard?.items?.length ||
@@ -6162,6 +5873,7 @@ function App() {
             `Storyboard shots: ${shotPrompts.length}`,
             `Moodboard images: ${moodboardCount}`,
             `Selected clip: ${selectedClipId || 'none'}`,
+            `Selected transform: ${JSON.stringify(timelineClips.find(clip => clip.id === selectedClipId)?.transform || { position: { x: 50, y: 50 }, rotation: 0 })}`,
             `Selected clip media: ${selectedTimelineMedia ? `${selectedTimelineMedia.name} (${selectedTimelineMedia.type})` : 'none'}`,
             `Assistant image target: ${assistantImageTarget?.label || 'none'}`,
             `Playhead: ${playheadPosition.toFixed(2)}s`,
@@ -6201,7 +5913,7 @@ function App() {
         studioAgentState.pendingApproval?.reason,
         studioAgentState.status,
         studioAgentApprovalBundle,
-        timelineClips.length,
+        timelineClips,
     ]);
 
     const assistantWorkspaceEnum: Workspace[] = allowedWorkspaces;
@@ -6221,6 +5933,32 @@ function App() {
     } as const;
 
     const assistantTools: FunctionDeclaration[] = [
+        {
+            name: 'moveSelectedClip',
+            description: 'Move the selected picture in exactly one direction within the frame. Does not reorder clips. Use 5 percent for a little movement.',
+            parameters: { type: Type.OBJECT, properties: {
+                direction: { type: Type.STRING, enum: ['left', 'right', 'up', 'down'] },
+                percent: { type: Type.NUMBER, description: 'Positive movement as a percentage of frame size; default 5.' },
+            }, required: ['direction'] },
+        },
+        {
+            name: 'rotateSelectedClip',
+            description: 'Rotate the selected picture by the specified degrees. Positive is clockwise; negative is counterclockwise. Does not change position.',
+            parameters: { type: Type.OBJECT, properties: { degrees: { type: Type.NUMBER } }, required: ['degrees'] },
+        },
+        {
+            name: 'resetSelectedClipTransform',
+            description: 'Center the selected picture and reset its rotation to zero. Preserve scale and opacity.',
+            parameters: { type: Type.OBJECT, properties: {} },
+        },
+        {
+            name: 'transformSelectedClip',
+            description: 'Move or rotate the selected timeline picture or text. Position is percent of frame: center is x=50,y=50; right/down is positive. Rotation is clockwise degrees. Use relative=true for move left/right/up/down or rotate by; a little movement is 5%. Use absolute for center/reset. This does not reorder the timeline.',
+            parameters: { type: Type.OBJECT, properties: {
+                clipId: { type: Type.STRING, description: 'Exact clip ID; omit to use selection.' },
+                x: { type: Type.NUMBER }, y: { type: Type.NUMBER }, rotation: { type: Type.NUMBER }, relative: { type: Type.BOOLEAN },
+            } },
+        },
         {
             name: 'navigateWorkspace',
             description: 'Open a workspace tab.',
@@ -6735,7 +6473,26 @@ function App() {
         studioAgentYieldedToManualControl,
     ]);
 
+    const runAssistantTransform = (args: AssistantTransform) => {
+            try {
+                const state = assistantEditState.current;
+                const result = transformAssistantClip(state.clips, state.tracks, state.selectedId, args);
+                assistantEditState.current = { ...state, clips: result.clips };
+                setTimelineClips(result.clips);
+                return { success: true, transform: result.transform, message: 'Updated the clip position and rotation. Use Undo to restore it.' };
+            } catch (error) { return { success: false, message: error instanceof Error ? error.message : 'The clip could not be transformed.' }; }
+    };
     const aiToolExecutor = {
+        transformSelectedClip: runAssistantTransform,
+        moveSelectedClip: ({ direction, percent = 5 }: { direction: string; percent?: number }) => {
+            if (!['left', 'right', 'up', 'down'].includes(direction) || typeof percent !== 'number' || !Number.isFinite(percent) || percent <= 0 || percent > 100) {
+                return { success: false, message: 'Choose left, right, up or down and a positive movement within 100%.' };
+            }
+            return runAssistantTransform({ relative: true, ...(['left', 'right'].includes(direction)
+                ? { x: direction === 'left' ? -percent : percent } : { y: direction === 'up' ? -percent : percent }) });
+        },
+        rotateSelectedClip: ({ degrees }: { degrees: number }) => runAssistantTransform({ rotation: degrees, relative: true }),
+        resetSelectedClipTransform: () => runAssistantTransform({ x: 50, y: 50, rotation: 0 }),
         getStudioAgentStatus: () => getStudioAgentStatusPayload(),
         studioAgentRunProjectWorkflow: async ({
             prompt,
@@ -8223,23 +7980,11 @@ function App() {
                         storyBible={storyBible}
                         setStoryBible={setStoryBible}
                         projectPath={projectPath}
-                        projectSync={projectSync}
-                        setProjectSync={setProjectSync}
                         projectCollaboration={projectCollaboration}
                         setProjectCollaboration={setProjectCollaboration}
                         syncStatus={projectSyncStatus}
                         activeProfileName={activeProfile?.name || ''}
                         onReloadProject={handleReloadProject}
-                        onPushToCloud={() => {
-                            if (projectPath && typeof window !== 'undefined' && projectApi) {
-                                pushProjectToCloud(projectPath);
-                            }
-                        }}
-                        onPullFromCloud={() => {
-                            if (typeof window !== 'undefined' && projectApi) {
-                                pullProjectFromCloud();
-                            }
-                        }}
                         shotPrompts={shotPrompts}
                         setShotPrompts={setShotPrompts}
                         onRoughCutReady={(newMedia) => {
@@ -8297,7 +8042,7 @@ function App() {
                                 presence={realtimePresence}
                                 configuredCollaboratorCount={projectCollaboration.collaborators.length}
                                 realtimeStatus={realtimeStatus}
-                                syncProvider={projectSync.provider || (collaborationDocStatus === 'connected' ? 'yjs' : null)}
+                                syncProvider={collaborationDocStatus === 'connected' ? 'yjs' : null}
                                 localUserName={localCollaborator.name}
                                 activeWorkspace={activeWorkspace}
                                 activePhase={projectHubActivePhase}
@@ -8322,7 +8067,7 @@ function App() {
                                             title={project.path}
                                         >
                                             <span className="team-space__name">{project.name || project.path.split(/[\\/]/).pop()}</span>
-                                            <span className="team-space__meta">{project.path === projectPath ? 'Open now' : 'Open'}{projectSync.provider && project.path === projectPath ? ` · synced via ${projectSync.provider}` : ''}</span>
+                                            <span className="team-space__meta">{project.path === projectPath ? 'Open now' : 'Open'}</span>
                                         </button>
                                     ))}
                                 </div>
@@ -8735,7 +8480,7 @@ function App() {
                             presence={realtimePresence}
                             configuredCollaboratorCount={projectCollaboration.collaborators.length}
                             realtimeStatus={realtimeStatus}
-                            syncProvider={projectSync.provider || (collaborationDocStatus === 'connected' ? 'yjs' : null)}
+                            syncProvider={collaborationDocStatus === 'connected' ? 'yjs' : null}
                             localUserName={localCollaborator.name}
                             activeWorkspace={activeWorkspace}
                             activePhase={projectHubActivePhase}

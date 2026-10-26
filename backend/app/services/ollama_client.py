@@ -82,7 +82,7 @@ def check_ollama_status(host: Optional[str] = None, timeout: float = 2.0) -> Oll
     return OllamaStatusResponse(available=False, host=target_host, error=error)
 
 
-def generate_ollama(prompt, model=None, host=None, timeout=None, json_output=True):
+def generate_ollama(prompt, model=None, host=None, timeout=None, json_output=True, max_tokens=1024, context_size=None):
     """Validated non-streaming generation, matching Rayflow's existing protocol."""
     status = check_ollama_status(host)
     if not status.available:
@@ -99,9 +99,11 @@ def generate_ollama(prompt, model=None, host=None, timeout=None, json_output=Tru
     except ValueError:
         raise OllamaError('OLLAMA_GENERATION_TIMEOUT must be between 1 and 600 seconds.') from None
     payload = {'model': selected, 'prompt': prompt, 'stream': False,
-               'options': {'temperature': 0.2, 'top_p': 0.9, 'num_predict': 1024}}
+               'options': {'temperature': 0.2, 'top_p': 0.9, 'num_predict': max_tokens}}
     if selected.startswith('qwen3:'):
         payload['think'] = False
+    if context_size:
+        payload['options']['num_ctx'] = context_size
     if json_output:
         payload['format'] = 'json'
     try:
@@ -110,9 +112,15 @@ def generate_ollama(prompt, model=None, host=None, timeout=None, json_output=Tru
         if response.status_code == 404:
             raise OllamaError('Ollama could not load the selected model. Reconnect and verify it is installed.', 422)
         if response.status_code != 200:
+            try:
+                message = str(response.json().get('error', '')).lower()
+            except (ValueError, AttributeError):
+                message = ''
+            if any(word in message for word in ('memory', 'allocate', 'out of memory')):
+                raise OllamaError('Ollama could not allocate enough memory for this model. Close memory-heavy apps or select a smaller installed model, then retry.')
             raise OllamaError(f'Ollama generation returned HTTP {response.status_code}. Check model resources and server access.')
         data = response.json()
-        if (not isinstance(data, dict) or data.get('done') is not True or
+        if (not isinstance(data, dict) or data.get('done') is not True or data.get('done_reason') == 'length' or
                 not isinstance(data.get('response'), str) or not data['response'].strip()):
             raise OllamaError('Ollama did not return a completed response. Try a smaller instruction or another installed model.')
         return data['response'].strip()
