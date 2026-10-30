@@ -1,5 +1,14 @@
-# Rendered by the nginx:alpine entrypoint via envsubst. ${PORT} and ${BACKEND_URL}
-# are supplied by Cloud Run. Serves the SPA and proxies /api to the backend.
+# Rendered by the nginx:alpine entrypoint via envsubst.
+# Variables supplied by Cloud Run / the deploy step:
+#   ${PORT}         - port nginx listens on (Cloud Run injects this)
+#   ${BACKEND_URL}  - full backend origin, e.g. https://rayflow-backend-xxxx.run.app
+#   ${BACKEND_HOST} - backend hostname only, e.g. rayflow-backend-xxxx.run.app
+#
+# Proxying to a Cloud Run HTTPS upstream requires that the request carries the
+# BACKEND's host as both the HTTP Host header and the TLS SNI name, otherwise
+# Cloud Run's front end cannot route the request and returns an error (seen as a
+# 502 at nginx). We therefore set Host/SNI to ${BACKEND_HOST} and use a resolver
+# so the upstream name is resolved at request time.
 server {
     listen       ${PORT};
     server_name  _;
@@ -7,33 +16,37 @@ server {
     root   /usr/share/nginx/html;
     index  index.html;
 
-    # Security headers (kept lightweight; the backend sets its own API headers).
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "same-origin" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
 
     client_max_body_size 1024m;
 
-    # Reverse-proxy the API to the backend Cloud Run service. Credentials and
-    # cookies flow through; long timeouts accommodate planning/transcription.
     location /api/ {
-        proxy_pass ${BACKEND_URL};
+        # Google public DNS; required because we proxy to a variable upstream.
+        resolver 8.8.8.8 1.1.1.1 ipv6=off valid=60s;
+        set $backend "${BACKEND_URL}";
+
+        proxy_pass $backend;
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
+
+        # Cloud Run routes by Host + TLS SNI — both must be the backend host.
+        proxy_set_header Host "${BACKEND_HOST}";
+        proxy_ssl_server_name on;
+        proxy_ssl_name "${BACKEND_HOST}";
+
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto https;
         proxy_set_header Origin $http_origin;
         proxy_set_header Cookie $http_cookie;
         proxy_read_timeout 620s;
         proxy_send_timeout 620s;
     }
 
-    # SPA routing: fall back to index.html for client-side routes.
     location / {
         try_files $uri $uri/ /index.html;
     }
 
-    # Cache built, fingerprinted assets aggressively.
     location /assets/ {
         expires 1y;
         add_header Cache-Control "public, immutable";

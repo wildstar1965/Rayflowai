@@ -137,10 +137,11 @@ steps:
         set -e
         # $$ escapes literal $ so Cloud Build does not treat these as substitutions.
         BACKEND_URL=$$(gcloud run services describe ${_BACKEND_SERVICE} --region=${_REGION} --format='value(status.url)')
+        BACKEND_HOST=$$(echo "$$BACKEND_URL" | sed -E 's#^https?://##')
         gcloud run deploy ${_FRONTEND_SERVICE} \
           --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/frontend:$SHORT_SHA \
           --region=${_REGION} --platform=managed --allow-unauthenticated \
           --port=8080 --cpu=1 --memory=512Mi --concurrency=80 \
           --min-instances=0 --max-instances=4 \
-          --set-env-vars=BACKEND_URL=$$BACKEND_URL
+          --set-env-vars=BACKEND_URL=$$BACKEND_URL,BACKEND_HOST=$$BACKEND_HOST
     waitFor: ['deploy-backend', 'push-frontend']
