@@ -13,6 +13,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def reset_workspace_context():
+    # TestClient exercises WorkspaceMiddleware, which sets the workspace_id
+    # ContextVar. Reset it after each test so request-scoped state never leaks
+    # into other test modules (e.g. job_history's storage path resolution).
+    from app.editor.context import workspace_id, account
+    yield
+    workspace_id.set(None)
+    account.set(None)
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv('RAYFLOW_ENV', 'test')
