@@ -85,7 +85,7 @@ steps:
 
   # 5. Deploy backend Cloud Run Service.
   - id: deploy-backend
-    name: gcr.io/google-cloud-sdk/cloud-sdk
+    name: gcr.io/cloud-builders/gcloud
     entrypoint: gcloud
     args:
       - run
@@ -108,7 +108,7 @@ steps:
 
   # 6. Create/update the render Cloud Run Job.
   - id: deploy-render-job
-    name: gcr.io/google-cloud-sdk/cloud-sdk
+    name: gcr.io/cloud-builders/gcloud
     entrypoint: bash
     args:
       - -c
@@ -129,7 +129,7 @@ steps:
 
   # 7. Deploy frontend Cloud Run Service (public), proxying /api to the backend.
   - id: deploy-frontend
-    name: gcr.io/google-cloud-sdk/cloud-sdk
+    name: gcr.io/cloud-builders/gcloud
     entrypoint: bash
     args:
       - -c
