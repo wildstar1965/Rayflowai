@@ -13,7 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libgomp1
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app/backend
 COPY backend/requirements.txt backend/constraints.txt ./
-RUN python -m pip install -r requirements.txt -c constraints.txt
+# Resilient install for slower/CI networks: longer per-read timeout and retries.
+RUN python -m pip install --timeout 180 --retries 10 -r requirements.txt -c constraints.txt
 COPY backend/app ./app
 COPY backend/assets ./assets
 COPY backend/setup_local_assets.py ./
