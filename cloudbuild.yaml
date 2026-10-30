@@ -145,3 +145,18 @@ steps:
           --min-instances=0 --max-instances=4 \
           --set-env-vars=BACKEND_URL=$$BACKEND_URL,BACKEND_HOST=$$BACKEND_HOST
     waitFor: ['deploy-backend', 'push-frontend']
+
+  # 8. Tell the backend which origin (the frontend) may create workspaces. This
+  # runs last because it needs the frontend's deployed URL. The backend's
+  # require_origin() check allows CORS_ORIGINS + RAYFLOW_PUBLIC_ORIGINS.
+  - id: allow-frontend-origin
+    name: gcr.io/cloud-builders/gcloud
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -e
+        FRONTEND_URL=$$(gcloud run services describe ${_FRONTEND_SERVICE} --region=${_REGION} --format='value(status.url)')
+        gcloud run services update ${_BACKEND_SERVICE} --region=${_REGION} \
+          --update-env-vars=RAYFLOW_PUBLIC_ORIGINS=$$FRONTEND_URL,CORS_ORIGINS=$$FRONTEND_URL
+    waitFor: ['deploy-frontend']
