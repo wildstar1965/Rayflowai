@@ -21,31 +21,7 @@ RayFlow AI is a **Qloo‑powered, agentic video‑editing studio**. It learns yo
 
 </div>
 
----
 
-## 📖 Table of contents
-
-- [What is RayFlow AI?](#-what-is-rayflow-ai)
-- [The big idea: taste‑driven editing](#-the-big-idea-tastedriven-editing)
-- [How the intelligence works](#-how-the-intelligence-works)
-- [Feature overview](#-feature-overview)
-- [System architecture](#-system-architecture)
-- [The agentic taste loop (end‑to‑end)](#-the-agentic-taste-loop-endtoend)
-- [Qloo integration](#-qloo-integration)
-- [Request flow: creating a taste reel](#-request-flow-creating-a-taste-reel)
-- [Rendering on Cloud Run Jobs](#-rendering-on-cloud-run-jobs)
-- [Data model & storage](#-data-model--storage)
-- [Tech stack](#-tech-stack)
-- [Backend API reference](#-backend-api-reference)
-- [Repository layout](#-repository-layout)
-- [Run it locally](#-run-it-locally)
-- [Deploy to Google Cloud Run](#-deploy-to-google-cloud-run)
-- [Security & privacy](#-security--privacy)
-- [Testing](#-testing)
-- [Project status](#-project-status)
-- [Further documentation](#-further-documentation)
-
----
 
 ## 🎯 What is RayFlow AI?
 
