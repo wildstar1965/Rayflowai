@@ -114,15 +114,16 @@ steps:
       - -c
       - |
         set -e
+        # $$ escapes a literal $ so Cloud Build does not treat these as substitutions.
         COMMON="--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/render-worker:$SHORT_SHA \
           --region=${_REGION} --tasks=1 --max-retries=1 --task-timeout=2000 \
           --cpu=2 --memory=4Gi \
           --set-env-vars=RAYFLOW_ENV=production,RAYFLOW_STORAGE_DIR=/tmp/rayflow,GCS_BUCKET=${_GCS_BUCKET},GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION} \
           --set-secrets=${_BACKEND_SECRETS}"
         if gcloud run jobs describe ${_RENDER_JOB} --region=${_REGION} >/dev/null 2>&1; then
-          gcloud run jobs update ${_RENDER_JOB} $COMMON
+          gcloud run jobs update ${_RENDER_JOB} $$COMMON
         else
-          gcloud run jobs create ${_RENDER_JOB} $COMMON
+          gcloud run jobs create ${_RENDER_JOB} $$COMMON
         fi
     waitFor: ['push-worker']
 
@@ -134,7 +135,8 @@ steps:
       - -c
       - |
         set -e
-        BACKEND_URL=$(gcloud run services describe ${_BACKEND_SERVICE} --region=${_REGION} --format='value(status.url)')
+        # $$ escapes literal $ so Cloud Build does not treat these as substitutions.
+        BACKEND_URL=$$(gcloud run services describe ${_BACKEND_SERVICE} --region=${_REGION} --format='value(status.url)')
         gcloud run deploy ${_FRONTEND_SERVICE} \
           --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/frontend:$SHORT_SHA \
           --region=${_REGION} --platform=managed --allow-unauthenticated \
