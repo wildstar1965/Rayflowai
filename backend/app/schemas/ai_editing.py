@@ -58,6 +58,10 @@ class EditorContext(BaseModel):
     playhead_time: float = Field(default=0, ge=0, allow_inf_nan=False)
     can_undo: bool = False
     can_redo: bool = False
+    # Populated server-side from the workspace's saved taste profile so the
+    # Director can reason with the user's cultural preferences. The client never
+    # sends this; it is injected in the /api/ai/plan route.
+    taste_profile: Optional[Dict[str, Any]] = None
 
 
 class AIPlanRequest(BaseModel):

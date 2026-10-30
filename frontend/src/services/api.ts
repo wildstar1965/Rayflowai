@@ -688,3 +688,133 @@ export async function waitCreativeJob<T>(jobId: string, onStage?: (stage: string
     await new Promise(resolve => setTimeout(resolve, 700));
   }
 }
+
+// --- Taste AI (Qloo-powered) -------------------------------------------------
+
+export interface TastePreferenceInput {
+  text: string;
+  category: string;
+}
+
+export interface TasteStrategy {
+  style_name: string;
+  aspect_ratio: EditingPlan['aspect_ratio'];
+  pacing: string;
+  color_mood: string;
+  color_strength: number;
+  motion: string;
+  clip_motion: string;
+  transition_preferences: string[];
+  beat_sync: boolean;
+  music_direction: string;
+  storytelling: string;
+  reasoning: { decision: string; basis: string }[];
+}
+
+export interface TasteProfileResponse {
+  exists: boolean;
+  profile: Record<string, unknown> | null;
+  summary?: Record<string, unknown>;
+  qloo_configured: boolean;
+}
+
+export interface TasteAnalysisResponse {
+  summary: {
+    declared: TastePreferenceInput[];
+    resolved_entities: { name: string; type: string; category: string }[];
+    cultural_associations: { name: string; type?: string; affinity?: number }[];
+    tag_signals: { name: string; affinity?: number; weight?: number }[];
+    notes: string[];
+  };
+  resolved_entities: unknown[];
+  resolved_tags: unknown[];
+  cultural_associations: unknown[];
+  unresolved: { query: string; category: string; reason: string }[];
+  qloo_configured: boolean;
+}
+
+const tasteHeaders = { 'Content-Type': 'application/json' } as const;
+
+export async function getTasteProfile(): Promise<TasteProfileResponse> {
+  const res = await fetch(`${API_BASE}/taste/profile`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Could not load your taste profile.');
+  return res.json();
+}
+
+export async function analyzeTaste(
+  preferences: TastePreferenceInput[],
+  useQloo = true,
+): Promise<TasteAnalysisResponse> {
+  const res = await fetch(`${API_BASE}/taste/analyze`, {
+    method: 'POST', credentials: 'include', headers: tasteHeaders,
+    body: JSON.stringify({ preferences, use_qloo: useQloo }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'Taste analysis failed.');
+  return body;
+}
+
+export async function saveTasteProfile(
+  preferences: TastePreferenceInput[],
+  useQloo = true,
+  update = false,
+): Promise<TasteProfileResponse> {
+  const res = await fetch(`${API_BASE}/taste/profile`, {
+    method: update ? 'PUT' : 'POST', credentials: 'include', headers: tasteHeaders,
+    body: JSON.stringify({ preferences, use_qloo: useQloo }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'Could not save your taste profile.');
+  return body;
+}
+
+export async function getTasteStrategy(allowLlm = true): Promise<{
+  strategy: TasteStrategy; used_qloo: boolean; used_llm: boolean; profile_source: string; notes: string[];
+}> {
+  const res = await fetch(`${API_BASE}/taste/edit-plan`, {
+    method: 'POST', credentials: 'include', headers: tasteHeaders,
+    body: JSON.stringify({ allow_llm: allowLlm }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'Could not generate a taste strategy.');
+  return body;
+}
+
+export async function applyTasteToPlan(
+  currentPlan: EditingPlan,
+  strategy?: TasteStrategy,
+  allowLlm = true,
+): Promise<{ proposed_plan: EditingPlan; strategy: TasteStrategy; reasoning: { decision: string; basis: string }[]; used_qloo: boolean | null; used_llm: boolean | null }> {
+  const res = await fetch(`${API_BASE}/taste/apply`, {
+    method: 'POST', credentials: 'include', headers: tasteHeaders,
+    body: JSON.stringify({ current_plan: currentPlan, strategy, allow_llm: allowLlm }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'Could not apply your taste to the timeline.');
+  return body;
+}
+
+export async function generateTasteReel(
+  mediaFilename: string,
+  availableAssets?: unknown[],
+  options?: { whisperModel?: string; includeCaptions?: boolean; currentPlan?: EditingPlan; autoBroll?: boolean; listSounds?: boolean; tightenSpeech?: boolean; allowLlm?: boolean },
+  onStage?: (stage: string) => void,
+): Promise<EditingPlan & { taste?: { strategy: TasteStrategy; reasoning: { decision: string; basis: string }[]; used_qloo: boolean; used_llm: boolean; profile_source: string } }> {
+  const res = await fetch(`${API_BASE}/taste/reel/jobs`, {
+    method: 'POST', credentials: 'include', headers: tasteHeaders,
+    body: JSON.stringify({
+      media_filename: mediaFilename,
+      available_assets: availableAssets,
+      whisper_model: options?.whisperModel,
+      include_captions: options?.includeCaptions ?? false,
+      current_plan: options?.currentPlan,
+      auto_broll: options?.autoBroll ?? false,
+      list_sounds: options?.listSounds ?? false,
+      tighten_speech: options?.tightenSpeech ?? false,
+      allow_llm: options?.allowLlm ?? true,
+    }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'Could not start your taste reel.');
+  return waitCreativeJob(body.job_id, onStage);
+}

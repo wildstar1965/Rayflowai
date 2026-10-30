@@ -46,6 +46,16 @@ class RecordStore:
     def cloud(self):
         return bool(os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
 
+    @property
+    def gcs_bucket(self):
+        """When set, blobs (media/exports) are stored in Google Cloud Storage.
+
+        Records still use Supabase/SQLite; only large binary objects go to GCS so
+        user media survives Cloud Run's ephemeral filesystem. Enabled by setting
+        GCS_BUCKET to the bucket name (no gs:// prefix).
+        """
+        return os.getenv('GCS_BUCKET', '').strip() or None
+
     def _check(self):
         if os.getenv('RAYFLOW_ENV') == 'production' and not self.cloud:
             raise StorageUnavailable('Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the backend.')
@@ -158,6 +168,15 @@ class RecordStore:
 
     def put_blob(self, owner_id, relative, content, content_type=None):
         relative = safe_relative(relative)
+        if self.gcs_bucket:
+            from app.editor import gcs
+            gcs.upload_bytes(owner_id, relative, content,
+                             content_type or mimetypes.guess_type(relative)[0] or 'application/octet-stream')
+            # Also keep a local copy for same-request reads (e.g. FFmpeg access).
+            path = self.blob_path(owner_id, relative)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+            return path
         if self.cloud:
             self.request('POST', '/storage/v1/object/rayflow-private/' + quote(owner_id + '/' + relative, safe='/'), data=content,
                          headers={'Content-Type': content_type or mimetypes.guess_type(relative)[0] or 'application/octet-stream', 'x-upsert': 'true'})
@@ -175,6 +194,11 @@ class RecordStore:
         path = self.blob_path(owner_id, relative)
         if path.is_file():
             return path
+        if self.gcs_bucket:
+            from app.editor import gcs
+            path.parent.mkdir(parents=True, exist_ok=True)
+            gcs.download_to(owner_id, safe_relative(relative), path)
+            return path
         if not self.cloud:
             raise FileNotFoundError('Project file not found.')
         result = self.request('GET', '/storage/v1/object/authenticated/rayflow-private/' + quote(owner_id + '/' + safe_relative(relative), safe='/'))
@@ -183,18 +207,30 @@ class RecordStore:
         return path
 
     def blob_size(self, owner_id, relative):
+        local = self.blob_path(owner_id, relative)
+        if local.is_file():
+            return local.stat().st_size
+        if self.gcs_bucket:
+            from app.editor import gcs
+            return gcs.object_size(owner_id, safe_relative(relative))
         if not self.cloud:
-            return self.blob_path(owner_id, relative).stat().st_size
+            return local.stat().st_size
         result = self.request('HEAD', '/storage/v1/object/authenticated/rayflow-private/' + quote(owner_id + '/' + safe_relative(relative), safe='/'))
         return int(result.headers.get('content-length', 0))
 
     def delete_blob(self, owner_id, relative):
         relative = safe_relative(relative)
+        if self.gcs_bucket:
+            from app.editor import gcs
+            gcs.delete_object(owner_id, relative)
         if self.cloud:
             self.request('DELETE', '/storage/v1/object/rayflow-private', json={'prefixes': [owner_id + '/' + relative]})
         self.blob_path(owner_id, relative).unlink(missing_ok=True)
 
     def sign(self, owner_id, relative, upload=False):
+        if self.gcs_bucket:
+            from app.editor import gcs
+            return gcs.signed_url(owner_id, safe_relative(relative), upload=upload)
         if not self.cloud:
             return None
         relative = safe_relative(relative)

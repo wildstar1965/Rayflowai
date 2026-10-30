@@ -261,12 +261,35 @@ def interpret_command_endpoint(request: CommandRequest):
     return interpret_command(request, allow_llm=setting('AI_PROVIDER', 'auto') in ('auto', 'ollama'))
 
 
+def _inject_taste_context(context):
+    """Server-populate the taste profile summary into the Director context.
+
+    The client-supplied taste_profile (if any) is ignored and replaced with the
+    workspace's saved profile so taste context is authoritative and not spoofable.
+    """
+    context.taste_profile = None
+    from app.editor.context import workspace_id
+    identity = workspace_id.get()
+    if not identity:
+        return context
+    try:
+        from app.api.taste_routes import _load_profile
+        profile = _load_profile(identity)
+        if profile:
+            context.taste_profile = profile.summary()
+    except Exception:
+        # Taste context is strictly optional; never block an edit on it.
+        context.taste_profile = None
+    return context
+
+
 @router.post("/ai/plan", response_model=AIPlanResponse)
 def create_ai_editing_plan(request: AIPlanRequest, http_request: Request):
     """Create and validate a provider-backed proposal without mutating editor state."""
     _check_ai_rate_limit(http_request)
     try:
-        ai_plan = request_plan(request.command.strip(), request.current_plan, request.context, request.conversation)
+        context = _inject_taste_context(request.context)
+        ai_plan = request_plan(request.command.strip(), request.current_plan, context, request.conversation)
         proposed, changes = apply_actions(request.current_plan, ai_plan)
     except (AIEditingError, ValueError, TypeError, KeyError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
@@ -346,13 +369,16 @@ async def render_video(request: RenderJobRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
-        job_id = start_render_job(
+        from app.services.render_dispatch import dispatch_render
+        job_id = dispatch_render(
             plan=request.plan,
             image_filenames=request.image_filenames,
             audio_filename=request.audio_filename
         )
     except ValueError as exc:
         raise HTTPException(429, str(exc)) from None
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from None
 
     return {
         "job_id": job_id,

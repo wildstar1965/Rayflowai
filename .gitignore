@@ -25,9 +25,22 @@ dist-ssr/
 .env.production
 .env.*
 !.env.example
+!.env.production.example
 backend/storage/cache/
 deploy/backend.env
 deploy/compose.env
 backend/models/
 .DS_Store
 Thumbs.db
+
+# Root-level local runtime storage (created when running the backend from repo root)
+/private/
+/workspaces/
+/storage/
+/backend_install.log
+/frontend_install.log
+/editor_runtime_install.log
+/docker_backend_build.log
+/docker_*_build.log
+_*.py
+_render_out.mp4

@@ -13,3 +13,4 @@ faster-whisper>=1.0.0
 cryptography>=46.0.0
 pyloudnorm==0.1.1
 matchering==2.0.6
+google-cloud-storage>=2.16.0

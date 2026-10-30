@@ -1,0 +1,24 @@
+# Frontend image for Google Cloud Run (static SPA + /api reverse proxy).
+# Unlike the Compose Caddy image (which fronts the whole stack with basic-auth),
+# this serves the built SPA on Cloud Run's $PORT and proxies /api to the backend
+# Cloud Run service URL provided via the BACKEND_URL env var at deploy time.
+FROM node:24-bookworm-slim AS build
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+COPY frontend/vendor ./vendor
+RUN npm ci
+COPY frontend/ ./
+# The SPA calls the backend via same-origin /api (proxied below), so no API
+# base URL is baked in and no secrets end up in the bundle.
+RUN npm run build
+
+FROM nginx:1.27-alpine
+# Non-root: run nginx as the unprivileged 'nginx' user on a high port.
+RUN rm -f /etc/nginx/conf.d/default.conf
+COPY deploy/cloudrun/nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=build /app/frontend/dist /usr/share/nginx/html
+ENV PORT=8080 BACKEND_URL=http://127.0.0.1:8000
+EXPOSE 8080
+# nginx:alpine entrypoint renders /etc/nginx/templates/*.template with envsubst
+# into /etc/nginx/conf.d/ using the PORT and BACKEND_URL variables.
+CMD ["nginx", "-g", "daemon off;"]

@@ -12,7 +12,7 @@ SETTINGS_PATH = STORAGE_DIR / 'private' / 'providers.json'
 _lock = threading.RLock()
 FIELDS = {
     'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'PIXABAY_API_KEY',
-    'OLLAMA_HOST', 'OLLAMA_MODEL', 'AI_PROVIDER',
+    'OLLAMA_HOST', 'OLLAMA_MODEL', 'AI_PROVIDER', 'QLOO_API_KEY',
 }
 
 
@@ -46,6 +46,11 @@ def setting(key, default=''):
         if key == 'OLLAMA_MODEL':
             record = provider_record('ollama') or {}
             return record['model'] if 'model' in record else values.get(key) or os.getenv(key, default)
+        # QLOO_API_KEY and QLOO_BASE_URL are shared backend-operator credentials
+        # (like Supabase), so they fall back to the process environment rather
+        # than requiring per-workspace configuration.
+        if key in ('QLOO_API_KEY', 'QLOO_BASE_URL'):
+            return values.get(key) or os.getenv(key, default)
         return values.get(key, default)
     with _lock:
         # Production configuration must not inherit a developer's private file.
@@ -146,6 +151,7 @@ def public_settings():
         'openrouter_configured': bool(setting('OPENROUTER_API_KEY')),
         'openrouter_model': setting('OPENROUTER_MODEL', 'openrouter/free'),
         'pixabay_configured': bool(setting('PIXABAY_API_KEY')),
+        'qloo_configured': bool(setting('QLOO_API_KEY')),
         'ollama_host': setting('OLLAMA_HOST', 'http://127.0.0.1:11434'),
         'ollama_model': setting('OLLAMA_MODEL'),
         'ai_provider': setting('AI_PROVIDER', 'auto'),

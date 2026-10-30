@@ -29,7 +29,9 @@ import {
   loadDemoProject,
   startTranscription,
   getTranscriptionStatus,
-  generateAutoEditReel
+  generateAutoEditReel,
+  generateTasteReel,
+  getTasteProfile
 } from '../services/api';
 import { recalculateTimeline, uploadedClip } from '../utils/timeline';
 import { getSettings } from '../services/settings';
@@ -117,6 +119,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
   // Auto-Edit Workflow Modal State
   const [isAutoEditModalOpen, setIsAutoEditModalOpen] = useState(false);
   const [autoEditStyle, setAutoEditStyle] = useState<'fitness_energy' | 'minimalist' | 'cinematic'>('cinematic');
+  const [useTasteReel, setUseTasteReel] = useState(false);
+  const [hasTasteProfile, setHasTasteProfile] = useState(false);
   const [tightenSpeech, setTightenSpeech] = useState(false);
   const [isAutoEditing, setIsAutoEditing] = useState(false);
   const [includeCaptions, setIncludeCaptions] = useState(true);
@@ -678,6 +682,15 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
     }
   };
 
+  // Detect whether a taste profile exists so we can offer the personalized reel.
+  useEffect(() => {
+    let cancelled = false;
+    void getTasteProfile()
+      .then(result => { if (!cancelled) setHasTasteProfile(!!result.exists); })
+      .catch(() => { if (!cancelled) setHasTasteProfile(false); });
+    return () => { cancelled = true; };
+  }, []);
+
   // Automatic Talking-Head / Photo Reel Generation Workflow
   const handleExecuteAutoEdit = async () => {
     if (images.length === 0) {
@@ -696,8 +709,15 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
       const video = images.find(item => item.media_type === 'video');
       const mediaTarget = video?.filename || audio?.filename || images[0].filename;
       const before = planRef.current;
-      const newPlan = await generateAutoEditReel(mediaTarget, autoEditStyle, assets, whisperModel, plan.aspect_ratio, includeCaptions, plan, setAutoStage, tightenSpeech);
+      const newPlan = useTasteReel
+        ? await generateTasteReel(mediaTarget, assets, {
+            whisperModel, includeCaptions, currentPlan: plan,
+            autoBroll: plan.auto_broll !== false, listSounds: plan.list_sounds !== false,
+            tightenSpeech,
+          }, setAutoStage)
+        : await generateAutoEditReel(mediaTarget, autoEditStyle, assets, whisperModel, plan.aspect_ratio, includeCaptions, plan, setAutoStage, tightenSpeech);
       if (planRef.current !== before) throw new Error('The project changed during Auto Reel. Your edits were preserved; run again to apply a fresh draft.');
+      const tasteMeta = (newPlan as { taste?: { strategy?: { style_name?: string }; used_qloo?: boolean } }).taste;
       setIsPlaying(false);
       currentTimeRef.current = 0;
       setCurrentTime(0);
@@ -713,7 +733,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
         ...prev,
         {
           sender: 'assistant',
-          text: `Auto Reel draft generated! Applied "${autoEditStyle.replace('_', ' ').toUpperCase()}" style, synchronized ${newPlan.clips.length} clip cuts, and structured your timeline.`,
+          text: useTasteReel && tasteMeta
+            ? `Personalized "${tasteMeta.strategy?.style_name || 'Taste'}" reel generated from your taste profile${tasteMeta.used_qloo ? ' using Qloo cultural intelligence' : ''}. Structured ${newPlan.clips.length} clips — fully editable.`
+            : `Auto Reel draft generated! Applied "${autoEditStyle.replace('_', ' ').toUpperCase()}" style, synchronized ${newPlan.clips.length} clip cuts, and structured your timeline.`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
@@ -2693,10 +2715,41 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
             <label className="flex gap-2 text-xs"><input type="checkbox" checked={tightenSpeech} onChange={e=>setTightenSpeech(e.target.checked)}/>Trim greetings and long quiet pauses in new drafts</label>
             <label className="flex gap-2 text-xs"><input type="checkbox" checked={plan.list_sounds !== false} onChange={e => updatePlanWithHistory({...plan,list_sounds:e.target.checked})} />Add clicks to spoken list items</label>
             <SpeechModelSelect state={speechModels} value={whisperModel} onChange={setWhisperModel} label="Whisper model" />
+
+            {/* Taste-personalized reel (Qloo-powered) */}
+            <button
+              type="button"
+              onClick={() => setUseTasteReel(v => !v)}
+              className={`w-full p-3 rounded-xl border text-left transition-all ${
+                useTasteReel
+                  ? 'border-accent bg-studio-raised ring-1 ring-accent shadow-xs'
+                  : 'border-studio-border bg-studio-panel hover:border-studio-border'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-bold text-studio-text flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-brass" /> Create a Reel Based on My Taste
+                </span>
+                <span className="text-[10px] font-mono text-studio-muted bg-studio-hover px-1.5 py-0.5 rounded">
+                  Qloo
+                </span>
+              </div>
+              <p className="text-[11px] text-studio-muted leading-relaxed">
+                {hasTasteProfile
+                  ? 'Use your saved taste profile to drive pacing, color, motion, and transitions. Produces a fully editable timeline.'
+                  : 'Set up your taste profile first in “Discover Your Taste”, then return here.'}
+              </p>
+            </button>
+            {useTasteReel && !hasTasteProfile && (
+              <p className="text-[11px] text-brass">
+                No taste profile found. <a href="#/taste" className="underline">Discover Your Taste</a> to enable this.
+              </p>
+            )}
+
             {/* Choose Reel Style */}
-            <div className="space-y-2">
+            <div className={`space-y-2 ${useTasteReel ? 'opacity-50 pointer-events-none' : ''}`}>
               <label className="text-xs font-semibold text-studio-text block">
-                Choose your reel style
+                {useTasteReel ? 'Base style (chosen from your taste)' : 'Choose your reel style'}
               </label>
               <div className="space-y-2">
                 {[
@@ -2756,7 +2809,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({ onBackToHome, feature })
                 variant="primary"
                 size="sm"
                 onClick={handleExecuteAutoEdit}
-                disabled={isAutoEditing || images.length === 0 || (!whisperModel && (includeCaptions || plan.auto_broll || plan.list_sounds) && (!!audio || images.some(item => item.media_type === 'video')))}
+                disabled={isAutoEditing || images.length === 0 || (useTasteReel && !hasTasteProfile) || (!whisperModel && (includeCaptions || plan.auto_broll || plan.list_sounds) && (!!audio || images.some(item => item.media_type === 'video')))}
                 className="bg-accent hover:bg-accent-hover text-white flex items-center gap-1.5"
               >
                 {isAutoEditing ? (

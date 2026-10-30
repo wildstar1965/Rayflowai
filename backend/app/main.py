@@ -16,6 +16,7 @@ from app.api.analytics_routes import router as analytics_router
 from app.services.job_history import recover_interrupted
 from app.api.editor_routes import router as editor_router
 from app.api.editor_live_routes import router as editor_live_router
+from app.api.taste_routes import router as taste_router
 from app.editor.accounts import router as accounts_router
 from app.editor.teams import router as teams_router
 from app.editor.collaboration import router as collaboration_router
@@ -77,6 +78,7 @@ app.include_router(analytics_router)
 app.include_router(health_router)
 app.include_router(editor_router)
 app.include_router(editor_live_router)
+app.include_router(taste_router)
 app.include_router(accounts_router)
 app.include_router(teams_router)
 app.include_router(collaboration_router)

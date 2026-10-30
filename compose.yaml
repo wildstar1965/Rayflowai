@@ -14,6 +14,24 @@ services:
     restart: unless-stopped
     stop_grace_period: 45s
     # No host port: all user requests pass through authenticated HTTPS.
+  # Render worker image (used as a Cloud Run Job in production). Built locally so
+  # `docker compose build` produces all three images. It is not started by
+  # default (local rendering runs in-process in the backend); it is available
+  # under the 'worker' profile for building/testing the job image.
+  render-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.worker
+    image: rayflow-render-worker
+    profiles: ['worker']
+    env_file: deploy/backend.env
+    environment:
+      RAYFLOW_ENV: production
+      RAYFLOW_STORAGE_DIR: /data
+    volumes:
+      - rayflow_data:/data
+      - rayflow_models:/models
+    restart: 'no'
   web:
     build:
       context: .

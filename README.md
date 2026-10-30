@@ -4,6 +4,14 @@ RayFlow AI turns photos, video clips, and audio into an edited video. You can ar
 
 This guide takes you from opening the project for the first time to downloading a finished MP4. You do not need to know how to code. **Manual editing and Studio MP4 export do not require an AI API key.**
 
+> **New: Video editing that understands your taste.** RayFlow now integrates
+> **Qloo Taste AI**. Tell RayFlow what you love in **Discover Your Taste**, and it
+> personalizes editing decisions — pacing, color mood, transitions, motion, and
+> music direction — then produces a fully **editable** timeline. See
+> [Qloo integration](#qloo-taste-ai-integration) below, the detailed
+> [QLOO_INTEGRATION.md](QLOO_INTEGRATION.md), and for production deployment
+> [GCP_CLOUD_RUN_DEPLOYMENT.md](GCP_CLOUD_RUN_DEPLOYMENT.md).
+
 | Workspace | What it is for |
 | --- | --- |
 | **Studio** | Start here. Make a reel from photos or video, add music and captions, adjust cuts, and export an MP4. |
@@ -666,3 +674,75 @@ With the backend running, [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/doc
 - [Design guidelines](design.md): typography, palette, and interface conventions.
 
 RayFlow draws inspiration from filmmaker Satyajit Ray's attention to the rhythm of images, sound, and cuts.
+
+
+## Qloo Taste AI integration
+
+RayFlow AI — Video Editing That Understands Your Taste.
+
+RayFlow uses [Qloo Taste AI](https://docs.qloo.com/reference/qloo-llm-hackathon-developer-guide)
+to understand your cultural preferences and translate them into personalized
+editing decisions. RayFlow remains a **video editor** — it never becomes a
+text-to-video generator, and every result is an editable timeline.
+
+### What it does
+
+1. **Discover Your Taste** (top nav → *Discover Your Taste*, or `#/taste`): enter
+   favorite movies, directors, artists, genres, moods, and aesthetic styles.
+2. RayFlow resolves them with Qloo and retrieves cultural intelligence, showing
+   three clearly separated layers:
+   - **YOU SAID** — your declared preferences.
+   - **QLOO INFERRED** — Qloo-derived cultural associations and tag signals.
+   - **AI DECIDED** — the editing strategy, with reasoning you can read.
+3. **Create a Reel Based on My Taste** (Studio → Auto Reel): generates a
+   personalized, editable draft driven by your taste.
+4. **Taste-aware AI Director**: subjective requests like *“make it more
+   cinematic”* use your taste signals. As always, you review and approve every
+   change before it is applied.
+
+### Enable it locally
+
+Add your Qloo hackathon key to `backend/.env` (gitignored; never committed):
+
+```dotenv
+QLOO_API_KEY=your_hackathon_key
+```
+
+Restart the backend. Without a key, RayFlow still builds a declared-only taste
+profile and a rule-based editing strategy, and **manual editing and MP4 export
+continue to work with no key at all.**
+
+Your photos, videos, and audio are **never** sent to Qloo — only the cultural
+preference text you enter.
+
+### Run the tests
+
+```powershell
+# Offline (mocked Qloo) — no key needed
+./backend/venv/Scripts/python.exe -m pytest tests/test_qloo_client.py tests/test_taste_intelligence.py tests/test_taste_routes.py
+
+# Live Qloo integration — requires a real key (skipped otherwise)
+$env:QLOO_API_KEY="your_key"; ./backend/venv/Scripts/python.exe -m pytest tests/test_qloo_live_integration.py -v
+```
+
+### Deploy to Google Cloud Run
+
+See [GCP_CLOUD_RUN_DEPLOYMENT.md](GCP_CLOUD_RUN_DEPLOYMENT.md) for the full
+Cloud Run architecture (frontend + backend Services, rendering Cloud Run Job,
+Cloud Storage, Secret Manager, Artifact Registry, and the Cloud Build pipeline
+in [`cloudbuild.yaml`](cloudbuild.yaml)). Security details are in
+[SECURITY.md](SECURITY.md); production variable names are in
+[`.env.production.example`](.env.production.example).
+
+### Local containers (Docker Compose, unchanged for development)
+
+```bash
+docker compose build          # builds frontend, backend (+ render-worker image)
+docker compose up -d
+docker compose ps
+docker compose logs -f
+```
+
+Local rendering runs in-process inside the backend container, so Compose does
+not need the render worker running. In production the same render code runs as a
+Cloud Run Job.

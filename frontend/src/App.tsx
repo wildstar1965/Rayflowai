@@ -3,6 +3,7 @@ import LandingPage from './pages/LandingPage';
 import StudioPage from './pages/StudioPage';
 import SettingsPage from './pages/SettingsPage';
 import DashboardPage from './pages/DashboardPage';
+import TastePage from './pages/TastePage';
 import { checkBackendHealth } from './services/api';
 import { initializeWorkspace, getWorkspaceSession, getEditorProviders } from './services/editorClient';
 import WorkspaceSetup from './components/WorkspaceSetup';
@@ -49,8 +50,8 @@ export function App() {
 
   return (
     <div className={`${route.startsWith('/editor') ? 'workspace-shell workspace-shell--editor' : 'min-h-screen'} bg-studio-canvas text-studio-text font-sans`}>
-      {route !== '/' && <nav className="workspace-nav" aria-label="Main"><a href="#/">Rayflow AI</a><a href="#/studio">Studio</a><a href="#/editor" aria-current={route.startsWith('/editor') ? 'page' : undefined}>AI Editor</a><a href="#/dashboard">Dashboard</a><a href="#/connections">Connections</a><button onClick={() => window.dispatchEvent(new CustomEvent('rayflow:choose-project'))}>Projects</button><button onClick={() => window.dispatchEvent(new CustomEvent('rayflow:assets'))}>Assets</button></nav>}
-      {route.startsWith('/editor') ? getWorkspaceSession() ? <ModuleBoundary><Suspense fallback={<WorkspaceLoading />}><EditorWorkspace /></Suspense></ModuleBoundary> : <main className="workspace-page"><h1>Connect to your workspace</h1><p>The AI Editor needs the backend for private projects and provider connections.</p><button onClick={() => void initialize()}>Reconnect</button></main> : route.startsWith('/studio') ? <StudioPage feature={route.split('/')[2]} onBackToHome={() => navigate('/')} /> : route === '/connections' ? <SettingsPage /> : route === '/dashboard' ? <DashboardPage /> : <LandingPage onEnterStudio={() => navigate('/studio')} />}
+      {route !== '/' && <nav className="workspace-nav" aria-label="Main"><a href="#/">Rayflow AI</a><a href="#/studio">Studio</a><a href="#/editor" aria-current={route.startsWith('/editor') ? 'page' : undefined}>AI Editor</a><a href="#/taste" aria-current={route.startsWith('/taste') ? 'page' : undefined}>Discover Your Taste</a><a href="#/dashboard">Dashboard</a><a href="#/connections">Connections</a><button onClick={() => window.dispatchEvent(new CustomEvent('rayflow:choose-project'))}>Projects</button><button onClick={() => window.dispatchEvent(new CustomEvent('rayflow:assets'))}>Assets</button></nav>}
+      {route.startsWith('/editor') ? getWorkspaceSession() ? <ModuleBoundary><Suspense fallback={<WorkspaceLoading />}><EditorWorkspace /></Suspense></ModuleBoundary> : <main className="workspace-page"><h1>Connect to your workspace</h1><p>The AI Editor needs the backend for private projects and provider connections.</p><button onClick={() => void initialize()}>Reconnect</button></main> : route.startsWith('/studio') ? <StudioPage feature={route.split('/')[2]} onBackToHome={() => navigate('/')} /> : route === '/connections' ? <SettingsPage /> : route === '/dashboard' ? <DashboardPage /> : route.startsWith('/taste') ? <TastePage /> : <LandingPage onEnterStudio={() => navigate('/studio')} />}
       <ProjectManager />
       <SharedAssets />
       {setup && <WorkspaceSetup onClose={() => setSetup(false)} />}
