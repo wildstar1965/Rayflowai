@@ -1,7 +1,13 @@
-"""Owner-scoped records and private blobs; Supabase in hosted deployments.
+"""Owner-scoped records and private blobs.
+
+Three backends, selected by environment:
+  * GCS (recommended for Cloud Run): records as JSON objects + media as blobs in
+    one private bucket. No external database required. Set GCS_BUCKET.
+  * Supabase: records table + storage bucket (legacy hosted option).
+  * Local SQLite + filesystem: development/tests only.
 
 The service-role credential is never returned to a browser. All public access
-passes the owner predicate here. Local SQLite is for development/tests only.
+passes the owner predicate here.
 """
 import json
 import mimetypes
@@ -57,8 +63,11 @@ class RecordStore:
         return os.getenv('GCS_BUCKET', '').strip() or None
 
     def _check(self):
-        if os.getenv('RAYFLOW_ENV') == 'production' and not self.cloud:
-            raise StorageUnavailable('Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the backend.')
+        # Production needs durable, cross-instance storage. Either a GCS bucket
+        # (records + blobs in one bucket, no external DB) or Supabase satisfies
+        # this; local SQLite is only for development/tests.
+        if os.getenv('RAYFLOW_ENV') == 'production' and not self.cloud and not self.gcs_bucket:
+            raise StorageUnavailable('Configure GCS_BUCKET (recommended) or Supabase on the backend.')
 
     def request(self, method, path, **kwargs):
         self._check()
@@ -86,6 +95,16 @@ class RecordStore:
         return db
 
     def list(self, collection, owner_id, identity=None):
+        if self.gcs_bucket:
+            from app.editor import gcs
+            if identity is not None:
+                found = gcs.get_record(collection, owner_id, identity)
+                if not found:
+                    return []
+                payload, revision, _gen = found
+                return [dict(payload, id=identity, revision=revision)]
+            return [dict(payload, id=rid, revision=revision)
+                    for rid, payload, revision in gcs.list_records(collection, owner_id)]
         if self.cloud:
             params = {'collection': 'eq.' + collection, 'owner_id': 'eq.' + owner_id, 'select': '*', 'order': 'updated.desc'}
             if identity is not None:
@@ -111,6 +130,20 @@ class RecordStore:
         return values[0] if values else None
 
     def put(self, collection, identity, owner_id, payload, expected=None):
+        if self.gcs_bucket:
+            from app.editor import gcs
+            with self.lock:
+                found = gcs.get_record(collection, owner_id, identity)
+                revision = found[1] if found else 0
+                generation = found[2] if found else 0  # 0 => object must not exist
+                if expected is not None and expected != revision:
+                    raise Conflict('The project changed elsewhere. Reload before saving.')
+                clean = {k: v for k, v in payload.items() if k not in ('id', 'revision', 'owner_id')}
+                next_revision = revision + 1
+                if not gcs.put_record(collection, owner_id, identity, clean, next_revision,
+                                      expected_generation=generation):
+                    raise Conflict('The project changed elsewhere. Reload before saving.')
+                return dict(clean, id=identity, revision=next_revision)
         with self.lock:
             current = self.get(collection, identity, owner_id)
             revision = current['revision'] if current else 0
@@ -145,6 +178,10 @@ class RecordStore:
             return dict(clean, id=identity, revision=next_revision)
 
     def delete(self, collection, identity, owner_id):
+        if self.gcs_bucket:
+            from app.editor import gcs
+            gcs.delete_record(collection, owner_id, identity)
+            return
         if self.cloud:
             self.request('DELETE', '/rest/v1/rayflow_records', params={'collection': 'eq.' + collection, 'id': 'eq.' + identity, 'owner_id': 'eq.' + owner_id})
         else:
@@ -153,6 +190,15 @@ class RecordStore:
 
     def take(self, collection, identity, owner_id):
         """Atomically consume a one-use ticket, including across backend processes."""
+        if self.gcs_bucket:
+            from app.editor import gcs
+            with self.lock:
+                found = gcs.get_record(collection, owner_id, identity)
+                if not found:
+                    return None
+                payload, revision, _gen = found
+                gcs.delete_record(collection, owner_id, identity)
+                return dict(payload, id=identity, revision=revision)
         if self.cloud:
             rows = self.request('DELETE', '/rest/v1/rayflow_records',
                                 params={'collection': 'eq.' + collection, 'id': 'eq.' + identity, 'owner_id': 'eq.' + owner_id},

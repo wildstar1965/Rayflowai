@@ -77,3 +77,98 @@ def signed_url(owner_id: str, relative: str, *, upload: bool = False, expires_se
     method = 'PUT' if upload else 'GET'
     url = blob.generate_signed_url(version='v4', expiration=timedelta(seconds=expires_seconds), method=method)
     return {'url': url, 'token': None, 'path': _object_name(owner_id, relative)}
+
+
+# ---------------------------------------------------------------------------
+# Record persistence in GCS (replaces the need for Supabase / Cloud SQL).
+#
+# Records are stored as individual JSON objects so there is no external
+# database to provision. Layout inside the bucket:
+#
+#   [<prefix>/]records/<collection>/<owner_id>/<id>.json
+#
+# Each object stores {payload, revision, updated}. Optimistic concurrency uses
+# the GCS object generation precondition (if_generation_match), which gives us
+# atomic compare-and-set without any extra service.
+# ---------------------------------------------------------------------------
+import json as _json
+
+
+def _record_name(collection: str, owner_id: str, identity: str) -> str:
+    prefix = os.getenv('GCS_PREFIX', '').strip('/')
+    key = f'records/{collection}/{owner_id}/{identity}.json'
+    return f'{prefix}/{key}' if prefix else key
+
+
+def _record_folder(collection: str, owner_id: str) -> str:
+    prefix = os.getenv('GCS_PREFIX', '').strip('/')
+    key = f'records/{collection}/{owner_id}/'
+    return f'{prefix}/{key}' if prefix else key
+
+
+def get_record(collection: str, owner_id: str, identity: str):
+    """Return (payload_dict, revision, generation) or None."""
+    blob = _bucket().blob(_record_name(collection, owner_id, identity))
+    try:
+        data = blob.download_as_bytes()
+    except Exception:
+        return None
+    try:
+        stored = _json.loads(data)
+    except ValueError:
+        return None
+    return stored.get('payload', {}), int(stored.get('revision', 0)), blob.generation
+
+
+def list_records(collection: str, owner_id: str):
+    """Return a list of (identity, payload, revision), newest first."""
+    bucket = _bucket()
+    folder = _record_folder(collection, owner_id)
+    out = []
+    for blob in _client().list_blobs(bucket, prefix=folder):
+        if not blob.name.endswith('.json'):
+            continue
+        try:
+            stored = _json.loads(blob.download_as_bytes())
+        except Exception:
+            continue
+        identity = blob.name.rsplit('/', 1)[-1][:-5]  # strip ".json"
+        out.append((identity, stored.get('payload', {}), int(stored.get('revision', 0)),
+                    float(stored.get('updated', 0))))
+    out.sort(key=lambda row: row[3], reverse=True)
+    return [(identity, payload, revision) for identity, payload, revision, _ in out]
+
+
+def put_record(collection: str, owner_id: str, identity: str, payload: dict,
+               revision: int, *, expected_generation=None) -> bool:
+    """Write a record with an optimistic-concurrency precondition.
+
+    ``expected_generation`` is the GCS object generation the caller observed
+    (0 means "must not already exist"). Returns False on a precondition failure
+    (someone else changed it), True on success.
+    """
+    import time as _time
+    blob = _bucket().blob(_record_name(collection, owner_id, identity))
+    body = _json.dumps({'payload': payload, 'revision': revision, 'updated': _time.time()})
+    kwargs = {'content_type': 'application/json'}
+    if expected_generation is not None:
+        kwargs['if_generation_match'] = expected_generation
+    try:
+        from google.api_core.exceptions import PreconditionFailed  # type: ignore
+    except ImportError:  # pragma: no cover
+        PreconditionFailed = ()  # type: ignore
+    try:
+        blob.upload_from_string(body, **kwargs)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        if PreconditionFailed and isinstance(exc, PreconditionFailed):
+            return False
+        raise
+
+
+def delete_record(collection: str, owner_id: str, identity: str):
+    blob = _bucket().blob(_record_name(collection, owner_id, identity))
+    try:
+        blob.delete()
+    except Exception:
+        pass

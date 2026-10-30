@@ -33,21 +33,26 @@ Browser ──HTTPS──▶ rayflow-frontend (Cloud Run Service, nginx)
                    rayflow-render (Cloud Run Job, FFmpeg)
                       │ pulls source media + uploads MP4
                       ▼
-                   Cloud Storage (private bucket)  ← handoff between services
-                   Supabase (records: projects, jobs, taste profiles)
-                   Secret Manager (QLOO_API_KEY, Supabase, vault, LLM keys)
+                   Cloud Storage (ONE private bucket):
+                     • records/  → projects, jobs, taste profiles (JSON)
+                     • uploads/ projects/ exports/ → media (blobs)
+                   Secret Manager (QLOO_API_KEY, vault secret, optional LLM keys)
 ```
 
 The backend and render job **do not share a filesystem**. Cloud Storage is the
-handoff. Render status is persisted (job history) so it survives instance
-restarts, and Cloud Run Job execution status is distinct from FFmpeg progress.
+handoff and the system of record. Render status is persisted so it survives
+instance restarts, and Cloud Run Job execution status is distinct from FFmpeg
+progress. No Supabase or Cloud SQL is required.
 
 ## 0. Prerequisites
 
-- `gcloud` CLI authenticated: `gcloud auth login`
-- A Supabase project (free tier is fine) providing `SUPABASE_URL` and
-  `SUPABASE_SERVICE_ROLE_KEY`. Apply the SQL in `supabase/` if present.
+- `gcloud` CLI authenticated (Cloud Shell is already authenticated).
 - A Qloo hackathon API key.
+
+**No external database.** Persistence (projects, jobs, taste profiles) and media
+both live in a single **private Google Cloud Storage bucket**. Records are stored
+as JSON objects with atomic optimistic-concurrency writes; media/exports are
+stored as blobs. No Supabase or Cloud SQL is required.
 
 ```bash
 export PROJECT_ID=ladysingham
@@ -94,16 +99,14 @@ gcloud storage buckets update gs://rayflow-storage-ladysingham --lifecycle-file=
 
 ## 4. Secret Manager
 
-Create one secret per credential (values never go in the repo or images):
+Only two secrets are required (values never go in the repo or images):
 
 ```bash
-printf '%s' 'YOUR_QLOO_KEY'            | gcloud secrets create QLOO_API_KEY --data-file=-
-printf '%s' 'https://xxxx.supabase.co' | gcloud secrets create SUPABASE_URL --data-file=-
-printf '%s' 'YOUR_SERVICE_ROLE_KEY'    | gcloud secrets create SUPABASE_SERVICE_ROLE_KEY --data-file=-
+printf '%s' 'YOUR_QLOO_KEY' | gcloud secrets create QLOO_API_KEY --data-file=-
 # 32+ byte random string for encrypting per-workspace provider credentials:
-python -c "import secrets;print(secrets.token_urlsafe(48))" | gcloud secrets create RAYFLOW_VAULT_SECRET --data-file=-
+python3 -c "import secrets;print(secrets.token_urlsafe(48))" | gcloud secrets create RAYFLOW_VAULT_SECRET --data-file=-
 
-# Optional LLM key(s) — enables the AI Director / LLM taste interpretation:
+# Optional LLM key(s) — enables LLM taste interpretation / AI Director:
 # printf '%s' 'YOUR_GEMINI_KEY' | gcloud secrets create GEMINI_API_KEY --data-file=-
 ```
 
@@ -116,7 +119,7 @@ create a dedicated one. Grant it only what it needs:
 export RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
 # Read the required secrets.
-for S in QLOO_API_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY RAYFLOW_VAULT_SECRET; do
+for S in QLOO_API_KEY RAYFLOW_VAULT_SECRET; do
   gcloud secrets add-iam-policy-binding "$S" \
     --member="serviceAccount:${RUNTIME_SA}" \
     --role="roles/secretmanager.secretAccessor"
@@ -165,14 +168,14 @@ gcloud run deploy rayflow-backend \
   --region="$REGION" --no-allow-unauthenticated --port=8000 \
   --cpu=2 --memory=2Gi --concurrency=20 --timeout=900 --max-instances=4 \
   --set-env-vars=RAYFLOW_ENV=production,RAYFLOW_STORAGE_DIR=/tmp/rayflow,GCS_BUCKET=rayflow-storage-ladysingham,GCP_PROJECT_ID=${PROJECT_ID},GCP_REGION=${REGION},RENDER_CLOUD_RUN_JOB=rayflow-render \
-  --set-secrets=QLOO_API_KEY=QLOO_API_KEY:latest,SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,RAYFLOW_VAULT_SECRET=RAYFLOW_VAULT_SECRET:latest
+  --set-secrets=QLOO_API_KEY=QLOO_API_KEY:latest,RAYFLOW_VAULT_SECRET=RAYFLOW_VAULT_SECRET:latest
 
 # Render Job
 gcloud run jobs create rayflow-render \
   --image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/render-worker:$(git rev-parse --short HEAD)" \
   --region="$REGION" --tasks=1 --max-retries=1 --task-timeout=2000 --cpu=2 --memory=4Gi \
   --set-env-vars=RAYFLOW_ENV=production,RAYFLOW_STORAGE_DIR=/tmp/rayflow,GCS_BUCKET=rayflow-storage-ladysingham,GCP_PROJECT_ID=${PROJECT_ID},GCP_REGION=${REGION} \
-  --set-secrets=QLOO_API_KEY=QLOO_API_KEY:latest,SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,RAYFLOW_VAULT_SECRET=RAYFLOW_VAULT_SECRET:latest
+  --set-secrets=QLOO_API_KEY=QLOO_API_KEY:latest,RAYFLOW_VAULT_SECRET=RAYFLOW_VAULT_SECRET:latest
 
 # Frontend (wire to backend URL)
 BACKEND_URL=$(gcloud run services describe rayflow-backend --region="$REGION" --format='value(status.url)')

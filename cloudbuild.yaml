@@ -21,9 +21,10 @@ substitutions:
   _RENDER_JOB: rayflow-render
   _GCS_BUCKET: rayflow-storage-ladysingham
   # Comma-separated Secret Manager bindings applied to the backend + job.
-  # Each entry maps an ENV var to a secret name:version.
+  # Each entry maps an ENV var to a secret name:version. Persistence uses GCS
+  # (GCS_BUCKET), so no database secret is required.
   _BACKEND_SECRETS: >-
-    QLOO_API_KEY=QLOO_API_KEY:latest,SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,RAYFLOW_VAULT_SECRET=RAYFLOW_VAULT_SECRET:latest
+    QLOO_API_KEY=QLOO_API_KEY:latest,RAYFLOW_VAULT_SECRET=RAYFLOW_VAULT_SECRET:latest
 
 options:
   logging: CLOUD_LOGGING_ONLY

@@ -40,12 +40,18 @@ def readiness():
         except Exception:
             checks['vault'] = False
         try:
-            if not store.cloud:
+            if store.gcs_bucket:
+                # Verify the GCS records+blob bucket is reachable.
+                from app.editor import gcs
+                gcs.list_records('__healthcheck__', '__none__')
+                checks['storage_backend'] = True
+            elif store.cloud:
+                store.request('GET', '/rest/v1/rayflow_records', params={'select': 'id', 'limit': '1'})
+                checks['storage_backend'] = True
+            else:
                 raise RuntimeError('Storage is not configured')
-            store.request('GET', '/rest/v1/rayflow_records', params={'select': 'id', 'limit': '1'})
-            checks['supabase'] = True
         except Exception:
-            checks['supabase'] = False
+            checks['storage_backend'] = False
         runtime = Path(__file__).resolve().parents[2] / 'editor-runtime' / 'node_modules'
         checks['editor_runtime'] = (runtime / '@google/genai/package.json').is_file() and (runtime / 'fluent-ffmpeg/package.json').is_file()
     ready = all(checks.values())
